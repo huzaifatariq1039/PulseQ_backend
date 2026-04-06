@@ -1,0 +1,5 @@
+# Ignore environment variables
+.env
+
+# Ignore Firebase service account
+smart-token-247bb-firebase-adminsdk-fbsvc-b793f6e6af.json

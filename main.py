@@ -1,0 +1,280 @@
+from fastapi import FastAPI, HTTPException, status
+from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from contextlib import asynccontextmanager
+import os
+import asyncio
+
+# Import configuration and database
+from app.config import PROJECT_NAME, DEBUG, FIREBASE_SERVICE_ACCOUNT_KEY
+from app.database import initialize_firebase
+from app.config_env import WEB_BASE_URL, MOBILE_BASE_URL, EXTRA_CORS_ORIGINS
+from app.utils.responses import fail
+from app.services.ai_engine import ai_engine
+from app.services.queue_management_service import QueueManagementService
+from app.config import QUEUE_AUTOSKIP_INTERVAL_SECONDS
+from app.services.app_scheduler import start_scheduler, shutdown_scheduler
+
+# Firebase initialization for AWS EC2
+import firebase_admin
+from firebase_admin import credentials, firestore
+import json
+
+# Import routes
+from app.routes import auth, hospitals, doctors, tokens, dashboard
+from app.routes import realtime, portal
+from app.routes import consultation
+from app.routes import pos
+from app.routes import tokens_listing
+from app.routes import tokens_idempotent
+from app.routes import health
+from app.routes import ml
+from app.routes import ai
+from app.routes import patient
+from app.routes import profile
+from app.routes import payments
+from app.routes import queue
+from app.routes import reception
+from app.routes.whatsapp_webhook import router as whatsapp_webhook_router
+from app.routes.pharmacy import public_router as pharmacy_public_router
+from app.routes.pharmacy import router as pharmacy_portal_router
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan manager"""
+    # Startup
+    print("Starting PulseQ Backend...")
+
+    autoskip_task: asyncio.Task | None = None
+    
+    # Initialize Firebase for AWS EC2
+    try:
+        # Check if Firebase is already initialized
+        if not firebase_admin._apps:
+            # Try environment variable first, then file
+            firebase_json = os.getenv('FIREBASE_SERVICE_ACCOUNT_JSON')
+            if firebase_json:
+                try:
+                    cred_dict = json.loads(firebase_json)
+                    cred = credentials.Certificate(cred_dict)
+                    print("Using Firebase credentials from environment variable")
+                except json.JSONDecodeError as e:
+                    print(f"Invalid JSON in FIREBASE_SERVICE_ACCOUNT_JSON: {e}")
+                    raise
+            else:
+                # Use absolute path for AWS EC2
+                firebase_path = "/home/ubuntu/PulseQ_Backend/firebase_key.json"
+                cred = credentials.Certificate(firebase_path)
+                print(f"Using Firebase credentials from file: {firebase_path}")
+            
+            firebase_admin.initialize_app(cred)
+            print("Firebase initialized successfully!")
+        
+        # Initialize database connection
+        initialize_firebase()
+        print("Backend started successfully!")
+    except Exception as e:
+        print(f"Failed to start backend: {e}")
+        raise
+
+    async def _autoskip_worker():
+        # Run forever; best-effort (never crashes app)
+        interval = max(15, int(QUEUE_AUTOSKIP_INTERVAL_SECONDS or 60))
+        while True:
+            try:
+                await QueueManagementService.autoskip_cycle()
+            except Exception:
+                pass
+            await asyncio.sleep(interval)
+
+    try:
+        autoskip_task = asyncio.create_task(_autoskip_worker())
+        print(f"Auto-skip worker started (interval={int(QUEUE_AUTOSKIP_INTERVAL_SECONDS)}s)")
+    except Exception as e:
+        print(f"Auto-skip worker failed to start: {e}")
+
+    # Start APScheduler (for production-safe background scheduling)
+    try:
+        start_scheduler()
+        print("APScheduler started")
+    except Exception as e:
+        print(f"APScheduler failed to start: {e}")
+    # Try to load AI engine model at startup (do not crash app if it fails)
+    try:
+        ai_engine.load()
+        print("AI Engine model loaded successfully!")
+    except Exception as e:
+        print(f"AI Engine failed to load: {e}")
+    
+    yield
+    
+    # Shutdown
+    print("Shutting down Smart Token Backend...")
+    try:
+        if autoskip_task:
+            autoskip_task.cancel()
+    except Exception:
+        pass
+
+    try:
+        shutdown_scheduler()
+    except Exception:
+        pass
+
+# Initialize FastAPI app
+app = FastAPI(
+    title=PROJECT_NAME,
+    description="Backend API for PulseQ mobile application - Healthcare appointment system",
+    version="1.0.0",
+    debug=DEBUG,
+    lifespan=lifespan
+)
+
+# Add CORS middleware
+# Read comma-separated origins from env ALLOWED_ORIGINS, default to "*"
+_origins_env = os.getenv("ALLOWED_ORIGINS", "")
+_allowed_origins = [o.strip() for o in _origins_env.split(",") if o.strip()]
+_default_origins = [o for o in [WEB_BASE_URL, MOBILE_BASE_URL] if o]
+_extra = EXTRA_CORS_ORIGINS or []
+if not (_allowed_origins or _default_origins or _extra):
+    _allowed_origins = ["*"]
+cors_origins = _allowed_origins or (_default_origins + _extra)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# -------------------- Routers (Strict RBAC Portal Isolation) --------------------
+# Public / unauth routes
+app.include_router(auth.router, prefix="/api/v1")
+app.include_router(health.router, prefix="/api/v1")
+app.include_router(ml.router, prefix="/api/v1/ml", tags=["ML"])
+app.include_router(ai.router, prefix="/api/v1/ai", tags=["AI"])
+app.include_router(whatsapp_webhook_router, prefix="/api/v1")
+
+# Public discovery endpoints (no auth)
+app.include_router(hospitals.router, prefix="/api/v1/public")
+app.include_router(doctors.router, prefix="/api/v1/public")
+app.include_router(pharmacy_public_router, prefix="/api/v1/public")
+
+# Patient portal
+app.include_router(dashboard.router, prefix="/api/v1/patient")
+app.include_router(profile.router, prefix="/api/v1/patient")
+app.include_router(tokens.router, prefix="/api/v1/patient")
+app.include_router(tokens_listing.router, prefix="/api/v1/patient")
+app.include_router(tokens_idempotent.router, prefix="/api/v1/patient")
+app.include_router(payments.router, prefix="/api/v1/patient")
+app.include_router(patient.router, prefix="/api/v1/patient")
+app.include_router(portal.router, prefix="/api/v1/patient")
+app.include_router(queue.router, prefix="/api/v1/patient")
+
+# Doctor portal
+app.include_router(portal.router, prefix="/api/v1/doctor")
+app.include_router(consultation.router, prefix="/api/v1/doctor")
+app.include_router(queue.router, prefix="/api/v1/doctor")
+app.include_router(realtime.router, prefix="/api/v1/doctor")
+
+# Receptionist portal
+app.include_router(tokens.router, prefix="/api/v1/receptionist")
+app.include_router(queue.router, prefix="/api/v1/receptionist")
+app.include_router(realtime.router, prefix="/api/v1/receptionist")
+app.include_router(doctors.router, prefix="/api/v1/receptionist")
+app.include_router(consultation.router, prefix="/api/v1/receptionist")
+app.include_router(portal.router, prefix="/api/v1/receptionist")
+
+# Pharmacist portal
+app.include_router(pharmacy_portal_router, prefix="/api/v1/pharmacist")
+
+# Admin portal
+app.include_router(dashboard.router, prefix="/api/v1/admin")
+app.include_router(profile.router, prefix="/api/v1/admin")
+app.include_router(tokens.router, prefix="/api/v1/admin")
+app.include_router(tokens_listing.router, prefix="/api/v1/admin")
+app.include_router(tokens_idempotent.router, prefix="/api/v1/admin")
+app.include_router(payments.router, prefix="/api/v1/admin")
+app.include_router(patient.router, prefix="/api/v1/admin")
+app.include_router(portal.router, prefix="/api/v1/admin")
+app.include_router(queue.router, prefix="/api/v1/admin")
+app.include_router(realtime.router, prefix="/api/v1/admin")
+app.include_router(consultation.router, prefix="/api/v1/admin")
+app.include_router(doctors.router, prefix="/api/v1/admin")
+
+# POS integration (shared across roles / external systems)
+app.include_router(pos.router, prefix="/api")
+
+# Reception queue (fees) - POS/Retailer friendly path
+app.include_router(reception.router, prefix="/api")
+
+# Root endpoint
+@app.get("/")
+async def root():
+    """Root endpoint with API information"""
+    return {
+        "message": "Smart Token Backend API",
+        "version": "1.0.0",
+        "status": "running",
+        "docs": "/docs",
+        "redoc": "/redoc"
+    }
+
+# Also load AI engine on FastAPI startup event (idempotent with lifespan loader)
+@app.on_event("startup")
+async def startup_event():
+    try:
+        ai_engine.load()
+        print("AI Engine model loaded successfully (startup event)")
+    except Exception as e:
+        print(f"AI Engine failed to load on startup event: {e}")
+
+# Health check endpoint
+@app.get("/ping")
+async def health_check():
+    """Health check endpoint"""
+    return {"status": "healthy", "message": "pong"}
+
+# Protected endpoint for testing authentication
+@app.get("/secure")
+async def secure_endpoint():
+    """Protected endpoint for testing authentication"""
+    return {
+        "message": "This is a protected endpoint",
+        "status": "authenticated"
+    }
+
+# Global exception handler
+@app.exception_handler(Exception)
+async def global_exception_handler(request, exc):
+    """Global exception handler with standardized response"""
+    return fail(message="Internal server error", status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+# HTTPException -> standardized fail envelope
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request, exc: HTTPException):
+    message = exc.detail if isinstance(exc.detail, str) else "Request failed"
+    # include original detail in data for debugging/UX
+    return fail(message=message, status_code=exc.status_code, data={"detail": exc.detail})
+
+# Validation errors -> clear messages for web
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request, exc: RequestValidationError):
+    try:
+        # Build concise message from first error while returning full list in data
+        first = exc.errors()[0] if exc.errors() else {}
+        loc = ".".join([str(x) for x in first.get("loc", [])]) if first else "request"
+        msg = first.get("msg", "Validation error") if first else "Validation error"
+        message = f"{loc}: {msg}" if loc else msg
+    except Exception:
+        message = "Validation error"
+    return fail(message=message, status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, data={"errors": exc.errors()})
+
+# 404 handler
+@app.exception_handler(404)
+async def not_found_handler(request, exc):
+    """404 not found handler with standardized response"""
+    return fail(message="Endpoint not found", status_code=status.HTTP_404_NOT_FOUND)
+
+# Application is served by Gunicorn in production
