@@ -3,18 +3,31 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from app.config import DATABASE_URL
 
-# Create SQLAlchemy engine
-engine = create_engine(DATABASE_URL, pool_pre_ping=True)
-
-# Create sessionmaker
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
 # Create base class for models
 Base = declarative_base()
+
+# Engine and session will be initialized lazily
+_engine = None
+_SessionLocal = None
+
+def get_engine():
+    """Get or create SQLAlchemy engine"""
+    global _engine
+    if _engine is None:
+        _engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+    return _engine
+
+def get_session_local():
+    """Get or create sessionmaker"""
+    global _SessionLocal
+    if _SessionLocal is None:
+        _SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=get_engine())
+    return _SessionLocal
 
 # Dependency to get DB session
 def get_db() -> Session:
     """Get database session"""
+    SessionLocal = get_session_local()
     db = SessionLocal()
     try:
         yield db
@@ -24,12 +37,14 @@ def get_db() -> Session:
 # For direct DB access (non-generator)
 def get_db_session() -> Session:
     """Get database session directly (for non-async contexts)"""
+    SessionLocal = get_session_local()
     return SessionLocal()
 
 # Initialize database tables
 def init_db():
     """Create all tables"""
     from app import db_models  # Import all models
+    engine = get_engine()
     Base.metadata.create_all(bind=engine)
     print("Database tables created successfully!")
 
@@ -158,6 +173,7 @@ def initialize_firebase():
     """Legacy function - now initializes PostgreSQL connection"""
     try:
         # Test connection
+        engine = get_engine()
         with engine.connect() as conn:
             conn.execute("SELECT 1")
         print("✅ Database connection successful")

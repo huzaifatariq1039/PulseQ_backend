@@ -50,10 +50,11 @@ async def lifespan(app: FastAPI):
         # Create tables if they don't exist
         init_db()
         print("✅ Database initialized successfully!")
-        print("Backend started successfully!")
     except Exception as e:
-        print(f"❌ Failed to start backend: {e}")
-        raise
+        print(f"⚠️ Database initialization warning: {e}")
+        print("⚠️ Continuing without database - some features may not work")
+    
+    print("Backend started successfully!")
 
     async def _autoskip_worker():
         # Run forever; best-effort (never crashes app)
