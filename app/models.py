@@ -693,3 +693,10 @@ class PharmacyMedicineResponse(PharmacyMedicineBase):
 # Queue Token Status Update Model
 class QueueTokenStatusUpdate(BaseModel):
     status: str
+
+# Token Create Spec Model (for idempotent token creation)
+class TokenCreateSpec(BaseModel):
+    doctor_id: str
+    hospital_id: str
+    appointment_date: str  # YYYY-MM-DD in clinic local timezone
+    idempotency_key: str

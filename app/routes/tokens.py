@@ -8,7 +8,7 @@ from app.models import (
     ActivityType, TokenCancellationRequest, QueueResponse, NotificationRequest,
     TokenStatus, NotificationType, CancellationResponse, RefundCalculation,
     CancellationReason, RefundMethod, RefundStatus, SmartTokenGenerateRequest,
-    PaymentStatus, QueueTokenStatusUpdate
+    PaymentStatus, QueueTokenStatusUpdate, TokenCreateSpec
 )
 from app.database import get_db
 from app.config import COLLECTIONS, TOKEN_FEE

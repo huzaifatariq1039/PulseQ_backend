@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, Request, status
 from pydantic import BaseModel
 from app.security import get_current_active_user
-from app.routes.tokens import TokenCreateSpec, create_token
+from app.routes.tokens import create_token
+from app.models import TokenCreateSpec
 from app.utils.idempotency import Idempotency
 from app.utils.responses import ok, fail
 from app.utils.audit import log_action, get_user_role

@@ -7,19 +7,14 @@ import os
 import asyncio
 
 # Import configuration and database
-from app.config import PROJECT_NAME, DEBUG, FIREBASE_SERVICE_ACCOUNT_KEY
-from app.database import initialize_firebase
+from app.config import PROJECT_NAME, DEBUG
+from app.database import initialize_firebase, init_db
 from app.config_env import WEB_BASE_URL, MOBILE_BASE_URL, EXTRA_CORS_ORIGINS
 from app.utils.responses import fail
 from app.services.ai_engine import ai_engine
 from app.services.queue_management_service import QueueManagementService
 from app.config import QUEUE_AUTOSKIP_INTERVAL_SECONDS
 from app.services.app_scheduler import start_scheduler, shutdown_scheduler
-
-# Firebase initialization for AWS EC2
-import firebase_admin
-from firebase_admin import credentials, firestore
-import json
 
 # Import routes
 from app.routes import auth, hospitals, doctors, tokens, dashboard
@@ -48,51 +43,16 @@ async def lifespan(app: FastAPI):
 
     autoskip_task: asyncio.Task | None = None
     
-    # Initialize Firebase for AWS EC2 / Render
+    # Initialize PostgreSQL database
     try:
-        # Check if Firebase is already initialized
-        if not firebase_admin._apps:
-            # Try environment variable first, then file
-            firebase_json = os.getenv('FIREBASE_SERVICE_ACCOUNT_JSON')
-            if firebase_json:
-                try:
-                    cred_dict = json.loads(firebase_json)
-                    cred = credentials.Certificate(cred_dict)
-                    print("Using Firebase credentials from environment variable")
-                except json.JSONDecodeError as e:
-                    print(f"Invalid JSON in FIREBASE_SERVICE_ACCOUNT_JSON: {e}")
-                    raise
-            else:
-                # Try multiple possible paths for different environments
-                possible_paths = [
-                    "/home/ubuntu/PulseQ_Backend/firebase_key.json",  # AWS EC2
-                    "/opt/render/project/src/firebase_key.json",      # Render
-                    "firebase_key.json",                               # Local / relative
-                ]
-                firebase_path = None
-                for path in possible_paths:
-                    if os.path.exists(path):
-                        firebase_path = path
-                        break
-                
-                if firebase_path is None:
-                    raise FileNotFoundError(
-                        "Firebase credentials not found. Please set FIREBASE_SERVICE_ACCOUNT_JSON "
-                        "environment variable or place firebase_key.json in one of these locations: "
-                        + ", ".join(possible_paths)
-                    )
-                
-                cred = credentials.Certificate(firebase_path)
-                print(f"Using Firebase credentials from file: {firebase_path}")
-            
-            firebase_admin.initialize_app(cred)
-            print("Firebase initialized successfully!")
-        
         # Initialize database connection
         initialize_firebase()
+        # Create tables if they don't exist
+        init_db()
+        print("✅ Database initialized successfully!")
         print("Backend started successfully!")
     except Exception as e:
-        print(f"Failed to start backend: {e}")
+        print(f"❌ Failed to start backend: {e}")
         raise
 
     async def _autoskip_worker():

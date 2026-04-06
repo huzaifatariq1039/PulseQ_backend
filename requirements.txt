@@ -3,7 +3,12 @@ fastapi==0.104.1
 uvicorn[standard]==0.24.0
 gunicorn==21.2.0
 
-# Firebase
+# Database
+sqlalchemy==2.0.23
+psycopg2-binary==2.9.9
+alembic==1.12.1
+
+# Firebase (keeping for migration period)
 firebase-admin==6.2.0
 google-cloud-firestore>=2.13.1
 

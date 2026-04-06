@@ -20,7 +20,13 @@ TOKEN_FEE = float(os.getenv("TOKEN_FEE", "50"))
 # Testing Mode (for development without Firebase)
 TESTING_MODE = os.getenv("TESTING_MODE", "False").lower() == "true"
 
-# Firebase Configuration
+# Database Configuration
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "postgresql://postgres:postgres@localhost:5432/pulseq"
+)
+
+# Firebase Configuration (deprecated - keeping for migration)
 FIREBASE_SERVICE_ACCOUNT_KEY = os.getenv(
     "FIREBASE_SERVICE_ACCOUNT_KEY", 
     "smart-token-247bb-firebase-adminsdk-fbsvc-b793f6e6af.json"
