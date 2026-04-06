@@ -48,7 +48,7 @@ async def lifespan(app: FastAPI):
 
     autoskip_task: asyncio.Task | None = None
     
-    # Initialize Firebase for AWS EC2
+    # Initialize Firebase for AWS EC2 / Render
     try:
         # Check if Firebase is already initialized
         if not firebase_admin._apps:
@@ -63,8 +63,25 @@ async def lifespan(app: FastAPI):
                     print(f"Invalid JSON in FIREBASE_SERVICE_ACCOUNT_JSON: {e}")
                     raise
             else:
-                # Use absolute path for AWS EC2
-                firebase_path = "/home/ubuntu/PulseQ_Backend/firebase_key.json"
+                # Try multiple possible paths for different environments
+                possible_paths = [
+                    "/home/ubuntu/PulseQ_Backend/firebase_key.json",  # AWS EC2
+                    "/opt/render/project/src/firebase_key.json",      # Render
+                    "firebase_key.json",                               # Local / relative
+                ]
+                firebase_path = None
+                for path in possible_paths:
+                    if os.path.exists(path):
+                        firebase_path = path
+                        break
+                
+                if firebase_path is None:
+                    raise FileNotFoundError(
+                        "Firebase credentials not found. Please set FIREBASE_SERVICE_ACCOUNT_JSON "
+                        "environment variable or place firebase_key.json in one of these locations: "
+                        + ", ".join(possible_paths)
+                    )
+                
                 cred = credentials.Certificate(firebase_path)
                 print(f"Using Firebase credentials from file: {firebase_path}")
             

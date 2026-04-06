@@ -689,3 +689,7 @@ class PharmacyMedicineUpdate(BaseModel):
 class PharmacyMedicineResponse(PharmacyMedicineBase):
     id: str
     created_at: Optional[datetime] = None
+
+# Queue Token Status Update Model
+class QueueTokenStatusUpdate(BaseModel):
+    status: str

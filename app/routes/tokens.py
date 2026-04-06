@@ -1,7 +1,6 @@
 from fastapi import APIRouter, HTTPException, status, Depends, Query, Response, Body, Request
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
-from app.models import QueueTokenStatusUpdate
 import logging
 
 from app.models import (
@@ -9,7 +8,7 @@ from app.models import (
     ActivityType, TokenCancellationRequest, QueueResponse, NotificationRequest,
     TokenStatus, NotificationType, CancellationResponse, RefundCalculation,
     CancellationReason, RefundMethod, RefundStatus, SmartTokenGenerateRequest,
-    PaymentStatus
+    PaymentStatus, QueueTokenStatusUpdate
 )
 from app.database import get_db
 from app.config import COLLECTIONS, TOKEN_FEE
