@@ -1,1 +1,2 @@
-# Smart Token Backend Package 
+# Smart Token Backend Package
+from main import app 

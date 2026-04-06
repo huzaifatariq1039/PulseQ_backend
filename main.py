@@ -214,7 +214,7 @@ app.include_router(reception.router, prefix="/api")
 async def root():
     """Root endpoint with API information"""
     return {
-        "message": "Smart Token Backend API",
+        "message": "PulseQ backend running successfully",
         "version": "1.0.0",
         "status": "running",
         "docs": "/docs",
