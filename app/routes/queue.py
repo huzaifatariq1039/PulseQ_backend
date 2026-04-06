@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, status, Depends, Request
 from typing import List, Dict, Any, Optional
-from app.models import QueueResponse, QueueStatus, NotificationType, ConsultationDetails
+from app.models import QueueResponse, QueueStatus, NotificationType
 from app.database import get_db
 from app.config import COLLECTIONS
 from app.security import get_current_active_user
