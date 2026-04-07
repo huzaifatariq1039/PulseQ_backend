@@ -148,6 +148,7 @@ class Token(Base):
     consultation_fee = Column(Float, nullable=True)
     session_fee = Column(Float, nullable=True)
     total_fee = Column(Float, nullable=True)
+    department = Column(String(100), nullable=True)  # Doctor department/specialization
     idempotency_key = Column(String(255), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

@@ -450,11 +450,13 @@ class SmartTokenCreate(BaseModel):
     doctor_id: str
     hospital_id: str
     appointment_date: datetime
+    department: Optional[str] = None
 
 class SmartTokenGenerateRequest(BaseModel):
     doctor_id: str
     hospital_id: str
     appointment_date: Optional[datetime] = None
+    department: Optional[str] = None
 
 class SmartTokenResponse(BaseModel):
     id: str
@@ -476,6 +478,7 @@ class SmartTokenResponse(BaseModel):
     consultation_fee: Optional[float] = None
     session_fee: Optional[float] = None
     total_fee: Optional[float] = None
+    department: Optional[str] = None  # Doctor department/specialization
     created_at: datetime
     updated_at: datetime
     # Convenience flag for UI filtering; true unless status is cancelled or completed
@@ -700,3 +703,4 @@ class TokenCreateSpec(BaseModel):
     hospital_id: str
     appointment_date: str  # YYYY-MM-DD in clinic local timezone
     idempotency_key: str
+    department: Optional[str] = None
