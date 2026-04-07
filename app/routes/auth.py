@@ -5,7 +5,7 @@ from typing import Annotated
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, func
-from app.models import UserCreate, UserResponse, Token, LoginRequest, LocationUpdate, AuthMethod, ActivityLogCreate, ActivityType
+from app.models import UserCreate, UserResponse, Token, LoginRequest, LocationUpdate, AuthMethod, ActivityType
 from app.security import (
     get_password_hash,
     verify_password,
@@ -18,7 +18,7 @@ from app.database import get_db_session
 from app.config import ACCESS_TOKEN_EXPIRE_MINUTES
 from datetime import datetime
 import uuid
-from app.db_models import User as UserModel, ActivityLog as ActivityLogModel
+from app.db_models import User as UserDB
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -91,8 +91,8 @@ async def check_phone_exists(phone: str):
         norm = _normalize_phone(phone)
         
         # Check for existing phone (normalized or raw)
-        user = db.query(UserModel).filter(
-            or_(UserModel.phone == phone, UserModel.phone == norm)
+        user = db.query(UserDB).filter(
+            or_(UserDB.phone == phone, UserDB.phone == norm)
         ).first()
         
         db.close()
@@ -129,8 +129,8 @@ async def register_user(user: UserCreate):
         
         # Check if user already exists
         if user.auth_method == AuthMethod.EMAIL and user.email:
-            existing = db.query(UserModel).filter(
-                func.lower(UserModel.email) == user.email.lower()
+            existing = db.query(UserDB).filter(
+                func.lower(UserDB.email) == user.email.lower()
             ).first()
             if existing:
                 raise HTTPException(
@@ -152,8 +152,8 @@ async def register_user(user: UserCreate):
                 )
             
             # Check for existing phone
-            existing = db.query(UserModel).filter(
-                or_(UserModel.phone == user.phone, UserModel.phone == phone_norm)
+            existing = db.query(UserDB).filter(
+                or_(UserDB.phone == user.phone, UserDB.phone == phone_norm)
             ).first()
             if existing:
                 raise HTTPException(
@@ -173,7 +173,7 @@ async def register_user(user: UserCreate):
         password_hash = get_password_hash(user.password)
         
         # Create user model
-        new_user = UserModel(
+        new_user = UserDB(
             id=user_id,
             name=user.name or f"User-{int(now.timestamp())}",
             email=user.email.lower() if user.email else None,
@@ -242,15 +242,15 @@ async def login(login_data: LoginRequest):
         # Find user by email or phone
         user = None
         if login_data.auth_method == AuthMethod.EMAIL:
-            user = db.query(UserModel).filter(
-                func.lower(UserModel.email) == login_data.identifier.lower()
+            user = db.query(UserDB).filter(
+                func.lower(UserDB.email) == login_data.identifier.lower()
             ).first()
         else:  # PHONE
             phone_norm = _normalize_phone(login_data.identifier)
-            user = db.query(UserModel).filter(
+            user = db.query(UserDB).filter(
                 or_(
-                    UserModel.phone == login_data.identifier,
-                    UserModel.phone == phone_norm
+                    UserDB.phone == login_data.identifier,
+                    UserDB.phone == phone_norm
                 )
             ).first()
         
@@ -301,11 +301,11 @@ async def login_form(form_data: Annotated[OAuth2PasswordRequestForm, Depends()])
     db = get_db_session()
     try:
         # Try to find user by email or phone
-        user = db.query(UserModel).filter(
+        user = db.query(UserDB).filter(
             or_(
-                func.lower(UserModel.email) == form_data.username.lower(),
-                UserModel.phone == form_data.username,
-                UserModel.phone == _normalize_phone(form_data.username)
+                func.lower(UserDB.email) == form_data.username.lower(),
+                UserDB.phone == form_data.username,
+                UserDB.phone == _normalize_phone(form_data.username)
             )
         ).first()
         
@@ -348,7 +348,7 @@ async def update_location_access(
     """Update user's location access"""
     db = get_db_session()
     try:
-        user = db.query(UserModel).filter(UserModel.id == current_user.id).first()
+        user = db.query(UserDB).filter(UserDB.id == current_user.id).first()
         if user:
             user.location_access = update.location_access
             user.updated_at = datetime.utcnow()
@@ -365,16 +365,16 @@ async def check_availability(email: str = None, phone: str = None):
         result = {"email_available": True, "phone_available": True}
         
         if email:
-            existing = db.query(UserModel).filter(
-                func.lower(UserModel.email) == email.lower()
+            existing = db.query(UserDB).filter(
+                func.lower(UserDB.email) == email.lower()
             ).first()
             result["email_available"] = existing is None
             result["email"] = email
         
         if phone:
             phone_norm = _normalize_phone(phone)
-            existing = db.query(UserModel).filter(
-                or_(UserModel.phone == phone, UserModel.phone == phone_norm)
+            existing = db.query(UserDB).filter(
+                or_(UserDB.phone == phone, UserDB.phone == phone_norm)
             ).first()
             result["phone_available"] = existing is None
             result["phone"] = phone
