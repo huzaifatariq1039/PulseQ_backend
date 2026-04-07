@@ -66,16 +66,17 @@ def _normalize_phone(phone: str) -> str:
     # For any other case, return the cleaned digits
     return digits
 
-def create_activity_log_sync(user_id: str, activity_type: str, description: str, metadata: dict = None):
+def create_activity_log_sync(user_id: str, activity_type: str, description: str, meta_data: dict = None):
     """Helper function to create activity logs (synchronous version)"""
     try:
         db = get_db_session()
+        from app.db_models import ActivityLog as ActivityLogModel
         activity = ActivityLogModel(
             id=str(uuid.uuid4()),
             user_id=user_id,
             activity_type=activity_type,
             description=description,
-            metadata=metadata or {}
+            meta_data=meta_data or {}
         )
         db.add(activity)
         db.commit()

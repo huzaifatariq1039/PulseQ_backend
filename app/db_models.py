@@ -190,7 +190,7 @@ class ActivityLog(Base):
     user_id = Column(String, ForeignKey("users.id"), nullable=False)
     activity_type = Column(String(50), nullable=False)
     description = Column(Text, nullable=False)
-    metadata = Column(JSON, nullable=True)
+    meta_data = Column(JSON, nullable=True)  # Renamed from 'metadata' to avoid SQLAlchemy reserved name
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # Relationships
