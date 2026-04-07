@@ -1,7 +1,6 @@
 from fastapi import APIRouter, HTTPException, status, Depends, Form
 from fastapi.security import OAuth2PasswordRequestForm
 from datetime import timedelta
-from typing import Annotated
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, func
@@ -21,14 +20,6 @@ import uuid
 from app.db_models import User as UserDB
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
-
-# Custom OAuth2 form that doesn't require grant_type
-class CustomOAuth2PasswordRequestForm(BaseModel):
-    username: Annotated[str, Form()]
-    password: Annotated[str, Form()]
-    
-    class Config:
-        from_attributes = True
 
 class PharmacyLoginRequest(BaseModel):
     email: str = Field(..., description="Pharmacy user email")
@@ -297,7 +288,7 @@ async def login(login_data: LoginRequest):
         db.close()
 
 @router.post("/login-form", response_model=Token)
-async def login_form(form_data: Annotated[OAuth2PasswordRequestForm, Depends()]):
+async def login_form(form_data: OAuth2PasswordRequestForm = Depends()):
     """Login using OAuth2 form (for Swagger UI)"""
     db = get_db_session()
     try:
