@@ -1,0 +1,607 @@
+{
+  "info": {
+    "_postman_id": "pulseq-api-collection",
+    "name": "PulseQ Backend API",
+    "description": "Complete API collection for PulseQ Healthcare Backend",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health & Status",
+      "item": [
+        {
+          "name": "Root Endpoint",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/",
+              "host": ["{{base_url}}"],
+              "path": [""]
+            },
+            "description": "Returns PulseQ backend status message"
+          },
+          "response": []
+        },
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/health",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "health"]
+            },
+            "description": "Check database and ML engine status"
+          },
+          "response": []
+        },
+        {
+          "name": "Ping",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/ping",
+              "host": ["{{base_url}}"],
+              "path": ["ping"]
+            },
+            "description": "Simple health ping endpoint"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Check Phone Exists",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/check-phone/+923001234567",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "check-phone", "+923001234567"]
+            },
+            "description": "Check if a phone number is already registered"
+          },
+          "response": []
+        },
+        {
+          "name": "Register User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Test User\",\n  \"email\": \"testuser@example.com\",\n  \"phone\": \"+923001234567\",\n  \"password\": \"testpassword123\",\n  \"role\": \"patient\",\n  \"auth_method\": \"phone\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/register",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "register"]
+            },
+            "description": "Register a new user (patient, doctor, admin, etc.)"
+          },
+          "response": []
+        },
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"identifier\": \"+923001234567\",\n  \"password\": \"testpassword123\",\n  \"auth_method\": \"phone\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "login"]
+            },
+            "description": "Login with phone/email and password. Returns access_token."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Current User",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/me",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "me"]
+            },
+            "description": "Get current logged-in user details"
+          },
+          "response": []
+        },
+        {
+          "name": "Pharmacy Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"pharmacy@example.com\",\n  \"password\": \"pharmacypassword123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/pharmacy/login",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "pharmacy", "login"]
+            },
+            "description": "Login specifically for pharmacy users"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Public Data",
+      "item": [
+        {
+          "name": "Get All Hospitals",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/public/hospitals",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "public", "hospitals"]
+            },
+            "description": "Get list of all hospitals"
+          },
+          "response": []
+        },
+        {
+          "name": "Get All Doctors",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/public/doctors",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "public", "doctors"]
+            },
+            "description": "Get list of all doctors"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Pharmacy Medicines",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/public/pharmacy/medicines",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "public", "pharmacy", "medicines"]
+            },
+            "description": "Get list of pharmacy medicines"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Patient Portal",
+      "item": [
+        {
+          "name": "Get Dashboard",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/patient/dashboard",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "patient", "dashboard"]
+            },
+            "description": "Get patient dashboard data"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/patient/profile",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "patient", "profile"]
+            },
+            "description": "Get patient profile"
+          },
+          "response": []
+        },
+        {
+          "name": "Update Profile",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Name\",\n  \"address\": \"New Address\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/patient/profile",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "patient", "profile"]
+            },
+            "description": "Update patient profile"
+          },
+          "response": []
+        },
+        {
+          "name": "Generate Token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"doctor_id\": \"doc_123\",\n  \"hospital_id\": \"hosp_456\",\n  \"appointment_date\": \"2026-04-07T10:00:00\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/patient/tokens/generate",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "patient", "tokens", "generate"]
+            },
+            "description": "Generate a new token for appointment"
+          },
+          "response": []
+        },
+        {
+          "name": "Get My Tokens",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/patient/tokens/my-tokens",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "patient", "tokens", "my-tokens"]
+            },
+            "description": "Get all tokens for current patient"
+          },
+          "response": []
+        },
+        {
+          "name": "Cancel Token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"schedule_conflict\",\n  \"refund_method\": \"original_payment\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/patient/tokens/{{token_id}}/cancel",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "patient", "tokens", "{{token_id}}", "cancel"]
+            },
+            "description": "Cancel a token/appointment"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Queue Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/patient/queue/doctor/{{doctor_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "patient", "queue", "doctor", "{{doctor_id}}"]
+            },
+            "description": "Get queue status for a doctor"
+          },
+          "response": []
+        },
+        {
+          "name": "Process Payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token_id\": \"token_123\",\n  \"amount\": 500,\n  \"method\": \"online\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/patient/payments/process",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "patient", "payments", "process"]
+            },
+            "description": "Process payment for a token"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Doctor Portal",
+      "item": [
+        {
+          "name": "Advance Queue",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{doctor_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/doctor/queue/doctor/{{doctor_id}}/advance",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "doctor", "queue", "doctor", "{{doctor_id}}", "advance"]
+            },
+            "description": "Advance to next patient in queue"
+          },
+          "response": []
+        },
+        {
+          "name": "Start Token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{doctor_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/doctor/queue/token/{{token_id}}/start",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "doctor", "queue", "token", "{{token_id}}", "start"]
+            },
+            "description": "Start consultation for a token"
+          },
+          "response": []
+        },
+        {
+          "name": "Skip Token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{doctor_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/doctor/queue/token/{{token_id}}/skip",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "doctor", "queue", "token", "{{token_id}}", "skip"]
+            },
+            "description": "Skip a token in queue"
+          },
+          "response": []
+        },
+        {
+          "name": "Complete Token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{doctor_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/doctor/queue/token/{{token_id}}/complete",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "doctor", "queue", "token", "{{token_id}}", "complete"]
+            },
+            "description": "Complete consultation for a token"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Admin Portal",
+      "item": [
+        {
+          "name": "Create Hospital",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Test Hospital\",\n  \"address\": \"123 Main St\",\n  \"city\": \"Lahore\",\n  \"state\": \"Punjab\",\n  \"phone\": \"+920123456789\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/hospitals",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "admin", "hospitals"]
+            },
+            "description": "Create a new hospital (Admin only)"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Doctor",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Dr. Test Doctor\",\n  \"specialization\": \"Cardiology\",\n  \"hospital_id\": \"hosp_123\",\n  \"phone\": \"+920123456789\",\n  \"experience_years\": 10,\n  \"consultation_fee\": 1000,\n  \"start_time\": \"09:00\",\n  \"end_time\": \"17:00\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/doctors",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "admin", "doctors"]
+            },
+            "description": "Create a new doctor (Admin only)"
+          },
+          "response": []
+        },
+        {
+          "name": "Get All Tokens",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/tokens",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "admin", "tokens"]
+            },
+            "description": "Get all tokens (Admin only)"
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [""]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [""]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "https://pulseq-backend.onrender.com",
+      "type": "string"
+    },
+    {
+      "key": "access_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "doctor_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "admin_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "token_id",
+      "value": "token_123",
+      "type": "string"
+    },
+    {
+      "key": "doctor_id",
+      "value": "doc_123",
+      "type": "string"
+    }
+  ]
+}
