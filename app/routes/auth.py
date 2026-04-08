@@ -246,24 +246,44 @@ async def login(login_data: LoginRequest):
             ).first()
         
         if not user:
+            print(f"[ERROR] User not found: {login_data.identifier}")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid credentials"
             )
         
+        print(f"[DEBUG] User found: {user.id}, verifying password...")
+        
         # Verify password using SHA-256 + bcrypt (handles unlimited length)
-        if not verify_password(login_data.password, user.password_hash):
+        try:
+            password_valid = verify_password(login_data.password, user.password_hash)
+        except Exception as pwd_error:
+            print(f"[ERROR] Password verification error: {str(pwd_error)}")
+            # This might happen with old password hashes from the previous hashing method
+            print(f"[ERROR] This could be due to old password hash format. User needs to re-register.")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid credentials"
             )
+        
+        if not password_valid:
+            print(f"[ERROR] Invalid password for user: {user.id}")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid credentials"
+            )
+        
+        print(f"[DEBUG] Password verified successfully for user: {user.id}")
+        
+        # Convert role to string if it's an Enum
+        user_role = user.role.value if hasattr(user.role, 'value') else str(user.role)
         
         # Create tokens
         access_token = create_access_token(
-            data={"sub": user.id, "role": user.role},
+            data={"sub": str(user.id), "role": user_role},
             expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
         )
-        refresh_token = create_refresh_token(data={"sub": user.id})
+        refresh_token = create_refresh_token(data={"sub": str(user.id)})
         
         print(f"[DEBUG] Login successful: {user.id}")
         
@@ -281,7 +301,7 @@ async def login(login_data: LoginRequest):
         print(traceback.format_exc())
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Login failed"
+            detail=f"Login failed: {str(e)}"
         )
     finally:
         db.close()
