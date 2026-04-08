@@ -1,27 +1,44 @@
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
+import hashlib
+import bcrypt
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import jwt, JWTError
-from passlib.context import CryptContext
 
 from app.config import SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES, REFRESH_TOKEN_EXPIRE_DAYS, COLLECTIONS
 from app.database import get_db
 from app.models import TokenData
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 
-# PASSWORDS
-def verify_password(plain, hashed):
-    return pwd_context.verify(plain, hashed)
+# PASSWORDS - SHA-256 + bcrypt (handles unlimited password length)
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """
+    Verify a password against its hash.
+    Flow: plain password -> SHA-256 -> bcrypt verification
+    """
+    # Step 1: Pre-hash with SHA-256 (handles unlimited length, always 32 bytes)
+    sha_hash = hashlib.sha256(plain_password.encode("utf-8")).digest()
+    
+    # Step 2: Verify with bcrypt
+    return bcrypt.checkpw(sha_hash, hashed_password.encode("utf-8"))
 
 
-def get_password_hash(password):
-    return pwd_context.hash(password)
+def get_password_hash(password: str) -> str:
+    """
+    Hash a password using SHA-256 + bcrypt.
+    Flow: plain password -> SHA-256 -> bcrypt hash
+    """
+    # Step 1: Pre-hash with SHA-256 (handles unlimited length, always 32 bytes)
+    sha_hash = hashlib.sha256(password.encode("utf-8")).digest()
+    
+    # Step 2: Hash with bcrypt (32 bytes is well within 72-byte limit)
+    bcrypt_hash = bcrypt.hashpw(sha_hash, bcrypt.gensalt())
+    
+    return bcrypt_hash.decode("utf-8")
 
 
 # ACCESS TOKEN
