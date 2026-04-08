@@ -194,7 +194,7 @@ async def register_user(user: UserCreate):
         
         # Return user data (without password)
         return UserResponse(
-            id=new_user.id,
+            id=str(new_user.id),  # Ensure ID is string, not UUID object
             name=new_user.name,
             email=new_user.email,
             phone=new_user.phone,
