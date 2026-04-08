@@ -160,8 +160,9 @@ async def register_user(user: UserCreate):
         date_of_birth = user.date_of_birth or getattr(user, 'birthday', None)
         address = user.address or getattr(user, 'location', None)
         
-        # Hash password
-        password_hash = get_password_hash(user.password)
+        # Hash password - truncate to 72 bytes silently (bcrypt limitation, frontend handles length)
+        raw_password = user.password.encode("utf-8")[:72].decode("utf-8", errors="ignore")
+        password_hash = get_password_hash(raw_password)
         
         # Create user model
         new_user = UserDB(
@@ -251,8 +252,9 @@ async def login(login_data: LoginRequest):
                 detail="Invalid credentials"
             )
         
-        # Verify password
-        if not verify_password(login_data.password, user.password_hash):
+        # Verify password - truncate to 72 bytes to match registration hashing
+        login_password = login_data.password.encode("utf-8")[:72].decode("utf-8", errors="ignore")
+        if not verify_password(login_password, user.password_hash):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid credentials"
