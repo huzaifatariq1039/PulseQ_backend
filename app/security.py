@@ -10,17 +10,23 @@ from app.config import SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES, REFRE
 from app.database import get_db
 from app.models import TokenData
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto", bcrypt__truncate_error=False)
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 
 # PASSWORDS
 def verify_password(plain, hashed):
+    # Truncate to 72 bytes before verifying (bcrypt limitation)
+    if isinstance(plain, str):
+        plain = plain.encode("utf-8")[:72].decode("utf-8", errors="ignore")
     return pwd_context.verify(plain, hashed)
 
 
 def get_password_hash(password):
+    # Truncate to 72 bytes before hashing (bcrypt limitation - handled transparently)
+    if isinstance(password, str):
+        password = password.encode("utf-8")[:72].decode("utf-8", errors="ignore")
     return pwd_context.hash(password)
 
 
