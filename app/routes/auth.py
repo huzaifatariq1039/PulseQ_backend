@@ -1,5 +1,4 @@
 from fastapi import APIRouter, HTTPException, status, Depends, Form
-from fastapi.security import OAuth2PasswordRequestForm
 from datetime import timedelta
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -283,41 +282,6 @@ async def login(login_data: LoginRequest):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Login failed"
-        )
-    finally:
-        db.close()
-
-@router.post("/login-form", response_model=Token)
-async def login_form(form_data: OAuth2PasswordRequestForm = Depends()):
-    """Login using OAuth2 form (for Swagger UI)"""
-    db = get_db_session()
-    try:
-        # Try to find user by email or phone
-        user = db.query(UserDB).filter(
-            or_(
-                func.lower(UserDB.email) == form_data.username.lower(),
-                UserDB.phone == form_data.username,
-                UserDB.phone == _normalize_phone(form_data.username)
-            )
-        ).first()
-        
-        if not user or not verify_password(form_data.password, user.password_hash):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid credentials",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-        
-        access_token = create_access_token(
-            data={"sub": user.id, "role": user.role},
-            expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-        )
-        refresh_token = create_refresh_token(data={"sub": user.id})
-        
-        return Token(
-            access_token=access_token,
-            refresh_token=refresh_token,
-            token_type="bearer"
         )
     finally:
         db.close()
