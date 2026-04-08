@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from app.config import DATABASE_URL
@@ -43,10 +43,14 @@ def get_db_session() -> Session:
 # Initialize database tables
 def init_db():
     """Create all tables"""
-    from app import db_models  # Import all models
-    engine = get_engine()
-    Base.metadata.create_all(bind=engine)
-    print("Database tables created successfully!")
+    try:
+        from app import db_models  # Import all models
+        engine = get_engine()
+        Base.metadata.create_all(bind=engine)
+        print("Database tables created successfully!")
+    except Exception as e:
+        print(f"⚠️ Could not create tables: {e}")
+        print("⚠️ Tables may already exist or database is unavailable")
 
 # Legacy compatibility - MockFirestore interface for gradual migration
 class MockFirestore:
@@ -175,8 +179,9 @@ def initialize_firebase():
         # Test connection
         engine = get_engine()
         with engine.connect() as conn:
-            conn.execute("SELECT 1")
+            conn.execute(text("SELECT 1"))
         print("✅ Database connection successful")
     except Exception as e:
         print(f"❌ Database connection failed: {e}")
-        raise
+        # Don't raise - let the app start even if DB is not available
+        print("⚠️ Continuing without database - will retry on first request")
