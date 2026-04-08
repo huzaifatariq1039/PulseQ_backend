@@ -2,14 +2,15 @@ import os
 from dotenv import load_dotenv
 from pathlib import Path
 
-# Load environment variables
-load_dotenv(encoding="utf-8")
-
-# Base directory
+# Base directory - project root (where .env file is located)
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Load environment variables from .env file in project root
+env_path = BASE_DIR / ".env"
+load_dotenv(dotenv_path=env_path, encoding="utf-8", override=True)
+
 # Project Settings
-PROJECT_NAME = os.getenv("PROJECT_NAME", " PulseQBackend")
+PROJECT_NAME = os.getenv("PROJECT_NAME", "PulseQBackend")
 DEBUG = os.getenv("DEBUG", "True").lower() == "true"
 HOST = os.getenv("HOST", "127.0.0.1")
 PORT = int(os.getenv("PORT", "8000"))
