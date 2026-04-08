@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, status
+from fastapi import FastAPI, HTTPException, status, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -198,6 +198,12 @@ async def root():
         "docs": "/docs",
         "redoc": "/redoc"
     }
+
+# HEAD endpoint for uptime monitoring (returns 200 OK with no body)
+@app.head("/")
+async def health_head():
+    """Health check for uptime monitoring - returns 200 OK"""
+    return Response(status_code=200)
 
 # Also load AI engine on FastAPI startup event (idempotent with lifespan loader)
 @app.on_event("startup")
