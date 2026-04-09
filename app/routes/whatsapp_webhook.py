@@ -4,12 +4,12 @@ from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
 
-from app.config import COLLECTIONS
 from app.database import get_db
+from sqlalchemy.orm import Session
+from sqlalchemy import func, or_
+from app.db_models import User, Doctor, Hospital, Token
 from app.templates import TEMPLATES
 from app.services.whatsapp_service import send_template_message
-
-# Reuse recalculation helper from tokens route (local import to avoid cycles at startup)
 
 router = APIRouter(prefix="/whatsapp", tags=["WhatsApp Webhook"])
 
@@ -60,7 +60,7 @@ def _extract_from(payload: Dict[str, Any]) -> str:
 
 
 @router.post("/webhook")
-async def whatsapp_webhook_receive(request: Request):
+async def whatsapp_webhook_receive(request: Request, db: Session = Depends(get_db)):
     payload = await request.json()
     text = _extract_text(payload)
     wa_from = _extract_from(payload)
@@ -71,120 +71,76 @@ async def whatsapp_webhook_receive(request: Request):
     if msg not in {"yes", "y", "cancel", "c"}:
         return {"success": True}
 
-    db = get_db()
-
     # Find latest active token for this phone.
-    # Tokens store patient_phone in local format; WhatsApp webhook uses E.164 digits.
-    # We'll do a best-effort match by digits suffix.
+    # WhatsApp webhook uses E.164 digits.
     digits = "".join([c for c in wa_from if c.isdigit()])
     if digits.startswith("92"):
-        local = "0" + digits[2:]
+        local_suffix = digits[2:] # 3001234567
     else:
-        local = digits
+        local_suffix = digits[-10:]
 
-    tokens = list(db.collection(COLLECTIONS["TOKENS"]).limit(5000).stream())
+    # Search tokens where patient_phone ends with the digits
+    tokens = db.query(Token).filter(
+        or_(
+            Token.patient_phone.like(f"%{local_suffix}"),
+            Token.patient_phone.like(f"%{digits}")
+        )
+    ).filter(
+        ~Token.status.in_(["cancelled", "completed", "rescheduled"])
+    ).order_by(Token.created_at.desc()).all()
+
     candidate = None
-    for tdoc in tokens:
-        t = tdoc.to_dict() or {}
-        phone = str(t.get("patient_phone") or "").strip()
-        if not phone:
+    for t in tokens:
+        if msg in {"yes", "y"} and bool(getattr(t, "queue_opt_in", False)):
             continue
-        pd = "".join([c for c in phone if c.isdigit()])
-        if not pd:
-            continue
-        if pd.endswith(local[-10:]) or local.endswith(pd[-10:]):
-            st_raw = t.get("status")
-            st = str(getattr(st_raw, "value", st_raw) or "").lower()
-            if st in {"cancelled", "completed", "rescheduled"}:
-                continue
-            # For YES, only consider tokens not yet opted-in.
-            if msg in {"yes", "y"} and bool(t.get("queue_opt_in")):
-                continue
-            # choose most recently created
-            created = t.get("created_at")
-            try:
-                created_dt = created if isinstance(created, datetime) else getattr(created, "to_datetime", lambda: None)()
-            except Exception:
-                created_dt = None
-            if candidate is None:
-                candidate = (tdoc, t, created_dt)
-            else:
-                if created_dt and (candidate[2] is None or created_dt > candidate[2]):
-                    candidate = (tdoc, t, created_dt)
+        candidate = t
+        break
 
     if not candidate:
         return {"success": True}
 
-    tdoc, token, _ = candidate
-    token_id = str(token.get("id") or getattr(tdoc, "id", "") or "").strip()
-    if not token_id:
-        return {"success": True}
+    token_id = candidate.id
+    now = datetime.utcnow()
 
     # CANCEL flow: mark token cancelled and send cancelled template immediately
     if msg in {"cancel", "c"}:
-        now = datetime.utcnow()
-        try:
-            db.collection(COLLECTIONS["TOKENS"]).document(token_id).set(
-                {
-                    "status": "cancelled",
-                    "cancelled_at": now,
-                    "updated_at": now,
-                },
-                merge=True,
-            )
-        except Exception:
-            return {"success": True}
+        candidate.status = "cancelled"
+        candidate.cancelled_at = now
+        candidate.updated_at = now
+        db.commit()
 
         try:
             tpl = str(TEMPLATES.get("CANCELLED") or "").strip()
-        except Exception:
-            tpl = ""
-
-        if tpl:
-            try:
-                phone_to = str(token.get("patient_phone") or "").strip()
-                patient_name = str(token.get("patient_name") or "")
-                token_number = str(token.get("formatted_token") or token.get("token_number") or "")
+            if tpl:
+                phone_to = str(candidate.patient_phone or "").strip()
+                patient_name = str(candidate.patient_name or "")
+                token_number = str(candidate.display_code or candidate.token_number or "")
                 params = [p for p in [patient_name, token_number] if p]
-                await send_template_message(phone_to or local, tpl, params)
-            except Exception:
-                pass
+                await send_template_message(phone_to or digits, tpl, params)
+        except Exception:
+            pass
 
         return {"success": True}
 
     # YES flow: opt-in token and mark confirmed
-    now = datetime.utcnow()
-    try:
-        db.collection(COLLECTIONS["TOKENS"]).document(token_id).set(
-            {
-                "queue_opt_in": True,
-                "queue_opted_in_at": now,
-                "confirmed": True,
-                "confirmation_status": "confirmed",
-                "confirmed_at": now,
-                "updated_at": now,
-            },
-            merge=True,
-        )
-    except Exception:
-        return {"success": True}
+    candidate.queue_opt_in = True
+    candidate.queue_opted_in_at = now
+    candidate.confirmed = True
+    candidate.confirmation_status = "confirmed"
+    candidate.confirmed_at = now
+    candidate.updated_at = now
+    db.commit()
 
     try:
         from app.routes.tokens import _recalculate_token_wait_times
-        doctor_id = str(token.get("doctor_id") or "").strip()
-        hospital_id = str(token.get("hospital_id") or "").strip()
-        appt = token.get("appointment_date")
-        appt_dt = appt if isinstance(appt, datetime) else getattr(appt, "to_datetime", lambda: None)()
-        day_local = appt_dt.date() if appt_dt else datetime.utcnow().date()
+        doctor_id = candidate.doctor_id
+        hospital_id = candidate.hospital_id
+        appt_dt = candidate.appointment_date
+        day_local = appt_dt.date() if appt_dt else now.date()
 
-        # per-patient minutes from doctor config if present
-        per_min = 5
-        try:
-            dsnap = db.collection(COLLECTIONS["DOCTORS"]).document(doctor_id).get()
-            d = dsnap.to_dict() if getattr(dsnap, "exists", False) else {}
-            per_min = int(d.get("per_patient_minutes") or 5)
-        except Exception:
-            per_min = 5
+        # per-patient minutes from doctor config
+        doctor = db.query(Doctor).filter(Doctor.id == doctor_id).first()
+        per_min = int(getattr(doctor, "per_patient_minutes", 5) or 5)
 
         _recalculate_token_wait_times(db, doctor_id, hospital_id, day_local, per_patient_minutes=per_min)
     except Exception:

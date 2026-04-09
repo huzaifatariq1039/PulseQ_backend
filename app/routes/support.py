@@ -1,10 +1,13 @@
 from fastapi import APIRouter, HTTPException, status, Depends
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from app.models import ActivityType
 from app.database import get_db
+from sqlalchemy.orm import Session
+from app.db_models import User, ActivityLog # Assuming SupportTicket model exists
 from app.security import get_current_active_user
 from datetime import datetime
 from pydantic import BaseModel
+import uuid
 
 router = APIRouter(prefix="/support", tags=["Help & Support"])
 
@@ -32,22 +35,18 @@ class FAQ(BaseModel):
     category: str
     helpful_count: int = 0
 
-async def create_activity_log(user_id: str, activity_type: ActivityType, description: str, metadata: dict = None):
-    """Helper function to create activity logs"""
-    db = get_db()
-    activities_ref = db.collection("activities")
-    
-    activity_ref = activities_ref.document()
-    activity_data = {
-        "id": activity_ref.id,
-        "user_id": user_id,
-        "activity_type": activity_type,
-        "description": description,
-        "metadata": metadata or {},
-        "created_at": datetime.utcnow()
-    }
-    
-    activity_ref.set(activity_data)
+async def create_activity_log(db: Session, user_id: str, activity_type: ActivityType, description: str, metadata: dict = None):
+    """Helper function to create activity logs in PostgreSQL"""
+    activity = ActivityLog(
+        id=str(uuid.uuid4()),
+        user_id=user_id,
+        activity_type=activity_type.value if hasattr(activity_type, 'value') else str(activity_type),
+        description=description,
+        metadata=metadata or {},
+        created_at=datetime.utcnow()
+    )
+    db.add(activity)
+    db.commit()
 
 @router.get("/faq")
 async def get_faqs():
@@ -84,59 +83,48 @@ async def get_faqs():
 @router.post("/ticket", response_model=SupportTicket)
 async def create_support_ticket(
     ticket: SupportTicketCreate,
+    db: Session = Depends(get_db),
     current_user = Depends(get_current_active_user)
 ):
-    """Create a new support ticket"""
-    db = get_db()
-    tickets_ref = db.collection("support_tickets")
-    ticket_ref = tickets_ref.document()
+    """Create a new support ticket in PostgreSQL"""
+    from app.db_models import SupportTicket as DBSupportTicket
+    ticket_id = str(uuid.uuid4())
     
-    ticket_data = {
-        "id": ticket_ref.id,
-        "user_id": current_user.user_id,
-        **ticket.dict(),
-        "status": "open",
-        "created_at": datetime.utcnow(),
-        "updated_at": datetime.utcnow()
-    }
-    
-    ticket_ref.set(ticket_data)
+    new_ticket = DBSupportTicket(
+        id=ticket_id,
+        user_id=current_user.user_id,
+        subject=ticket.subject,
+        description=ticket.description,
+        category=ticket.category,
+        priority=ticket.priority,
+        status="open",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow()
+    )
+    db.add(new_ticket)
+    db.commit()
     
     # Create activity log
     await create_activity_log(
+        db,
         current_user.user_id,
         ActivityType.PROFILE_UPDATED,
         f"Support ticket created: {ticket.subject}",
-        {"ticket_id": ticket_ref.id, "category": ticket.category}
+        {"ticket_id": ticket_id, "category": ticket.category}
     )
     
-    return SupportTicket(**ticket_data)
+    return SupportTicket(**{k: v for k, v in new_ticket.__dict__.items() if not k.startswith('_')})
 
 @router.get("/tickets", response_model=List[SupportTicket])
-async def get_user_tickets(current_user = Depends(get_current_active_user)):
-    """Get user's support tickets"""
-    db = get_db()
-    tickets_ref = db.collection("support_tickets")
+async def get_user_tickets(
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_active_user)
+):
+    """Get user's support tickets from PostgreSQL"""
+    from app.db_models import SupportTicket as DBSupportTicket
+    tickets_objs = db.query(DBSupportTicket).filter(DBSupportTicket.user_id == current_user.user_id).order_by(DBSupportTicket.created_at.desc()).all()
     
-    # Use simple query to avoid composite index requirement
-    query = tickets_ref.where("user_id", "==", current_user.user_id)
-    
-    tickets = []
-    ticket_docs = []
-    
-    # Get all documents first
-    for doc in query.stream():
-        ticket_data = doc.to_dict()
-        ticket_data["doc_id"] = doc.id
-        ticket_docs.append(ticket_data)
-    
-    # Sort in memory by created_at descending
-    ticket_docs.sort(key=lambda x: x.get("created_at", datetime.min), reverse=True)
-    
-    for ticket_data in ticket_docs:
-        tickets.append(SupportTicket(**ticket_data))
-    
-    return tickets
+    return [SupportTicket(**{k: v for k, v in t.__dict__.items() if not k.startswith('_')}) for t in tickets_objs]
 
 @router.get("/contact-info")
 async def get_contact_info():

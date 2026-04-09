@@ -6,10 +6,12 @@ import bcrypt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import jwt, JWTError
+from sqlalchemy.orm import Session
 
-from app.config import SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES, REFRESH_TOKEN_EXPIRE_DAYS, COLLECTIONS
+from app.config import SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES, REFRESH_TOKEN_EXPIRE_DAYS
 from app.database import get_db
 from app.models import TokenData
+from app.db_models import User as UserDB
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
@@ -81,7 +83,11 @@ def verify_token(token: str):
         return None
 
 
-def get_current_user(token: str = Depends(oauth2_scheme)) -> TokenData:
+def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> TokenData:
+    """
+    Get current authenticated user from JWT token.
+    Uses PostgreSQL database instead of Firebase Firestore.
+    """
     payload = verify_token(token)
     if payload is None:
         raise HTTPException(
@@ -91,23 +97,25 @@ def get_current_user(token: str = Depends(oauth2_scheme)) -> TokenData:
 
     user_id = str(payload.get("sub") or "").strip()
     role = str(payload.get("role") or "").strip().lower() or None
+    
     if not user_id:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token payload",
         )
 
-    db = get_db()
-    user_doc = db.collection(COLLECTIONS["USERS"]).document(user_id).get()
-    if not getattr(user_doc, "exists", False):
+    # Query user from PostgreSQL database
+    user = db.query(UserDB).filter(UserDB.id == user_id).first()
+    
+    if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found",
         )
 
-    user_data = user_doc.to_dict() or {}
+    # Use role from database if not in token
     if not role:
-        role = str(user_data.get("role") or "").strip().lower() or None
+        role = str(user.role.value if hasattr(user.role, 'value') else user.role).strip().lower()
 
     return TokenData(user_id=user_id, role=role)
 

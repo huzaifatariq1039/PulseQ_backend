@@ -1,12 +1,14 @@
 from datetime import datetime, timedelta
 from typing import Any, Dict, List
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
+from sqlalchemy import func
 
 from app.services.ai_engine import ai_engine
 from app.database import get_db
-import app.database as db_mod
+from app.db_models import User, Doctor, Hospital, Token
 
 router = APIRouter()
 
@@ -27,64 +29,59 @@ def get_current_day() -> int:
     return datetime.now().weekday()
 
 
-def calculate_patients_ahead(doctor: str) -> int:
-    db = get_db()
-    tokens_ref = db.collection(db_mod.COLLECTIONS["TOKENS"])  # type: ignore
-    waiting = tokens_ref.where("doctor", "==", doctor).where("status", "==", "waiting").get()
-    confirmed = tokens_ref.where("doctor", "==", doctor).where("status", "==", "confirmed").get()
-    pending = tokens_ref.where("doctor", "==", doctor).where("status", "==", "pending").get()
-    return len(waiting) + len(confirmed) + len(pending)
+def calculate_patients_ahead(doctor_id: str, db: Session) -> int:
+    # Get today's tokens for this doctor that are in waiting/confirmed/pending status
+    today = datetime.utcnow().date()
+    count = db.query(Token).filter(
+        Token.doctor_id == doctor_id,
+        Token.status.in_(["waiting", "confirmed", "pending"]),
+        func.date(Token.appointment_date) == today
+    ).count()
+    return count
 
 
-def calculate_queue_length(doctor: str) -> int:
+def calculate_queue_length(doctor_id: str) -> int:
     # TODO: integrate with queue snapshot for real-time value
     return 0
 
 
-def calculate_queue_velocity(doctor: str) -> float:
-    db = get_db()
+def calculate_queue_velocity(doctor_id: str, db: Session) -> float:
     now = datetime.utcnow()
     window_start = now - timedelta(hours=2)
-    tokens_ref = db.collection(db_mod.COLLECTIONS["TOKENS"])  # type: ignore
-    completed = tokens_ref.where("doctor", "==", doctor).where("status", "==", "completed").get()
-    cnt = 0
-    for doc in completed:
-        data = doc.to_dict() or {}
-        ts = data.get("completed_at") or data.get("updated_at")
-        if ts and hasattr(ts, "timestamp"):
-            dt = ts
-        else:
-            dt = None
-        if dt and dt >= window_start:
-            cnt += 1
+    
+    completed_count = db.query(Token).filter(
+        Token.doctor_id == doctor_id,
+        Token.status == "completed",
+        Token.completed_at >= window_start
+    ).count()
+    
     hours = max((now - window_start).total_seconds() / 3600.0, 0.01)
-    return float(cnt) / float(hours)
+    return float(completed_count) / float(hours)
 
 
-def get_last_patient_duration(doctor: str) -> float:
-    db = get_db()
-    tokens_ref = db.collection(db_mod.COLLECTIONS["TOKENS"])  # type: ignore
-    completed = tokens_ref.where("doctor", "==", doctor).where("status", "==", "completed").order_by("completed_at", direction="DESCENDING").limit(1).get()
-    for doc in completed:
-        dur = _extract_duration_minutes(doc.to_dict() or {})
-        return dur
+def get_last_patient_duration(doctor_id: str, db: Session) -> float:
+    last_token = db.query(Token).filter(
+        Token.doctor_id == doctor_id,
+        Token.status == "completed"
+    ).order_by(Token.completed_at.desc()).first()
+    
+    if last_token:
+        return _extract_duration_minutes(last_token)
     return 0.0
 
 
-def avg_last_5(doctor: str) -> float:
-    return _avg_last_n(doctor, 5)
+def avg_last_5(doctor_id: str, db: Session) -> float:
+    return _avg_last_n(doctor_id, 5, db)
 
 
-def avg_last_30(doctor: str) -> float:
-    return _avg_last_n(doctor, 30)
+def avg_last_30(doctor_id: str, db: Session) -> float:
+    return _avg_last_n(doctor_id, 30, db)
 
 
-def count_available_doctors() -> int:
-    db = get_db()
+def count_available_doctors(db: Session) -> int:
     try:
-        doctors_ref = db.collection(db_mod.COLLECTIONS["DOCTORS"])  # type: ignore
-        available = doctors_ref.where("available", "==", True).get()
-        return len(available)
+        count = db.query(Doctor).filter(Doctor.status == "available").count()
+        return max(count, 1)
     except Exception:
         return 1
 
@@ -97,30 +94,20 @@ def get_weekday_history() -> float:
     return 0.0
 
 
-def get_doctor_history(doctor: str) -> float:
-    db = get_db()
-    tokens_ref = db.collection(db_mod.COLLECTIONS["TOKENS"])  # type: ignore
-    completed = tokens_ref.where("doctor", "==", doctor).where("status", "==", "completed").order_by("completed_at", direction="DESCENDING").limit(200).get()
-    durations: List[float] = []
-    for doc in completed:
-        durations.append(_extract_duration_minutes(doc.to_dict() or {}))
+def get_doctor_history(doctor_id: str, db: Session) -> float:
+    tokens = db.query(Token).filter(
+        Token.doctor_id == doctor_id,
+        Token.status == "completed"
+    ).order_by(Token.completed_at.desc()).limit(200).all()
+    
+    durations = [_extract_duration_minutes(t) for t in tokens]
     if not durations:
         return 0.0
     return float(sum(durations) / len(durations))
 
 
 def get_weather_code() -> int:
-    db = get_db()
-    try:
-        ref = db.collection(db_mod.COLLECTIONS.get("WEATHER", "WEATHER")).document("current")  # type: ignore
-        snap = ref.get()
-        if snap.exists:
-            data = snap.to_dict() or {}
-            code = data.get("code")
-            if isinstance(code, int):
-                return code
-    except Exception:
-        pass
+    # TODO: Implement weather integration for PostgreSQL
     return 0
 
 
@@ -129,48 +116,47 @@ def get_clinic_duration() -> float:
     return float((datetime.now() - start_of_day).total_seconds() / 60.0)
 
 
-def _extract_duration_minutes(t: Dict[str, Any]) -> float:
-    dur = t.get("service_duration")
-    if isinstance(dur, (int, float)):
-        return float(dur)
-    started = t.get("started_at")
-    completed = t.get("completed_at")
-    if started and completed and hasattr(started, "timestamp") and hasattr(completed, "timestamp"):
+def _extract_duration_minutes(t: Token) -> float:
+    # Assuming duration fields exist in Token model
+    if hasattr(t, 'duration_minutes') and t.duration_minutes:
+        return float(t.duration_minutes)
+    
+    if t.started_at and t.completed_at:
         try:
-            return float((completed - started).total_seconds() / 60.0)
+            return float((t.completed_at - t.started_at).total_seconds() / 60.0)
         except Exception:
             return 0.0
     return 0.0
 
 
-def _avg_last_n(doctor: str, n: int) -> float:
-    db = get_db()
-    tokens_ref = db.collection(db_mod.COLLECTIONS["TOKENS"])  # type: ignore
-    completed = tokens_ref.where("doctor", "==", doctor).where("status", "==", "completed").order_by("completed_at", direction="DESCENDING").limit(n).get()
-    durations: List[float] = []
-    for doc in completed:
-        durations.append(_extract_duration_minutes(doc.to_dict() or {}))
+def _avg_last_n(doctor_id: str, n: int, db: Session) -> float:
+    tokens = db.query(Token).filter(
+        Token.doctor_id == doctor_id,
+        Token.status == "completed"
+    ).order_by(Token.completed_at.desc()).limit(n).all()
+    
+    durations = [_extract_duration_minutes(t) for t in tokens]
     if not durations:
         return 0.0
     return float(sum(durations) / len(durations))
 
 
 @router.post("/predict-wait-time")
-def predict_wait_time(req: AIPredictRequest):
-    # STEP 6 — Calculate 13 backend features
+def predict_wait_time(req: AIPredictRequest, db: Session = Depends(get_db)):
+    # Calculate backend features using SQLAlchemy
     backend_features: Dict[str, Any] = {
         "hour_of_day": get_current_hour(),
         "day_of_week": get_current_day(),
-        "patients_ahead_of_user": calculate_patients_ahead(req.doctor),
+        "patients_ahead_of_user": calculate_patients_ahead(req.doctor, db),
         "patients_in_queue": calculate_queue_length(req.doctor),
-        "queue_velocity": calculate_queue_velocity(req.doctor),
-        "last_patient_duration": get_last_patient_duration(req.doctor),
-        "avg_service_time_last_5": avg_last_5(req.doctor),
-        "avg_service_time_last_30": avg_last_30(req.doctor),
-        "doctors_available": count_available_doctors(),
+        "queue_velocity": calculate_queue_velocity(req.doctor, db),
+        "last_patient_duration": get_last_patient_duration(req.doctor, db),
+        "avg_service_time_last_5": avg_last_5(req.doctor, db),
+        "avg_service_time_last_30": avg_last_30(req.doctor, db),
+        "doctors_available": count_available_doctors(db),
         "avg_wait_time_this_hour_past_week": get_hour_history(),
         "avg_wait_time_this_weekday_past_month": get_weekday_history(),
-        "avg_service_time_doctor_history": get_doctor_history(req.doctor),
+        "avg_service_time_doctor_history": get_doctor_history(req.doctor, db),
         "weather": get_weather_code(),
         "total_clinic_duration": get_clinic_duration(),
     }

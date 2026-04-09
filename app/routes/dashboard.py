@@ -1,13 +1,14 @@
 from fastapi import APIRouter, HTTPException, status, Depends, Query
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
+from sqlalchemy.orm import Session
 from app.models import (
-    DashboardData, UserStatistics, ActivityLog, ActivityLogCreate,
-    QuickAction, QuickActionCreate, ActivityType,
+    DashboardData, UserStatistics, ActivityLog as ActivityLogModel, ActivityLogCreate,
+    QuickAction as QuickActionModel, QuickActionCreate, ActivityType,
     HospitalResponse, HospitalSearchResponse,
     HospitalLite, HospitalUnifiedSearchResponse,
 )
 from app.database import get_db
-from app.config import COLLECTIONS
+from app.db_models import User, Token, ActivityLog, QuickAction, Hospital, Doctor
 from app.security import get_current_active_user
 from datetime import datetime, timedelta
 from app.services.token_service import SmartTokenService
@@ -89,7 +90,10 @@ def calculate_distance(lat1, lon1, lat2, lon2):
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
 @router.get("/", response_model=DashboardData)
-async def get_dashboard_data(current_user = Depends(get_current_active_user)):
+async def get_dashboard_data(
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_active_user)
+):
     """Get complete dashboard data for the current user"""
     # Try cache first
     cache_key = f"dashboard:root:{current_user.user_id}"
@@ -97,32 +101,28 @@ async def get_dashboard_data(current_user = Depends(get_current_active_user)):
     if cached is not None:
         return cached  # type: ignore[return-value]
 
-    db = get_db()
-    
     # Get user data
-    user_ref = db.collection(COLLECTIONS["USERS"]).document(current_user.user_id)
-    user_doc = user_ref.get()
-    
-    if not user_doc.exists:
+    user = db.query(User).filter(User.id == current_user.user_id).first()
+    if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found"
         )
     
-    user_data = user_doc.to_dict()
+    user_data = {k: v for k, v in user.__dict__.items() if not k.startswith('_')}
     user_data.pop("password", None)
     
     # Get statistics
-    statistics = await get_user_statistics(current_user.user_id)
+    statistics = await get_user_statistics(current_user.user_id, db=db)
     
     # Get recent activities
-    recent_activities = await get_recent_activities(current_user.user_id, limit=5)
+    recent_activities = await get_recent_activities(current_user.user_id, limit=5, db=db)
     
     # Get quick actions
-    quick_actions = await get_user_quick_actions(current_user.user_id)
+    quick_actions = await get_user_quick_actions(current_user.user_id, db=db)
     
     # Get recent tokens
-    recent_tokens = await get_recent_tokens(current_user.user_id, limit=3)
+    recent_tokens = await get_recent_tokens(current_user.user_id, limit=3, db=db)
     
     result = DashboardData(
         user=user_data,
@@ -136,7 +136,10 @@ async def get_dashboard_data(current_user = Depends(get_current_active_user)):
     return result
 
 @router.get("/active-overview")
-async def get_dashboard_active_overview(current_user = Depends(get_current_active_user)):
+async def get_dashboard_active_overview(
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_active_user)
+):
     """Return the user's active token overview for Dashboard tiles:
 
     - active token visible label
@@ -150,20 +153,18 @@ async def get_dashboard_active_overview(current_user = Depends(get_current_activ
     does NOT return nearby hospitals. Nearby hospitals are for the Search page via
     `/hospitals/search-unified`.
     """
-    db = get_db()
-    tokens_ref = db.collection(COLLECTIONS["TOKENS"]).where("patient_id", "==", current_user.user_id)
-    docs = list(tokens_ref.stream())
+    tokens = db.query(Token).filter(Token.patient_id == current_user.user_id).all()
 
-    if not docs:
+    if not tokens:
         return {"token": None, "queue": None}
 
     # Pick the most recent non-cancelled/non-completed token
     candidates = []
-    for d in docs:
-        t = d.to_dict() or {}
-        status_val = str(t.get("status") or "").lower()
+    for t in tokens:
+        data = {k: v for k, v in t.__dict__.items() if not k.startswith('_')}
+        status_val = str(data.get("status") or "").lower()
         if status_val not in ["cancelled", "completed"]:
-            candidates.append(t)
+            candidates.append(data)
     if not candidates:
         return {"token": None, "queue": None}
 
@@ -291,9 +292,9 @@ async def get_dashboard_active_overview(current_user = Depends(get_current_activ
     try:
         did = token.get("doctor_id")
         if did:
-            dsnap = db.collection(COLLECTIONS["DOCTORS"]).document(str(did)).get()
-            if getattr(dsnap, "exists", False):
-                doctor_meta = dsnap.to_dict() or {}
+            doctor_obj = db.query(Doctor).filter(Doctor.id == str(did)).first()
+            if doctor_obj:
+                doctor_meta = {k: v for k, v in doctor_obj.__dict__.items() if not k.startswith('_')}
     except Exception:
         doctor_meta = {}
 
@@ -315,10 +316,9 @@ async def get_dashboard_active_overview(current_user = Depends(get_current_activ
     try:
         hid = token.get("hospital_id")
         if hid:
-            hsnap = db.collection(COLLECTIONS["HOSPITALS"]).document(str(hid)).get()
-            if getattr(hsnap, "exists", False):
-                h = hsnap.to_dict() or {}
-                msg = h.get("updates") or h.get("update_message") or h.get("notice") or h.get("announcement")
+            hospital_obj = db.query(Hospital).filter(Hospital.id == str(hid)).first()
+            if hospital_obj:
+                msg = hospital_obj.updates or hospital_obj.update_message or hospital_obj.notice or hospital_obj.announcement
                 if isinstance(msg, str) and msg.strip():
                     hospital_updates["message"] = msg.strip()
     except Exception:
@@ -342,6 +342,7 @@ async def get_dashboard_nearby_hospitals_unified(
     city: Optional[str] = Query(None, description="Optional city filter for DB entries (unused when include_db=False)"),
     include_db: bool = Query(True, description="Include SmartToken database hospitals (default: True)"),
     include_osm: bool = Query(True, description="Include OSM nearby hospitals (live GPS)"),
+    db: Session = Depends(get_db),
 ):
     """Unified nearby hospitals for the dashboard (DB + OSM), de-duplicated.
 
@@ -365,16 +366,13 @@ async def get_dashboard_nearby_hospitals_unified(
     if cached is not None:
         return cached  # type: ignore[return-value]
 
-    db = get_db()
-    hospitals_ref = db.collection(COLLECTIONS["HOSPITALS"]) if include_db else None
-
     items: list[HospitalLite] = []
 
     # 1) DB hospitals (optional)
-    if include_db and hospitals_ref is not None:
-        docs = hospitals_ref.limit(300).stream()
-        for d in docs:
-            h = d.to_dict() or {}
+    if include_db:
+        hospitals = db.query(Hospital).limit(300).all()
+        for h_obj in hospitals:
+            h = {k: v for k, v in h_obj.__dict__.items() if not k.startswith('_')}
             if city and h.get("city", "").lower() != city.lower():
                 continue
             # Compute distance if coords provided
@@ -392,7 +390,7 @@ async def get_dashboard_nearby_hospitals_unified(
                     # Skip DB entries outside the nearby radius for dashboard view
                     continue
             items.append(HospitalLite(
-                id=h.get("id", d.id),
+                id=h.get("id"),
                 name=h.get("name", "Hospital"),
                 address=h.get("address"),
                 city=h.get("city"),
@@ -409,7 +407,7 @@ async def get_dashboard_nearby_hospitals_unified(
                 is_database=True,
             ))
 
-    # 2) OSM nearby via Overpass (optional, only if coords)
+    # 2) OSM nearby logic...
     if include_osm and lat_val is not None and lng_val is not None:
         overpass_url = "https://overpass-api.de/api/interpreter"
         radius_m = int(radius_km * 1000)
@@ -459,10 +457,8 @@ async def get_dashboard_nearby_hospitals_unified(
                 ))
             overpass_ok = len(data.get("elements", [])) > 0
         except Exception:
-            # Overpass may rate-limit or fail; we'll attempt Nominatim fallback
             overpass_ok = False
 
-        # Fallback to Nominatim if Overpass failed or returned no results
         if not overpass_ok:
             try:
                 nominatim_url = "https://nominatim.openstreetmap.org/search"
@@ -484,7 +480,6 @@ async def get_dashboard_nearby_hospitals_unified(
                         olng = float(it.get("lon"))
                     except Exception:
                         continue
-                    # Distance and radius filter client-side
                     try:
                         dist_km = round(calculate_distance(lat_val, lng_val, olat, olng), 1)
                         if dist_km is not None and dist_km > radius_km:
@@ -515,7 +510,6 @@ async def get_dashboard_nearby_hospitals_unified(
                         is_database=False,
                     ))
             except Exception:
-                # Soft-fail: continue with DB-only if OSM fallback also fails
                 pass
 
     # 3) De-duplicate by name+city preferring DB
@@ -553,17 +547,19 @@ async def get_dashboard_nearby_hospitals_unified(
     return result
 
 @router.get("/statistics", response_model=UserStatistics)
-async def get_user_statistics_endpoint(current_user = Depends(get_current_active_user)):
+async def get_user_statistics_endpoint(
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_active_user)
+):
     """Get user statistics"""
-    return await get_user_statistics(current_user.user_id)
+    return await get_user_statistics(current_user.user_id, db=db)
 
-async def get_user_statistics(user_id: str) -> UserStatistics:
+async def get_user_statistics(user_id: str, db: Session = None) -> UserStatistics:
     """Calculate user statistics"""
-    db = get_db()
+    if db is None:
+        db = next(get_db())
     
-    # Get all user tokens and filter in memory to avoid index requirements
-    tokens_ref = db.collection(COLLECTIONS["TOKENS"])
-    user_tokens = list(tokens_ref.where("patient_id", "==", user_id).stream())
+    user_tokens = db.query(Token).filter(Token.patient_id == user_id).all()
     
     total_tokens = len(user_tokens)
     
@@ -573,11 +569,9 @@ async def get_user_statistics(user_id: str) -> UserStatistics:
     completed_appointments = 0
     
     for token in user_tokens:
-        token_data = token.to_dict()
-        appointment_date = token_data.get("appointment_date")
+        appointment_date = token.appointment_date
         
         if appointment_date:
-            # Convert to date for comparison
             if isinstance(appointment_date, datetime):
                 appt_date = appointment_date.date()
             else:
@@ -588,20 +582,17 @@ async def get_user_statistics(user_id: str) -> UserStatistics:
             else:
                 completed_appointments += 1
     
-    # Get payment statistics - simplified to avoid index requirements
+    # Get payment statistics
     pending_payments = 0
     total_payments = 0
     
-    # Count payments from user tokens
     for token in user_tokens:
-        token_data = token.to_dict()
-        payment_status = token_data.get("payment_status", "pending")
+        payment_status = str(token.payment_status or "pending").lower()
         
         if payment_status == "pending":
             pending_payments += 1
         
-        # Count as payment if status is not pending
-        if payment_status in ["completed", "processing"]:
+        if payment_status in ["completed", "processing", "paid"]:
             total_payments += 1
     
     return UserStatistics(
@@ -612,69 +603,71 @@ async def get_user_statistics(user_id: str) -> UserStatistics:
         pending_payments=pending_payments
     )
 
-@router.get("/activities", response_model=List[ActivityLog])
+@router.get("/activities", response_model=List[ActivityLogModel])
 async def get_user_activities(
     current_user = Depends(get_current_active_user),
     limit: int = Query(10, ge=1, le=50),
-    activity_type: Optional[ActivityType] = None
+    activity_type: Optional[ActivityType] = None,
+    db: Session = Depends(get_db),
 ):
     """Get user activity logs"""
-    return await get_recent_activities(current_user.user_id, limit, activity_type)
+    return await get_recent_activities(current_user.user_id, limit, activity_type, db=db)
 
-async def get_recent_activities(user_id: str, limit: int = 10, activity_type: Optional[ActivityType] = None) -> List[ActivityLog]:
+async def get_recent_activities(user_id: str, limit: int = 10, activity_type: Optional[ActivityType] = None, db: Session = None) -> List[ActivityLogModel]:
     """Get recent activities for a user"""
-    db = get_db()
-    activities_ref = db.collection("activities")
+    if db is None:
+        db = next(get_db())
     
-    # Get all user activities and sort in memory to avoid index requirements
-    query = activities_ref.where("user_id", "==", user_id)
+    query = db.query(ActivityLog).filter(ActivityLog.user_id == user_id)
     if activity_type:
-        query = query.where("activity_type", "==", activity_type)
+        query = query.filter(ActivityLog.activity_type == activity_type)
+    
+    activities_objs = query.order_by(ActivityLog.created_at.desc()).limit(limit).all()
     
     activities = []
-    docs = list(query.stream())
-    
-    # Sort by created_at in memory and limit results
-    sorted_docs = sorted(docs, key=lambda x: x.to_dict().get("created_at", datetime.min), reverse=True)
-    
-    for doc in sorted_docs[:limit]:
-        activity_data = doc.to_dict()
-        activities.append(ActivityLog(**activity_data))
+    for obj in activities_objs:
+        activity_data = {k: v for k, v in obj.__dict__.items() if not k.startswith('_')}
+        activities.append(ActivityLogModel(**activity_data))
     
     return activities
 
-@router.post("/activities", response_model=ActivityLog)
-async def create_activity_log(
+@router.post("/activities", response_model=ActivityLogModel)
+async def create_activity_log_endpoint(
     activity: ActivityLogCreate,
+    db: Session = Depends(get_db),
     current_user = Depends(get_current_active_user)
 ):
     """Create a new activity log entry"""
-    db = get_db()
-    activities_ref = db.collection("activities")
-    
-    activity_ref = activities_ref.document()
+    import uuid
+    activity_id = str(uuid.uuid4())
     activity_data = activity.dict()
-    activity_data["id"] = activity_ref.id
+    activity_data["id"] = activity_id
     activity_data["user_id"] = current_user.user_id
     activity_data["created_at"] = datetime.utcnow()
     
-    activity_ref.set(activity_data)
+    new_activity = ActivityLog(**activity_data)
+    db.add(new_activity)
+    db.commit()
+    db.refresh(new_activity)
     
-    return ActivityLog(**activity_data)
+    return ActivityLogModel(**activity_data)
 
-@router.get("/quick-actions", response_model=List[QuickAction])
-async def get_user_quick_actions(current_user = Depends(get_current_active_user)):
+@router.get("/quick-actions", response_model=List[QuickActionModel])
+async def get_user_quick_actions_endpoint(
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_active_user)
+):
     """Get user's quick actions"""
-    return await get_user_quick_actions(current_user.user_id)
+    return await get_user_quick_actions(current_user.user_id, db=db)
 
-async def get_user_quick_actions(user_id: str) -> List[QuickAction]:
+async def get_user_quick_actions(user_id: str, db: Session = None) -> List[QuickActionModel]:
     """Get quick actions for a user"""
-    db = get_db()
-    actions_ref = db.collection("quick_actions")
+    if db is None:
+        db = next(get_db())
     
     # Get user-specific actions first
-    user_action_docs = list(actions_ref.where("user_id", "==", user_id).stream())
-    user_actions = [doc.to_dict() for doc in user_action_docs]
+    user_actions_objs = db.query(QuickAction).filter(QuickAction.user_id == user_id).all()
+    user_actions = [{k: v for k, v in obj.__dict__.items() if not k.startswith('_')} for obj in user_actions_objs]
     
     # If no user-specific actions, get default actions
     if not user_actions:
@@ -727,74 +720,73 @@ async def get_user_quick_actions(user_id: str) -> List[QuickAction]:
         
         # Save default actions
         for action_data in default_actions:
-            action_ref = actions_ref.document()
-            action_data["id"] = action_ref.id
-            action_ref.set(action_data)
+            import uuid
+            action_data["id"] = str(uuid.uuid4())
+            new_action = QuickAction(**action_data)
+            db.add(new_action)
             user_actions.append(action_data)
+        db.commit()
     
-    return [QuickAction(**action) for action in user_actions]
+    return [QuickActionModel(**action) for action in user_actions]
 
-@router.post("/quick-actions", response_model=QuickAction)
+@router.post("/quick-actions", response_model=QuickActionModel)
 async def create_quick_action(
     action: QuickActionCreate,
+    db: Session = Depends(get_db),
     current_user = Depends(get_current_active_user)
 ):
     """Create a new quick action for the user"""
-    db = get_db()
-    actions_ref = db.collection("quick_actions")
-    
-    action_ref = actions_ref.document()
+    import uuid
+    action_id = str(uuid.uuid4())
     action_data = action.dict()
-    action_data["id"] = action_ref.id
+    action_data["id"] = action_id
     action_data["user_id"] = current_user.user_id
     action_data["created_at"] = datetime.utcnow()
     
-    action_ref.set(action_data)
+    new_action = QuickAction(**action_data)
+    db.add(new_action)
+    db.commit()
+    db.refresh(new_action)
     
-    return QuickAction(**action_data)
+    return QuickActionModel(**action_data)
 
 @router.put("/quick-actions/{action_id}")
 async def update_quick_action(
     action_id: str,
     is_enabled: bool,
+    db: Session = Depends(get_db),
     current_user = Depends(get_current_active_user)
 ):
     """Update quick action status"""
-    db = get_db()
-    action_ref = db.collection("quick_actions").document(action_id)
-    action_doc = action_ref.get()
+    action_obj = db.query(QuickAction).filter(QuickAction.id == action_id).first()
     
-    if not action_doc.exists:
+    if not action_obj:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Quick action not found"
         )
     
-    action_data = action_doc.to_dict()
-    if action_data["user_id"] != current_user.user_id:
+    if action_obj.user_id != current_user.user_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Access denied"
         )
     
-    action_ref.update({"is_enabled": is_enabled})
+    action_obj.is_enabled = is_enabled
+    db.commit()
     
     return {"message": "Quick action updated successfully"}
 
-async def get_recent_tokens(user_id: str, limit: int = 3) -> List[dict]:
+async def get_recent_tokens(user_id: str, limit: int = 3, db: Session = None) -> List[dict]:
     """Get recent tokens for a user"""
-    db = get_db()
-    tokens_ref = db.collection(COLLECTIONS["TOKENS"])
+    if db is None:
+        db = next(get_db())
     
-    # Get all user tokens and sort in memory to avoid index requirements
-    docs = list(tokens_ref.where("patient_id", "==", user_id).stream())
-    
-    # Sort by created_at in memory and limit results
-    sorted_docs = sorted(docs, key=lambda x: x.to_dict().get("created_at", datetime.min), reverse=True)
+    tokens_objs = db.query(Token).filter(Token.patient_id == user_id).order_by(Token.created_at.desc()).limit(limit).all()
     
     tokens = []
-    for doc in sorted_docs[:limit]:
-        token_data = doc.to_dict()
+    for obj in tokens_objs:
+        token_data = {k: v for k, v in obj.__dict__.items() if not k.startswith('_')}
         tokens.append(token_data)
     
     return tokens
@@ -802,24 +794,26 @@ async def get_recent_tokens(user_id: str, limit: int = 3) -> List[dict]:
 @router.get("/recent-tokens")
 async def get_recent_tokens_endpoint(
     current_user = Depends(get_current_active_user),
-    limit: int = Query(5, ge=1, le=20)
+    limit: int = Query(5, ge=1, le=20),
+    db: Session = Depends(get_db),
 ):
     """Get recent tokens for the current user"""
-    return await get_recent_tokens(current_user.user_id, limit)
+    return await get_recent_tokens(current_user.user_id, limit, db=db)
 
 @router.get("/active-token")
-async def get_active_token(current_user = Depends(get_current_active_user)):
+async def get_active_token(
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_active_user)
+):
     """Return the most recent active token for today with live queue status.
 
     Changes:
     - Compare by calendar day only (date-based) to avoid timezone issues hiding same-day tokens.
     - Include a precomputed `visible_token` that prefers `display_code`, then `token_number`, then safe fallbacks.
     """
-    db = get_db()
-    tokens_ref = db.collection(COLLECTIONS["TOKENS"])
-    docs = list(tokens_ref.where("patient_id", "==", current_user.user_id).stream())
+    tokens = db.query(Token).filter(Token.patient_id == current_user.user_id).all()
 
-    if not docs:
+    if not tokens:
         return {"token": None, "queue": None}
 
     # Use local server date; compare by date only (ignore time/tz)
@@ -827,13 +821,12 @@ async def get_active_token(current_user = Depends(get_current_active_user)):
 
     # Filter to today's tokens that are not cancelled/completed, then pick latest by created_at
     active_today = []
-    for doc in docs:
-        t = doc.to_dict()
-        appt = t.get("appointment_date")
+    for t in tokens:
+        data = {k: v for k, v in t.__dict__.items() if not k.startswith('_')}
+        appt = data.get("appointment_date")
         appt_date = None
         if appt is not None:
             try:
-                # Firestore may give datetime or string; normalize to date only
                 if isinstance(appt, datetime):
                     appt_date = appt.date()
                 else:
@@ -841,14 +834,14 @@ async def get_active_token(current_user = Depends(get_current_active_user)):
             except Exception:
                 appt_date = None
 
-        status_val = str(t.get("status") or "").lower()
+        status_val = str(data.get("status") or "").lower()
         if (appt_date == today) and (status_val not in ["cancelled", "completed"]):
-            active_today.append(t)
+            active_today.append(data)
 
     if not active_today:
         return {"token": None, "queue": None}
 
-    active_today.sort(key=lambda x: x.get("created_at", datetime.min), reverse=True)
+    active_today.sort(key=lambda x: x.get("created_at") or datetime.min, reverse=True)
     token_data = active_today[0]
 
     # Get live queue status for this token
@@ -866,7 +859,10 @@ async def get_active_token(current_user = Depends(get_current_active_user)):
         for k in ("token_number", "tokenNumber", "display_number", "displayNumber"):
             v = t.get(k)
             if v:
-                return str(v)
+                try:
+                    return SmartTokenService.format_token(int(v))
+                except Exception:
+                    return str(v)
         for k in ("hex_code", "hexCode", "code"):
             v = t.get(k)
             if v:
@@ -876,6 +872,8 @@ async def get_active_token(current_user = Depends(get_current_active_user)):
     # Attach label without mutating stored record
     token_view = dict(token_data)
     token_view["visible_token"] = _visible_token_label(token_view)
+    
+    return {"token": token_view, "queue": queue_status}
 
 
 @router.get("/nearby-hospitals", response_model=HospitalSearchResponse)
@@ -891,13 +889,10 @@ async def get_dashboard_nearby_hospitals(
     radius_km: float = Query(25.0, gt=0, le=200, description="Search radius (km) when lat/lng provided"),
     limit: int = Query(20, ge=1, le=100, description="Max hospitals to return"),
     city: Optional[str] = Query(None, description="Fallback city filter if no coordinates provided"),
+    db: Session = Depends(get_db),
 ):
     """Return nearby hospitals for the dashboard.
-
-    Behavior mirrors `app.routes.hospitals.get_nearby_hospitals` in a simplified form:
-    # Fallback 1 (legacy): if no coordinates provided, try to use user's stored last-known coords.
-    # Dashboard policy: we require live GPS; if still missing after fallback, return 400.
-    - Else return empty list.
+    ...
     """
     # Coalesce coordinate aliases
     lat_val = user_lat if user_lat is not None else (lat if lat is not None else latitude)
@@ -907,7 +902,7 @@ async def get_dashboard_nearby_hospitals(
     if lat_val is None or lng_val is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Location required. Please pass lat and lng from device GPS for nearby hospitals.")
 
-    # Per-user+params cache key (use coalesced values)
+    # Per-user+params cache key
     cache_key = (
         f"dashboard:nearby:{current_user.user_id}:lat={lat_val}:lng={lng_val}:r={radius_km}:l={limit}:city={(city or '').strip().lower()}"
     )
@@ -915,17 +910,14 @@ async def get_dashboard_nearby_hospitals(
     if cached is not None:
         return cached  # type: ignore[return-value]
 
-    db = get_db()
-    hospitals_ref = db.collection(COLLECTIONS["HOSPITALS"])
-
     hospitals: List[HospitalResponse] = []
 
     # Coordinates branch
     if lat_val is not None and lng_val is not None:
-        docs = hospitals_ref.limit(500).stream()
+        hospitals_objs = db.query(Hospital).limit(500).all()
         results: List[dict] = []
-        for d in docs:
-            h = d.to_dict() or {}
+        for h_obj in hospitals_objs:
+            h = {k: v for k, v in h_obj.__dict__.items() if not k.startswith('_')}
             h_lat = h.get("latitude")
             h_lng = h.get("longitude")
             if h_lat is None or h_lng is None:
@@ -948,10 +940,10 @@ async def get_dashboard_nearby_hospitals(
     # City branch
     if city:
         city_formatted = city.strip().title()
-        docs = hospitals_ref.where("city", "==", city_formatted).limit(limit).stream()
-        for d in docs:
-            h = d.to_dict() or {}
-            # If lat/lng supplied alongside city, compute distance (rare for this branch)
+        hospitals_objs = db.query(Hospital).filter(Hospital.city == city_formatted).limit(limit).all()
+        for h_obj in hospitals_objs:
+            h = {k: v for k, v in h_obj.__dict__.items() if not k.startswith('_')}
+            # If lat/lng supplied alongside city, compute distance
             if lat_val is not None and lng_val is not None and h.get("latitude") is not None and h.get("longitude") is not None:
                 dist = calculate_distance(lat_val, lng_val, h["latitude"], h["longitude"])  # type: ignore[arg-type]
                 h["distance_km"] = round(dist, 1)

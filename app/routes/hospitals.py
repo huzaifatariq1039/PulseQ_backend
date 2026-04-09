@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, status, Query, Depends
 from typing import List, Optional
 import re
+import uuid
 from app.models import (
     HospitalCreate,
     HospitalResponse,
@@ -14,7 +15,8 @@ from app.models import (
     QueueStatus,
 )
 from app.database import get_db
-from app.config import COLLECTIONS
+from sqlalchemy.orm import Session
+from app.db_models import Hospital, Doctor, Queue, HospitalStatus
 from datetime import datetime
 import math
 import httpx
@@ -58,33 +60,42 @@ def _cache_set(key: str, val: object, ttl: int = _CACHE_TTL_SECONDS):
         pass
 
 @router.post("/", response_model=HospitalResponse)
-async def create_hospital(hospital: HospitalCreate):
+async def create_hospital(hospital: HospitalCreate, db: Session = Depends(get_db)):
     """Create a new hospital"""
-    db = get_db()
-    hospitals_ref = db.collection(COLLECTIONS["HOSPITALS"])
 
     # Check if hospital with same name and address already exists
-    existing_hospital = hospitals_ref.where("name", "==", hospital.name)\
-                                     .where("address", "==", hospital.address).limit(1).stream()
-    if list(existing_hospital):
+    existing = (
+        db.query(Hospital)
+        .filter(Hospital.name == hospital.name)
+        .filter(Hospital.address == hospital.address)
+        .first()
+    )
+    if existing:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Hospital with this name and address already exists"
         )
-    
-    hospital_ref = hospitals_ref.document()
+
     hospital_data = hospital.dict()
     # Normalize city name to title case for consistent searching
     hospital_data["city"] = hospital_data["city"].strip().title()
-    hospital_data["id"] = hospital_ref.id
-    hospital_data["created_at"] = datetime.utcnow()
-    hospital_data["updated_at"] = datetime.utcnow()
+    hospital_id = str(uuid.uuid4())
+    now = datetime.utcnow()
 
-    hospital_ref.set(hospital_data)
-    return HospitalResponse(**hospital_data)
+    h = Hospital(
+        id=hospital_id,
+        created_at=now,
+        updated_at=now,
+        **hospital_data,
+    )
+    db.add(h)
+    db.commit()
+    db.refresh(h)
+    out = {k: v for k, v in h.__dict__.items() if not k.startswith('_')}
+    return HospitalResponse(**out)
 
 # ===============================
-# 🌐 NEW: Live Nearby via OpenStreetMap (Overpass API)
+# NEW: Live Nearby via OpenStreetMap (Overpass API)
 # ===============================
 @router.get("/nearby-overpass")
 async def get_nearby_hospitals_overpass(
@@ -154,21 +165,16 @@ async def get_nearby_hospitals_overpass(
         raise HTTPException(status_code=500, detail=f"Error fetching from Overpass: {str(e)}")
 
 @router.get("/", response_model=List[HospitalResponse])
-async def list_hospitals(limit: int = Query(20, ge=1, le=100)):
+async def list_hospitals(limit: int = Query(20, ge=1, le=100), db: Session = Depends(get_db)):
     """List all hospitals"""
-    db = get_db()
-    hospitals_ref = db.collection(COLLECTIONS["HOSPITALS"])
-    docs = hospitals_ref.limit(limit).stream()
-    
-    hospitals = []
-    for doc in docs:
-        hospitals.append(HospitalResponse(**doc.to_dict()))
-    return hospitals
+
+    hospitals = db.query(Hospital).limit(limit).all()
+    return [HospitalResponse(**{k: v for k, v in h.__dict__.items() if not k.startswith('_')}) for h in hospitals]
 
 # (Google Maps live-nearby endpoint removed as requested; using OpenStreetMap endpoints instead)
 
 # ===============================
-# 🌐 NEW: Live Nearby via OpenStreetMap (Nominatim)
+# NEW: Live Nearby via OpenStreetMap (Nominatim)
 # ===============================
 @router.get("/nearby-osm")
 async def get_nearby_hospitals_osm(
@@ -236,7 +242,8 @@ async def get_nearby_hospitals(
     latitude: Optional[float] = Query(None, description="User's latitude (alias 3)"),
     longitude: Optional[float] = Query(None, description="User's longitude (alias 3)"),
     radius_km: float = Query(25.0, gt=0, le=200, description="Search radius when using lat/lng"),
-    include_open_db: bool = Query(True, description="Also include OPEN DB hospitals even if they lack coordinates")
+    include_open_db: bool = Query(True, description="Also include OPEN DB hospitals even if they lack coordinates"),
+    db: Session = Depends(get_db),
 ):
     """Get nearby hospitals by city or by user coordinates.
 
@@ -245,9 +252,6 @@ async def get_nearby_hospitals(
     - Else if `user_lat` and `user_lng` provided, return hospitals within `radius_km`, sorted by distance.
     - Else return an empty list.
     """
-    db = get_db()
-    hospitals_ref = db.collection(COLLECTIONS["HOSPITALS"])
-
     # Coalesce coordinate aliases
     lat_val = user_lat if user_lat is not None else (lat if lat is not None else latitude)
     lng_val = user_lng if user_lng is not None else (lng if lng is not None else longitude)
@@ -266,9 +270,9 @@ async def get_nearby_hospitals(
     if city:
         # City-based query (case-insensitive storage by title-casing)
         city_formatted = city.strip().title()
-        docs = hospitals_ref.where("city", "==", city_formatted).limit(limit).stream()
-        for doc in docs:
-            hospital_data = doc.to_dict()
+        docs = db.query(Hospital).filter(Hospital.city == city_formatted).limit(limit).all()
+        for h in docs:
+            hospital_data = {k: v for k, v in h.__dict__.items() if not k.startswith('_')}
             if has_coords and hospital_data.get("latitude") is not None and hospital_data.get("longitude") is not None:
                 distance = calculate_distance(lat_val, lng_val, hospital_data["latitude"], hospital_data["longitude"])  # type: ignore[arg-type]
                 hospital_data["distance_km"] = round(distance, 1)
@@ -284,10 +288,10 @@ async def get_nearby_hospitals(
 
     if has_coords:
         # Coordinate-based fallback: scan and filter within radius_km
-        docs = hospitals_ref.limit(500).stream()
         results: List[dict] = []
+        docs = db.query(Hospital).limit(500).all()
         for doc in docs:
-            h = doc.to_dict()
+            h = {k: v for k, v in doc.__dict__.items() if not k.startswith('_')}
             h_lat = h.get("latitude")
             h_lng = h.get("longitude")
             if h_lat is not None and h_lng is not None:
@@ -298,8 +302,8 @@ async def get_nearby_hospitals(
                     results.append(h)
             elif include_open_db:
                 # Include OPEN hospitals that lack coordinates so the UI still shows onboarded hospitals
-                status_val = (h.get("status") or "").lower()
-                if status_val in ("open",) or status_val == str(h.get("status")).lower():
+                status_val = str(h.get("status") or "").lower()
+                if status_val in ("open",):
                     results.append(h)
         results.sort(key=lambda x: x.get("distance_km", 1e9))
         hospitals = [HospitalResponse(**h) for h in results[:limit]]
@@ -312,8 +316,8 @@ async def get_nearby_hospitals(
             _cache_set(cache_key, result)
             return result
         # Graceful fallback: return top hospitals (no distance) so UI isn't empty
-        docs = hospitals_ref.limit(limit).stream()
-        fallback = [HospitalResponse(**d.to_dict()) for d in docs]
+        docs = db.query(Hospital).limit(limit).all()
+        fallback = [HospitalResponse(**{k: v for k, v in d.__dict__.items() if not k.startswith('_')}) for d in docs]
         result = HospitalSearchResponse(
             hospitals=fallback,
             total_found=len(fallback),
@@ -331,27 +335,20 @@ async def get_nearby_hospitals(
 async def get_open_hospitals(
     city: Optional[str] = Query(None, description="Filter by city (optional)"),
     limit: int = Query(50, ge=1, le=200, description="Max hospitals to return"),
+    db: Session = Depends(get_db),
 ):
     """Return OPEN hospitals from the SmartToken database (onboarded providers).
 
     This endpoint is designed for the Search page to show onboarded/open hospitals
     even when the user has not typed a search query or granted location.
     """
-    db = get_db()
-    ref = db.collection(COLLECTIONS["HOSPITALS"]).limit(500)
-    docs = ref.stream()
-    items: List[dict] = []
-    for d in docs:
-        h = d.to_dict() or {}
-        # Filter by city if requested
-        if city and h.get("city", "").strip().lower() != city.strip().lower():
-            continue
-        # Consider both enum and string storage of status
-        status_val = str(h.get("status") or "").lower()
-        if status_val == "open":
-            items.append(h)
-        # Some datasets may store boolean or None; skip non-open
-    # Sort by name for stable UI
+
+    q = db.query(Hospital)
+    if city:
+        q = q.filter(Hospital.city.ilike(city.strip()))
+    q = q.filter(Hospital.status == HospitalStatus.OPEN)
+    docs = q.limit(500).all()
+    items = [{k: v for k, v in h.__dict__.items() if not k.startswith('_')} for h in docs]
     items.sort(key=lambda x: (x.get("name") or "").lower())
     hospitals = [HospitalResponse(**h) for h in items[:limit]]
     return HospitalSearchResponse(hospitals=hospitals, total_found=len(hospitals), search_query="open")
@@ -370,14 +367,13 @@ async def get_nearby_hospitals_with_doctors(
     subcategory: Optional[str] = Query(None, description="Filter doctors by specific subcategory/specialization"),
     per_hospital_limit: int = Query(10, ge=1, le=50, description="Max doctors per hospital"),
     hospitals_limit: int = Query(20, ge=1, le=50, description="Max hospitals to return"),
-    radius_km: float = Query(25.0, gt=0, le=200, description="Search radius when using lat/lng")
+    radius_km: float = Query(25.0, gt=0, le=200, description="Search radius when using lat/lng"),
+    db: Session = Depends(get_db),
 ):
     """Return nearby hospitals along with their doctors filtered by category/subcategory.
 
     This is a convenience endpoint to render doctors inline on the Nearby Hospitals screen.
     """
-    db = get_db()
-    hospitals_ref = db.collection(COLLECTIONS["HOSPITALS"])
     # Coalesce coordinate aliases similar to /hospitals/nearby
     lat_val = user_lat if user_lat is not None else (lat if lat is not None else latitude)
     lng_val = user_lng if user_lng is not None else (lng if lng is not None else longitude)
@@ -385,9 +381,9 @@ async def get_nearby_hospitals_with_doctors(
 
     if city:
         city_formatted = city.strip().title()
-        docs = hospitals_ref.where("city", "==", city_formatted).limit(hospitals_limit).stream()
+        docs = db.query(Hospital).filter(Hospital.city == city_formatted).limit(hospitals_limit).all()
     elif has_coords:
-        docs = hospitals_ref.limit(500).stream()
+        docs = db.query(Hospital).limit(500).all()
     else:
         docs = []
 
@@ -439,7 +435,7 @@ async def get_nearby_hospitals_with_doctors(
 
     results = []
     for doc in docs:
-        h = doc.to_dict()
+        h = {k: v for k, v in doc.__dict__.items() if not k.startswith('_')}
         # Distance calc if coords provided
         if has_coords and h.get("latitude") is not None and h.get("longitude") is not None:
             distance = calculate_distance(lat_val, lng_val, h["latitude"], h["longitude"])  # type: ignore[arg-type]
@@ -450,10 +446,10 @@ async def get_nearby_hospitals_with_doctors(
                 continue
 
         # Fetch doctors for this hospital and filter
-        dref = db.collection(COLLECTIONS["DOCTORS"]).where("hospital_id", "==", h["id"]).limit(500).stream()
+        dref = db.query(Doctor).filter(Doctor.hospital_id == str(h.get("id"))).limit(500).all()
         doctors = []
         for d in dref:
-            item = d.to_dict() or {}
+            item = {k: v for k, v in d.__dict__.items() if not k.startswith('_')}
             if _matches_category(item):
                 doctors.append(item)
                 if len(doctors) >= per_hospital_limit:
@@ -469,9 +465,9 @@ async def get_nearby_hospitals_with_doctors(
 
     # If no results in coordinate mode, graceful fallback to top hospitals
     if not results and has_coords:
-        fb_docs = hospitals_ref.limit(hospitals_limit).stream()
+        fb_docs = db.query(Hospital).limit(hospitals_limit).all()
         for d in fb_docs:
-            h = d.to_dict()
+            h = {k: v for k, v in d.__dict__.items() if not k.startswith('_')}
             results.append({
                 "hospital": HospitalResponse(**h),
                 "doctors": []
@@ -491,47 +487,45 @@ async def search_hospitals(
     city: Optional[str] = Query(None, description="Filter by city"),
     limit: int = Query(10, ge=1, le=50, description="Number of results to return"),
     user_lat: Optional[float] = Query(None, description="User's latitude"),
-    user_lng: Optional[float] = Query(None, description="User's longitude")
+    user_lng: Optional[float] = Query(None, description="User's longitude"),
+    db: Session = Depends(get_db),
 ):
     """Search hospitals by name, specialization, or city"""
-    db = get_db()
-    hospitals_ref = db.collection(COLLECTIONS["HOSPITALS"])
-    
     results = []
-    
+
     # Get all hospitals and filter in memory (simpler approach for small datasets)
-    all_hospitals_query = hospitals_ref.limit(100).stream()  # Reasonable limit for filtering
-    
-    for doc in all_hospitals_query:
-        hospital_data = doc.to_dict()
-        
+    all_hospitals = db.query(Hospital).limit(100).all()  # Reasonable limit for filtering
+
+    for h in all_hospitals:
+        hospital_data = {k: v for k, v in h.__dict__.items() if not k.startswith('_')}
+
         # Apply city filter if specified
         if city and hospital_data.get("city", "").lower() != city.lower():
             continue
-            
+
         # Check if query matches name, specializations, or city
         matches = False
-        
+
         # Search in hospital name (case-insensitive)
         if query.lower() in hospital_data.get("name", "").lower():
             matches = True
-            
+
         # Search in specializations (case-insensitive)
         specializations = hospital_data.get("specializations", [])
         if any(query.lower() in spec.lower() for spec in specializations):
             matches = True
-            
+
         # Search in city if not already filtered
         if not city and query.lower() in hospital_data.get("city", "").lower():
             matches = True
-            
+
         if matches:
             results.append(hospital_data)
-            
+
         # Stop if we have enough results
         if len(results) >= limit:
             break
-    
+
     # Calculate distances and prepare response
     hospitals = []
     for hospital_data in results[:limit]:
@@ -543,9 +537,9 @@ async def search_hospitals(
             )
             hospital_data["distance_km"] = round(distance, 1)
             hospital_data["estimated_time_minutes"] = int(distance * 2)
-        
+
         hospitals.append(HospitalResponse(**hospital_data))
-    
+
     return HospitalSearchResponse(
         hospitals=hospitals,
         total_found=len(hospitals),
@@ -553,7 +547,7 @@ async def search_hospitals(
     )
 
 # ===============================
-# 🔎 Unified Search: DB + Nearby (OSM)
+# Unified Search: DB + Nearby (OSM)
 # ===============================
 @router.get("/search-unified", response_model=HospitalUnifiedSearchResponse)
 async def search_hospitals_unified(
@@ -565,6 +559,7 @@ async def search_hospitals_unified(
     radius_km: float = Query(25.0, gt=0, le=50, description="Nearby radius for OSM"),
     include_db: bool = Query(True, description="Include SmartToken database hospitals"),
     include_osm: bool = Query(True, description="Include external nearby hospitals from OSM"),
+    db: Session = Depends(get_db),
 ):
     """Return a merged list of hospitals containing:
     - Database hospitals (never marked as nearby, is_database=True)
@@ -572,9 +567,6 @@ async def search_hospitals_unified(
 
     Items are de-duplicated by normalized name+city when possible.
     """
-    db = get_db()
-    hospitals_ref = db.collection(COLLECTIONS["HOSPITALS"]) if include_db else None
-
     qnorm = (query or "").strip().lower()
 
     # Cache by full parameter set
@@ -588,13 +580,14 @@ async def search_hospitals_unified(
     items: list[HospitalLite] = []
 
     # 1) Pull DB hospitals
-    if include_db and hospitals_ref is not None:
-        docs = hospitals_ref.limit(300).stream()
+    if include_db:
+        docs = db.query(Hospital).limit(300).all()
         for d in docs:
-            h = d.to_dict() or {}
+            h = {k: v for k, v in d.__dict__.items() if not k.startswith('_')}
             # Optional city filter
             if city and h.get("city", "").lower() != city.lower():
                 continue
+
             # Optional text filter
             if qnorm:
                 hay = f"{h.get('name','')} {h.get('city','')}".lower()
@@ -607,7 +600,7 @@ async def search_hospitals_unified(
                 h["estimated_time_minutes"] = int(dist * 2)
 
             items.append(HospitalLite(
-                id=h.get("id", d.id),
+                id=h.get("id"),
                 name=h.get("name", "Hospital"),
                 address=h.get("address"),
                 city=h.get("city"),
@@ -724,18 +717,16 @@ async def get_hospitals_by_radius(
     lat: float = Query(..., description="User latitude"),
     lng: float = Query(..., description="User longitude"),
     radius_km: float = Query(25.0, gt=0, le=200, description="Search radius in kilometers"),
-    limit: int = Query(20, ge=1, le=100, description="Max hospitals to return")
+    limit: int = Query(20, ge=1, le=100, description="Max hospitals to return"),
+    db: Session = Depends(get_db),
 ):
     """Return hospitals within a given radius of the provided coordinates."""
-    db = get_db()
-    hospitals_ref = db.collection(COLLECTIONS["HOSPITALS"])
-
     # Load hospitals (bounded for safety); filter in-memory by distance
-    docs = hospitals_ref.limit(500).stream()
     results: List[dict] = []
 
+    docs = db.query(Hospital).limit(500).all()
     for doc in docs:
-        h = doc.to_dict()
+        h = {k: v for k, v in doc.__dict__.items() if not k.startswith('_')}
         h_lat = h.get("latitude")
         h_lng = h.get("longitude")
         if h_lat is None or h_lng is None:
@@ -757,47 +748,41 @@ async def get_hospitals_by_radius(
     )
 
 @router.get("/{hospital_id}", response_model=HospitalResponse)
-async def get_hospital(hospital_id: str):
+async def get_hospital(hospital_id: str, db: Session = Depends(get_db)):
     """Get hospital by ID"""
-    db = get_db()
-    hospital_ref = db.collection(COLLECTIONS["HOSPITALS"]).document(hospital_id)
-    hospital_doc = hospital_ref.get()
-
-    if not hospital_doc.exists:
+    hospital = db.query(Hospital).filter(Hospital.id == hospital_id).first()
+    if not hospital:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Hospital not found"
         )
-    return HospitalResponse(**hospital_doc.to_dict())
+    return HospitalResponse(**{k: v for k, v in hospital.__dict__.items() if not k.startswith('_')})
 
 @router.get("/{hospital_id}/doctors", response_model=DoctorSearchResponse)
 async def get_hospital_doctors(
     hospital_id: str,
-    category: Optional[str] = Query(None, description="Filter doctors by specialization category")
+    category: Optional[str] = Query(None, description="Filter doctors by specialization category"),
+    db: Session = Depends(get_db),
 ):
     """Get doctors for a specific hospital with optional category filter.
 
     Aligns the response shape with `/doctors/hospital/{hospital_id}` by returning
     `DoctorSearchResponse` including `doctors` with queue info and `subcategories`.
     """
-    db = get_db()
-    doctors_ref = db.collection(COLLECTIONS["DOCTORS"]).where("hospital_id", "==", hospital_id)
-
     # Local helper to build a queue status for a doctor (mirrors logic in doctors.py)
     async def _get_queue_status(doctor_id: str) -> QueueStatus:
-        queue_ref = db.collection("queues").where("doctor_id", "==", doctor_id).limit(1).stream()
-        queue_docs = list(queue_ref)
-        if queue_docs:
-            qd = queue_docs[0].to_dict() or {}
+        q = db.query(Queue).filter(Queue.doctor_id == doctor_id).first()
+        if q:
             return QueueStatus(
                 doctor_id=doctor_id,
-                current_token=qd.get("current_token", 0),
-                waiting_patients=qd.get("waiting_patients", 0),
-                estimated_wait_time_minutes=qd.get("estimated_wait_time_minutes", 0),
+                current_token=int(getattr(q, "current_token", 0) or 0),
+                waiting_patients=int(getattr(q, "waiting_patients", 0) or 0),
+                estimated_wait_time_minutes=int(getattr(q, "estimated_wait_time_minutes", 0) or 0),
             )
         # Fallback synthetic queue
         import random
         waiting = random.randint(5, 25)
+
         return QueueStatus(
             doctor_id=doctor_id,
             current_token=random.randint(1, 10),
@@ -825,10 +810,10 @@ async def get_hospital_doctors(
 
     # If no category, return a reasonable set directly, wrapped as DoctorSearchResponse
     if not category:
-        docs_stream = doctors_ref.limit(200).stream()
+        docs_stream = db.query(Doctor).filter(Doctor.hospital_id == hospital_id).limit(200).all()
         doctors_with_queue: list[DoctorWithQueue] = []
         for d in docs_stream:
-            data = d.to_dict() or {}
+            data = {k: v for k, v in d.__dict__.items() if not k.startswith('_')}
             doctor = DoctorResponse(**data)
             queue = await _get_queue_status(data["id"])
             doctors_with_queue.append(DoctorWithQueue(doctor=doctor, queue=queue))
@@ -846,7 +831,7 @@ async def get_hospital_doctors(
     is_main_category = any(cat_lower == k.lower() for k in category_mappings.keys())
 
     # Stream a bounded set and filter in-memory for case-insensitivity and contains-matching
-    docs_stream = doctors_ref.limit(500).stream()
+    docs_stream = db.query(Doctor).filter(Doctor.hospital_id == hospital_id).limit(500).all()
     results: list[dict] = []
     resolved_subcategories: list[str] = []
 
@@ -861,7 +846,7 @@ async def get_hospital_doctors(
         dyn_set = set(subcats)
 
         for d in docs_stream:
-            item = d.to_dict() or {}
+            item = {k: v for k, v in d.__dict__.items() if not k.startswith('_')}
             spec = (item.get("specialization") or "").strip()
             sub = (item.get("subcategory") or "").strip()
             spec_l = spec.lower()
@@ -905,7 +890,7 @@ async def get_hospital_doctors(
     else:
         # Otherwise: treat it as a concrete specialization/subcategory term
         for d in docs_stream:
-            item = d.to_dict() or {}
+            item = {k: v for k, v in d.__dict__.items() if not k.startswith('_')}
             spec = (item.get("specialization") or "").strip().lower()
             sub = (item.get("subcategory") or "").strip().lower()
             if cat_lower == spec or cat_lower == sub or cat_lower in spec or cat_lower in sub:
@@ -919,7 +904,7 @@ async def get_hospital_doctors(
         doctors_with_queue.append(DoctorWithQueue(doctor=doctor, queue=queue))
 
     # Filter out any subcategory tokens that equal main category labels, and remove empties
-    main_labels_norm = {k.strip().lower() for k in category_mappings.keys()}
+    main_labels_norm = { _norm(k) for k in category_mappings.keys() }
     resolved_subcategories = sorted({
         s for s in (resolved_subcategories or [])
         if s and s.strip().lower() not in main_labels_norm
@@ -937,16 +922,14 @@ async def get_hospital_doctors(
 async def get_hospital_doctors_by_main_category(
     hospital_id: str,
     main_category: str = Query(..., description="One of: General Medical, Specialist, Surgeon"),
-    limit: int = Query(50, ge=1, le=200)
+    limit: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
 ):
     """Return doctors for a hospital filtered by a main category using the same mappings
     as `/{hospital_id}/categories`.
 
     Example: main_category=Surgeon will include ["General Surgery", "Cardiac Surgery", ...].
     """
-    db = get_db()
-    doctors_ref = db.collection(COLLECTIONS["DOCTORS"]).where("hospital_id", "==", hospital_id)
-
     # Category mappings must match get_hospital_categories()
     category_mappings = {
         "General Medical": [
@@ -1005,10 +988,10 @@ async def get_hospital_doctors_by_main_category(
     subcats_lower = [_norm(s) for s in subcats]
 
     # Fetch and filter in-memory for case-insensitive/contains matches
-    docs = doctors_ref.limit(500).stream()
+    docs = db.query(Doctor).filter(Doctor.hospital_id == hospital_id).limit(500).all()
     results: list[dict] = []
     for d in docs:
-        item = d.to_dict() or {}
+        item = {k: v for k, v in d.__dict__.items() if not k.startswith('_')}
         spec = _norm(item.get("specialization") or "")
         if any(spec == sc or spec in sc or sc in spec for sc in subcats_lower):
             results.append(item)
@@ -1031,13 +1014,12 @@ async def get_hospital_doctors_by_main_category(
 async def get_hospital_doctors_by_subcategory(
     hospital_id: str,
     subcategory: str = Query(..., description="Exact subcategory/specialization name to filter"),
-    limit: int = Query(50, ge=1, le=200)
+    limit: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
 ):
     """Return doctors for a hospital filtered by a specific subcategory/specialization.
     Uses case-insensitive contains matching to be tolerant to data entry variations.
     """
-    db = get_db()
-    doctors_ref = db.collection(COLLECTIONS["DOCTORS"]).where("hospital_id", "==", hospital_id)
     target = _norm(subcategory)
 
     # Map subcategory -> main category to also include doctors stored with main labels only
@@ -1096,10 +1078,10 @@ async def get_hospital_doctors_by_subcategory(
             target_main_norm = _norm(main)
             break
 
-    docs = doctors_ref.limit(500).stream()
+    docs = db.query(Doctor).filter(Doctor.hospital_id == hospital_id).limit(500).all()
     results: list[dict] = []
     for d in docs:
-        item = d.to_dict() or {}
+        item = {k: v for k, v in d.__dict__.items() if not k.startswith('_')}
         spec = _norm(item.get("specialization") or "")
         # Match direct subcategory OR the resolved main category (doctor saved as main only)
         if target and (target == spec or target in spec or spec in target or (target_main_norm and spec == target_main_norm)):
@@ -1114,8 +1096,9 @@ async def get_hospital_doctors_by_subcategory(
         "subcategory": subcategory,
     }
 
+
 @router.get("/{hospital_id}/categories")
-async def get_hospital_categories(hospital_id: str):
+async def get_hospital_categories(hospital_id: str, db: Session = Depends(get_db)):
     """Return enabled categories and subcategories for a hospital based on its doctors.
 
     Response example:
@@ -1129,17 +1112,14 @@ async def get_hospital_categories(hospital_id: str):
       "subcategories_counts": {"General Medicine": 3, "Cardiology": 5, ...}
     }
     """
-    db = get_db()
-    doctors_ref = db.collection(COLLECTIONS["DOCTORS"]).where("hospital_id", "==", hospital_id)
-
     # Fetch all specializations for this hospital
-    docs = doctors_ref.stream()
+    docs = db.query(Doctor).filter(Doctor.hospital_id == hospital_id).all()
     present_specs: dict[str, int] = {}
     for d in docs:
-        spec = (d.to_dict() or {}).get("specialization")
+        spec = getattr(d, "specialization", None)
         if not spec:
             continue
-        present_specs[spec] = present_specs.get(spec, 0) + 1
+        present_specs[str(spec)] = present_specs.get(str(spec), 0) + 1
 
     # Category mappings (kept in sync with app/routes/doctors.py)
     category_mappings = {
@@ -1231,6 +1211,71 @@ async def get_hospital_categories(hospital_id: str):
         "subcategories_counts": present_specs,
         "hospital_id": hospital_id,
     }
+
+
+@router.put("/{hospital_id}")
+async def update_hospital(
+    hospital_id: str,
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_active_user),
+):
+    """Update hospital details (Admin only)"""
+    # Verify role
+    from app.db_models import UserRole
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin only")
+
+    hospital = db.query(Hospital).filter(Hospital.id == hospital_id).first()
+    if not hospital:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Hospital not found")
+
+    allowed = {
+        "name", "address", "city", "state", "phone", "email",
+        "latitude", "longitude", "status", "specializations"
+    }
+
+    for k, v in payload.items():
+        if k in allowed:
+            if k == "status" and v:
+                from app.db_models import HospitalStatus
+                try:
+                    v = HospitalStatus(v.lower())
+                except ValueError:
+                    raise HTTPException(status_code=400, detail=f"Invalid status: {v}")
+            setattr(hospital, k, v)
+
+    hospital.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(hospital)
+
+    return {
+        "success": True,
+        "data": {k: v for k, v in hospital.__dict__.items() if not k.startswith('_')},
+        "message": "Hospital updated"
+    }
+
+
+@router.delete("/{hospital_id}")
+async def delete_hospital(
+    hospital_id: str,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_active_user),
+):
+    """Delete hospital (Admin only)"""
+    from app.db_models import UserRole
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin only")
+
+    hospital = db.query(Hospital).filter(Hospital.id == hospital_id).first()
+    if not hospital:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Hospital not found")
+
+    db.delete(hospital)
+    db.commit()
+
+    return {"success": True, "message": "Hospital deleted"}
+
 
 def calculate_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """Calculate distance between two points using Haversine formula"""

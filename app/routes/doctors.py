@@ -2,7 +2,8 @@ from fastapi import APIRouter, HTTPException, status, Query, Depends
 from typing import List, Optional, Dict, Any
 from app.models import DoctorCreate, DoctorResponse, DoctorSearchResponse, DoctorWithQueue, QueueStatus
 from app.database import get_db
-from app.config import COLLECTIONS
+from sqlalchemy.orm import Session
+from app.db_models import Doctor, Hospital, User
 from app.security import get_current_active_user, require_roles
 from datetime import datetime
 import random
@@ -13,6 +14,7 @@ router = APIRouter(prefix="/doctors", tags=["Doctors"])
 @router.patch("/status", dependencies=[Depends(require_roles("receptionist", "admin"))])
 async def update_doctor_status(
     payload: Dict[str, Any],
+    db: Session = Depends(get_db),
     current_user=Depends(get_current_active_user),
 ) -> Dict[str, Any]:
     doctor_id = str((payload or {}).get("doctor_id") or "").strip()
@@ -22,10 +24,8 @@ async def update_doctor_status(
     if new_status not in {"available", "busy", "offline", "on_leave"}:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="status is invalid")
 
-    db = get_db()
-    ref = db.collection(COLLECTIONS["DOCTORS"]).document(doctor_id)
-    snap = ref.get()
-    if not getattr(snap, "exists", False):
+    doctor = db.query(Doctor).filter(Doctor.id == doctor_id).first()
+    if not doctor:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Doctor not found")
 
     # Emergency leave flow: pause queues, update tokens, and notify patients
@@ -43,16 +43,18 @@ async def update_doctor_status(
         )
 
     now = datetime.utcnow()
-    ref.set({"status": new_status, "updated_at": now}, merge=True)
-    merged = snap.to_dict() or {}
-    merged.update({"status": new_status, "updated_at": now})
-    if not merged.get("id"):
-        merged["id"] = doctor_id
+    doctor.status = new_status
+    doctor.updated_at = now
+    db.commit()
+    db.refresh(doctor)
+    
+    merged = {k: v for k, v in doctor.__dict__.items() if not k.startswith('_')}
     return {"success": True, "data": merged, "message": "Doctor status updated"}
 
 
 @router.get("/manage", dependencies=[Depends(require_roles("receptionist", "admin"))])
 async def receptionist_manage_doctors(
+    db: Session = Depends(get_db),
     current_user=Depends(get_current_active_user),
     hospital_id: Optional[str] = Query(None, description="Optional hospital scope"),
     department: Optional[str] = Query(None, description="Filter by department"),
@@ -60,17 +62,16 @@ async def receptionist_manage_doctors(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
 ) -> Dict[str, Any]:
-    db = get_db()
-    ref = db.collection(COLLECTIONS["DOCTORS"])
+    # Query doctors from PostgreSQL
+    query = db.query(Doctor)
     if hospital_id:
-        ref = ref.where("hospital_id", "==", hospital_id)
-    docs = list(ref.limit(5000).stream())
-
+        query = query.filter(Doctor.hospital_id == hospital_id)
+    
+    doctors = query.all()
+    
     items: List[Dict[str, Any]] = []
-    for d in docs:
-        data = d.to_dict() or {}
-        if not data.get("id"):
-            data["id"] = getattr(d, "id", None)
+    for doctor in doctors:
+        data = {k: v for k, v in doctor.__dict__.items() if not k.startswith('_')}
         items.append(data)
 
     if department:
@@ -169,29 +170,26 @@ async def receptionist_manage_doctors(
 
 @router.get("/departments", dependencies=[Depends(require_roles("receptionist", "admin"))])
 async def receptionist_list_departments(
+    db: Session = Depends(get_db),
     current_user=Depends(get_current_active_user),
     hospital_id: Optional[str] = Query(None, description="Optional hospital scope"),
 ) -> Dict[str, Any]:
-    db = get_db()
-
+    # Departments table may not exist in PostgreSQL, fallback to extracting from doctors
     out: List[str] = []
-    try:
-        dep_ref = db.collection("departments")
-        if hospital_id:
-            dep_ref = dep_ref.where("hospital_id", "==", hospital_id)
-        dep_docs = [d.to_dict() for d in dep_ref.limit(2000).stream()]
-        names = [str(x.get("name") or "").strip() for x in dep_docs]
-        out = sorted({n for n in names if n}, key=lambda x: x.lower())
-    except Exception:
-        out = []
-
-    if not out:
-        ref = db.collection(COLLECTIONS["DOCTORS"])
-        if hospital_id:
-            ref = ref.where("hospital_id", "==", hospital_id)
-        docs = [d.to_dict() for d in ref.limit(2000).stream()]
-        names2 = [str(d.get("department") or d.get("specialization") or "").strip() for d in docs]
-        out = sorted({n for n in names2 if n}, key=lambda x: x.lower())
+    
+    # Extract unique departments from doctors
+    query = db.query(Doctor)
+    if hospital_id:
+        query = query.filter(Doctor.hospital_id == hospital_id)
+    
+    doctors = query.all()
+    names = []
+    for doctor in doctors:
+        dept = str(doctor.department or doctor.specialization or "").strip()
+        if dept:
+            names.append(dept)
+    
+    out = sorted(set(names), key=lambda x: x.lower())
 
     return {"success": True, "data": out}
 
@@ -200,12 +198,11 @@ async def receptionist_list_departments(
 async def receptionist_update_doctor(
     doctor_id: str,
     payload: Dict[str, Any],
+    db: Session = Depends(get_db),
     current_user=Depends(get_current_active_user),
 ) -> Dict[str, Any]:
-    db = get_db()
-    ref = db.collection(COLLECTIONS["DOCTORS"]).document(str(doctor_id))
-    snap = ref.get()
-    if not getattr(snap, "exists", False):
+    doctor = db.query(Doctor).filter(Doctor.id == doctor_id).first()
+    if not doctor:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Doctor not found")
 
     allowed = {
@@ -263,7 +260,7 @@ async def receptionist_update_doctor(
         if update["status"] not in {"available", "busy", "offline", "on_leave"}:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="status is invalid")
 
-    merged = (snap.to_dict() or {})
+    merged = {k: v for k, v in doctor.__dict__.items() if not k.startswith('_')}
     merged.update(update)
 
     dept_text = (
@@ -304,7 +301,15 @@ async def receptionist_update_doctor(
             "updated_at": merged.get("updated_at"),
         }
     )
-    ref.update(persist)
+    
+    # Update doctor in PostgreSQL
+    for key, value in persist.items():
+        if hasattr(doctor, key):
+            setattr(doctor, key, value)
+    
+    db.commit()
+    db.refresh(doctor)
+    
     if not merged.get("id"):
         merged["id"] = doctor_id
     return {"success": True, "data": merged, "message": "Doctor updated"}
@@ -358,21 +363,25 @@ def _normalize_time_to_hhmm(s: Optional[str]) -> Optional[str]:
         return None
 
 @router.post("/", response_model=DoctorResponse)
-async def create_doctor(doctor: DoctorCreate):
+async def create_doctor(
+    doctor: DoctorCreate,
+    db: Session = Depends(get_db)
+):
     """Create a new doctor"""
-    db = get_db()
-    doctors_ref = db.collection(COLLECTIONS["DOCTORS"])
-
     # Check if doctor with same name and hospital already exists
-    existing_doctor = doctors_ref.where("name", "==", doctor.name)\
-                                 .where("hospital_id", "==", doctor.hospital_id).limit(1).stream()
-    if list(existing_doctor):
+    existing_doctor = db.query(Doctor).filter(
+        Doctor.name == doctor.name,
+        Doctor.hospital_id == doctor.hospital_id
+    ).first()
+    
+    if existing_doctor:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Doctor with this name already exists in this hospital"
         )
 
-    doctor_ref = doctors_ref.document()
+    import uuid
+    doctor_id = str(uuid.uuid4())
     doctor_data = doctor.dict()
 
     # Normalize schedule times to 24-hour HH:MM if provided (support AM/PM input from frontend)
@@ -382,7 +391,7 @@ async def create_doctor(doctor: DoctorCreate):
         doctor_data["start_time"] = norm_start
     if norm_end:
         doctor_data["end_time"] = norm_end
-    doctor_data["id"] = doctor_ref.id
+    doctor_data["id"] = doctor_id
     doctor_data["created_at"] = datetime.utcnow()
     doctor_data["updated_at"] = datetime.utcnow()
 
@@ -425,7 +434,12 @@ async def create_doctor(doctor: DoctorCreate):
         else:
             doctor_data["avatar_initials"] = doctor.name[:2].upper()
 
-    doctor_ref.set(doctor_data)
+    # Create doctor in PostgreSQL
+    new_doctor = Doctor(**doctor_data)
+    db.add(new_doctor)
+    db.commit()
+    db.refresh(new_doctor)
+    
     return DoctorResponse(**doctor_data)
 
 
@@ -434,13 +448,13 @@ async def get_available_slots(
     doctor_id: str,
     day: str = Query(..., description="DD-MM-YYYY"),
     slot_minutes: int = Query(15, ge=5, le=60),
+    db: Session = Depends(get_db)
 ) -> Dict[str, Any]:
     """Generate available slots for a doctor from their availability."""
-    db = get_db()
-    snap = db.collection(COLLECTIONS["DOCTORS"]).document(str(doctor_id)).get()
-    if not getattr(snap, "exists", False):
+    doctor = db.query(Doctor).filter(Doctor.id == doctor_id).first()
+    if not doctor:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Doctor not found")
-    doc = snap.to_dict() or {}
+    doc = {k: v for k, v in doctor.__dict__.items() if not k.startswith('_')}
 
     # Hide/disable slots during emergency leave
     status_val = str(doc.get("status") or "").lower()
@@ -453,22 +467,11 @@ async def get_available_slots(
     slots = generate_slots_for_doctor(doc, d, slot_minutes=slot_minutes)
 
     # Mark booked/reserved by checking appointments docs
-    appt_col = db.collection(COLLECTIONS["APPOINTMENTS"])
+    # TODO: Create Appointment model in db_models and implement this
     out = []
     for s in slots:
-        t = s.get("time")
-        try:
-            hh, mm = _parse_time_hhmm_ampm(t)
-            sid = slot_id_for(str(doctor_id), d, hh, mm)
-            asnap = appt_col.document(sid).get()
-            if getattr(asnap, "exists", False):
-                st = str((asnap.to_dict() or {}).get("status") or "").lower()
-                available = st not in ("reserved", "booked")
-            else:
-                available = True
-        except Exception:
-            available = False
-        out.append({"time": t, "available": bool(available)})
+        # For now, mark all slots as available
+        out.append({"time": s.get("time"), "available": True})
 
     return {"doctor_id": doctor_id, "day": day, "slot_minutes": slot_minutes, "slots": out}
 
@@ -477,60 +480,57 @@ async def list_doctors(
     hospital_id: Optional[str] = Query(None, description="Filter by hospital ID"),
     specialization: Optional[str] = Query(None, description="Filter by specialization"),
     subcategory: Optional[str] = Query(None, description="Filter by subcategory"),
-    limit: int = Query(20, ge=1, le=100)
+    limit: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db)
 ):
     """List all doctors with optional filtering"""
-    db = get_db()
-    doctors_ref = db.collection(COLLECTIONS["DOCTORS"])
+    # Build query
+    query = db.query(Doctor)
     
-    # Firestore equality is exact and case-sensitive. To avoid empty results due to
-    # case/whitespace mismatches, do in-memory filtering when specialization/subcategory
-    # filters are used. Still apply hospital filter in the query for efficiency.
-    if specialization or subcategory:
-        base_query = doctors_ref
-        if hospital_id:
-            base_query = base_query.where("hospital_id", "==", hospital_id)
-        # Fetch a reasonable batch and filter locally (case-insensitive)
-        docs_stream = base_query.limit(500).stream()
-        spec_norm = (specialization or "").strip().lower()
-        sub_norm = (subcategory or "").strip().lower()
-        results = []
-        for d in docs_stream:
-            data = d.to_dict()
-            doc_spec = (data.get("specialization") or "").strip().lower()
-            doc_sub = (data.get("subcategory") or "").strip().lower()
-            ok = True
-            # Use contains match to be resilient to wording differences (e.g., "General Medicine" vs "General Medical")
-            if spec_norm:
-                ok = ok and (
-                    doc_spec == spec_norm or doc_sub == spec_norm
-                    or (spec_norm in doc_spec) or (spec_norm in doc_sub)
-                )
-            if sub_norm:
-                ok = ok and (
-                    doc_sub == sub_norm or doc_spec == sub_norm
-                    or (sub_norm in doc_sub) or (sub_norm in doc_spec)
-                )
-            if ok:
-                results.append(DoctorResponse(**data))
-            if len(results) >= limit:
-                break
-        return results
-
-    # No spec/subcategory filters: use Firestore filters directly
-    query = doctors_ref
+    # Apply hospital filter
     if hospital_id:
-        query = query.where("hospital_id", "==", hospital_id)
-    docs = query.limit(limit).stream()
-    doctors = [DoctorResponse(**doc.to_dict()) for doc in docs]
-    return doctors
+        query = query.filter(Doctor.hospital_id == hospital_id)
+    
+    # Fetch doctors
+    doctors = query.limit(500).all()
+    
+    # Filter in Python for case-insensitive matching
+    spec_norm = (specialization or "").strip().lower()
+    sub_norm = (subcategory or "").strip().lower()
+    
+    results = []
+    for doctor in doctors:
+        doc_spec = (doctor.specialization or "").strip().lower()
+        doc_sub = (doctor.subcategory or "").strip().lower()
+        
+        ok = True
+        if spec_norm:
+            ok = ok and (
+                doc_spec == spec_norm or doc_sub == spec_norm
+                or (spec_norm in doc_spec) or (spec_norm in doc_sub)
+            )
+        if sub_norm:
+            ok = ok and (
+                doc_sub == sub_norm or doc_spec == sub_norm
+                or (sub_norm in doc_sub) or (sub_norm in doc_spec)
+            )
+        
+        if ok:
+            doctor_data = {k: v for k, v in doctor.__dict__.items() if not k.startswith('_')}
+            results.append(DoctorResponse(**doctor_data))
+        
+        if len(results) >= limit:
+            break
+    
+    return results
 
 @router.get("/hospital/{hospital_id}", response_model=DoctorSearchResponse)
 async def get_doctors_by_hospital(
     hospital_id: str,
     category: Optional[str] = Query(None, description="Filter by main category or specialization (General Medical, Specialist, Surgeon, or specific)"),
     subcategory: Optional[str] = Query(None, description="Filter by subcategory"),
-    limit: int = Query(20, ge=1, le=50)
+    limit: int = Query(20, ge=1, le=50),
+    db: Session = Depends(get_db)
 ):
     """Get doctors for a specific hospital with optional main category & subcategory filter.
 
@@ -540,8 +540,8 @@ async def get_doctors_by_hospital(
     - If `subcategory` is provided, it takes precedence and we filter by it exactly.
     - Response includes the resolved `subcategories` list for the given main category to drive the UI dropdown.
     """
-    db = get_db()
-    doctors_ref = db.collection(COLLECTIONS["DOCTORS"])
+    # Query doctors from PostgreSQL
+    doctors = db.query(Doctor).filter(Doctor.hospital_id == hospital_id).limit(500).all()
 
     main_category_map = {
         "General Medical": [
@@ -571,15 +571,12 @@ async def get_doctors_by_hospital(
                 resolved_subcategories = list(subs)  # start with static
                 break
 
-    # Fetch doctors for this hospital first
-    all_docs = list(doctors_ref.where("hospital_id", "==", hospital_id).limit(500).stream())
-
     # Build dynamic subcategories present in data for this hospital
     if main_selected is not None:
         dyn_set = set(resolved_subcategories)
         general_set = set(main_category_map["General Medical"])  # for exclusions
-        for d in all_docs:
-            data = d.to_dict()
+        for d in doctors:
+            data = {k: v for k, v in d.__dict__.items() if not k.startswith('_')}
             doctor_sub = (data.get("subcategory") or "").strip()
             doctor_spec = (data.get("specialization") or "").strip()
             low_sub = doctor_sub.lower()
@@ -608,8 +605,8 @@ async def get_doctors_by_hospital(
 
     # Now filter results according to category/subcategory
     results = []
-    for d in all_docs:
-        data = d.to_dict()
+    for d in doctors:
+        data = {k: v for k, v in d.__dict__.items() if not k.startswith('_')}
         doctor_sub = (data.get("subcategory") or "").strip()
         doctor_spec = (data.get("specialization") or "").strip()
 
@@ -658,7 +655,7 @@ async def get_doctors_by_hospital(
     doctors_with_queue = []
     for doctor_data in results:
         doctor = DoctorResponse(**doctor_data)
-        queue = await get_doctor_queue(doctor_data["id"])
+        queue = await get_doctor_queue(doctor_data["id"], db=db)
         doctors_with_queue.append(DoctorWithQueue(doctor=doctor, queue=queue))
 
     # Clean subcategories to avoid returning main labels and duplicates
@@ -683,19 +680,17 @@ async def search_doctors(
     hospital_id: Optional[str] = Query(None, description="Filter by hospital ID"),
     category: Optional[str] = Query(None, description="Filter by specialization category"),
     subcategory: Optional[str] = Query(None, description="Filter by subcategory"),
-    limit: int = Query(10, ge=1, le=50)
+    limit: int = Query(10, ge=1, le=50),
+    db: Session = Depends(get_db)
 ):
     """Search doctors by name, specialization, or subcategory"""
-    db = get_db()
-    doctors_ref = db.collection(COLLECTIONS["DOCTORS"])
+    doctors = db.query(Doctor).limit(100).all()
     
     results = []
     
     # Get all doctors and filter in memory (simpler approach for small datasets)
-    all_doctors_query = doctors_ref.limit(100).stream()
-    
-    for doc in all_doctors_query:
-        doctor_data = doc.to_dict()
+    for doctor in doctors:
+        doctor_data = {k: v for k, v in doctor.__dict__.items() if not k.startswith('_')}
         
         # Apply hospital filter if specified
         if hospital_id and doctor_data.get("hospital_id") != hospital_id:
@@ -729,7 +724,7 @@ async def search_doctors(
     doctors_with_queue = []
     for doctor_data in results[:limit]:
         doctor = DoctorResponse(**doctor_data)
-        queue = await get_doctor_queue(doctor_data["id"])
+        queue = await get_doctor_queue(doctor_data["id"], db=db)
         
         doctors_with_queue.append(DoctorWithQueue(
             doctor=doctor,
@@ -793,7 +788,8 @@ async def get_doctor_categories():
 @router.get("/subcategories")
 async def get_subcategories(
     main_category: str = Query(..., description="One of: General Medical, Specialist, Surgeon"),
-    hospital_id: Optional[str] = Query(None, description="If provided, returns only subcategories present in this hospital's doctors")
+    hospital_id: Optional[str] = Query(None, description="If provided, returns only subcategories present in this hospital's doctors"),
+    db: Session = Depends(get_db)
 ):
     """Return subcategories for a selected main category.
 
@@ -802,8 +798,6 @@ async def get_subcategories(
     - With hospital_id: returns a dynamic list based on doctors in that hospital, filtered by the main category rules,
       so the dropdown only shows relevant subcategories actually available there.
     """
-    db = get_db()
-
     category_mappings = {
         "General Medical": [
             "General Medicine", "Family Medicine", "Internal Medicine", "Emergency Medicine"
@@ -835,15 +829,13 @@ async def get_subcategories(
         return {"main_category": main_category, "subcategories": cleaned}
 
     # Dynamic list constrained to a specific hospital
-    doctors_ref = db.collection(COLLECTIONS["DOCTORS"]).where("hospital_id", "==", hospital_id)
-    docs = list(doctors_ref.limit(500).stream())
+    doctors = db.query(Doctor).filter(Doctor.hospital_id == hospital_id).all()
 
     dyn: set[str] = set()
     general_set = set(category_mappings["General Medical"])  # for exclusions
-    for d in docs:
-        data = d.to_dict() or {}
-        sub = (data.get("subcategory") or "").strip()
-        spec = (data.get("specialization") or "").strip()
+    for d in doctors:
+        sub = str(getattr(d, "subcategory", "") or "").strip()
+        spec = str(getattr(d, "specialization", "") or "").strip()
         low_sub = sub.lower()
         low_spec = spec.lower()
 
@@ -868,17 +860,17 @@ async def get_subcategories(
     cleaned = sorted({ s for s in dyn if s and s.strip().lower() not in main_labels_norm }, key=lambda x: x.lower())
     return {"main_category": main_category, "hospital_id": hospital_id, "subcategories": cleaned}
 
+
 @router.get("/by-category/{main_category}")
 async def get_doctors_by_main_category(
     main_category: str,
     hospital_id: Optional[str] = Query(None, description="Filter by hospital ID"),
     subcategory: Optional[str] = Query(None, description="Filter by subcategory"),
-    limit: int = Query(20, ge=1, le=50)
+    limit: int = Query(20, ge=1, le=50),
+    db: Session = Depends(get_db),
 ):
     """Get doctors by main category (General Medical, Specialist, Surgeon) and optional subcategory"""
-    db = get_db()
-    doctors_ref = db.collection(COLLECTIONS["DOCTORS"])
-    
+
     category_mappings = {
         "General Medical": [
             "General Medicine", "Family Medicine", "Internal Medicine", "Emergency Medicine"
@@ -904,38 +896,37 @@ async def get_doctors_by_main_category(
         )
     
     subcategories = category_mappings[main_category]
-    
-    all_doctors_query = doctors_ref.limit(200).stream()
-    results = []
-    
-    for doc in all_doctors_query:
-        doctor_data = doc.to_dict()
-        
-        if hospital_id and doctor_data.get("hospital_id") != hospital_id:
-            continue
-        
-        doctor_specialization = doctor_data.get("specialization", "")
-        doctor_subcategory = doctor_data.get("subcategory", "")
-        
-        # Check if matches category or specific subcategory
+
+    query = db.query(Doctor)
+    if hospital_id:
+        query = query.filter(Doctor.hospital_id == hospital_id)
+
+    # Keep same behavior: scan up to 200, stop after limit matched
+    doctors = query.limit(200).all()
+    results: List[Doctor] = []
+
+    for d in doctors:
+        doctor_specialization = str(getattr(d, "specialization", "") or "")
+        doctor_subcategory = str(getattr(d, "subcategory", "") or "")
+
         if subcategory:
             if doctor_subcategory.lower() == subcategory.lower() or doctor_specialization.lower() == subcategory.lower():
-                results.append(doctor_data)
+                results.append(d)
         else:
-            # Include if doctor's subcategory OR specialization equals any subcategory token
             if any(
                 subcat.lower() == doctor_subcategory.lower() or subcat.lower() == doctor_specialization.lower()
                 for subcat in subcategories
             ):
-                results.append(doctor_data)
-            
+                results.append(d)
+
         if len(results) >= limit:
             break
     
     doctors_with_queue = []
-    for doctor_data in results:
+    for d in results:
+        doctor_data = {k: v for k, v in d.__dict__.items() if not k.startswith('_')}
         doctor = DoctorResponse(**doctor_data)
-        queue = await get_doctor_queue(doctor_data["id"])
+        queue = await get_doctor_queue(str(getattr(d, "id", "")), db=db)
         
         doctors_with_queue.append(DoctorWithQueue(
             doctor=doctor,
@@ -954,65 +945,55 @@ async def get_doctors_by_main_category(
     }
 
 @router.get("/{doctor_id}", response_model=DoctorResponse)
-async def get_doctor(doctor_id: str):
+async def get_doctor(doctor_id: str, db: Session = Depends(get_db)):
     """Get doctor by ID"""
-    db = get_db()
-    doctor_ref = db.collection(COLLECTIONS["DOCTORS"]).document(doctor_id)
-    doctor_doc = doctor_ref.get()
-
-    if not doctor_doc.exists:
+    doctor = db.query(Doctor).filter(Doctor.id == doctor_id).first()
+    if not doctor:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Doctor not found"
         )
-    return DoctorResponse(**doctor_doc.to_dict())
+    doctor_data = {k: v for k, v in doctor.__dict__.items() if not k.startswith('_')}
+    return DoctorResponse(**doctor_data)
 
 @router.get("/{doctor_id}/availability")
-async def get_doctor_availability(doctor_id: str):
+async def get_doctor_availability(doctor_id: str, db: Session = Depends(get_db)):
     """Return a doctor's availability schedule for pre-booking display.
 
     Response includes: available_days, start_time, end_time, status.
     """
-    db = get_db()
-    doctor_ref = db.collection(COLLECTIONS["DOCTORS"]).document(doctor_id)
-    doctor_doc = doctor_ref.get()
-
-    if not doctor_doc.exists:
+    doctor = db.query(Doctor).filter(Doctor.id == doctor_id).first()
+    if not doctor:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Doctor not found"
         )
 
-    d = doctor_doc.to_dict() or {}
     return {
         "doctor_id": doctor_id,
-        "status": d.get("status"),
-        "available_days": d.get("available_days") or [],
-        "start_time": d.get("start_time"),
-        "end_time": d.get("end_time"),
+        "status": getattr(doctor, "status", None),
+        "available_days": getattr(doctor, "available_days", None) or [],
+        "start_time": getattr(doctor, "start_time", None),
+        "end_time": getattr(doctor, "end_time", None),
     }
 
 @router.get("/{doctor_id}/availability/today")
-async def get_doctor_availability_today(doctor_id: str):
+async def get_doctor_availability_today(doctor_id: str, db: Session = Depends(get_db)):
     """Return whether the doctor is available today and today's time window.
 
     Computes availability based on `available_days`, `start_time`, `end_time`, and `status`.
     """
-    db = get_db()
-    doctor_ref = db.collection(COLLECTIONS["DOCTORS"]).document(doctor_id)
-    doctor_doc = doctor_ref.get()
-
-    if not doctor_doc.exists:
+    doctor = db.query(Doctor).filter(Doctor.id == doctor_id).first()
+    if not doctor:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Doctor not found"
         )
 
-    d = doctor_doc.to_dict() or {}
-    status_val = str(d.get("status") or "").lower()
-    start_time = (d.get("start_time") or "").strip()
-    end_time = (d.get("end_time") or "").strip()
-    days = [str(x).strip().lower() for x in (d.get("available_days") or [])]
+    status_val = str(getattr(doctor, "status", "") or "").lower()
+    start_time = str(getattr(doctor, "start_time", "") or "").strip()
+    end_time = str(getattr(doctor, "end_time", "") or "").strip()
+    days = [str(x).strip().lower() for x in (getattr(doctor, "available_days", None) or [])]
 
     today_name = datetime.utcnow().strftime("%A").lower()
     available_today = (
@@ -1025,34 +1006,43 @@ async def get_doctor_availability_today(doctor_id: str):
         "doctor_id": doctor_id,
         "available_today": available_today,
         "today_window": f"{start_time}-{end_time}" if start_time and end_time else None,
-        "status": d.get("status"),
-        "available_days": d.get("available_days") or [],
+        "status": getattr(doctor, "status", None),
+        "available_days": getattr(doctor, "available_days", None) or [],
     }
 
-@router.get("/{doctor_id}/queue", response_model=QueueStatus)
-async def get_doctor_queue_status(doctor_id: str):
-    """Get current queue status for a doctor"""
-    return await get_doctor_queue(doctor_id)
 
-async def get_doctor_queue(doctor_id: str) -> QueueStatus:
+@router.get("/{doctor_id}/queue", response_model=QueueStatus)
+async def get_doctor_queue_status(
+    doctor_id: str,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_active_user),
+):
+    """Get current queue status for a doctor"""
+    return await get_doctor_queue(doctor_id, db=db)
+
+
+async def get_doctor_queue(doctor_id: str, db: Session = None) -> QueueStatus:
     """Get or create queue information for a doctor"""
-    db = get_db()
-    
-    queue_ref = db.collection("queues").where("doctor_id", "==", doctor_id).limit(1).stream()
-    queue_docs = list(queue_ref)
-    
-    if queue_docs:
-        queue_data = queue_docs[0].to_dict()
+    if db is None:
+        db = next(get_db())
+
+    # TODO: Replace mock queue info with PostgreSQL-backed aggregate when queue tables/models are finalized.
+    # For now, we attempt to find a queue record if it exists in db_models.Queue
+    from app.db_models import Queue as DBQueue
+    q = db.query(DBQueue).filter(DBQueue.doctor_id == doctor_id).first()
+
+    if q:
         return QueueStatus(
             doctor_id=doctor_id,
-            current_token=queue_data.get("current_token", 0),
-            waiting_patients=queue_data.get("waiting_patients", 0),
-            estimated_wait_time_minutes=queue_data.get("estimated_wait_time_minutes", 0)
+            current_token=int(q.current_token or 0),
+            waiting_patients=int(q.waiting_patients or 0),
+            estimated_wait_time_minutes=int(q.estimated_wait_time_minutes or 0)
         )
-    
+
+    # Fallback mock for missing queue records
     waiting_patients = random.randint(5, 25)
-    estimated_wait_time = waiting_patients * 3  
-    
+    estimated_wait_time = waiting_patients * 3
+
     return QueueStatus(
         doctor_id=doctor_id,
         current_token=random.randint(1, 10),
