@@ -158,6 +158,16 @@ class Token(Base):
     doctor_specialization = Column(String(100), nullable=True)
     doctor_avatar_initials = Column(String(10), nullable=True)
     hospital_name = Column(String(200), nullable=True)
+    patient_name = Column(String(100), nullable=True)
+    patient_phone = Column(String(20), nullable=True)
+
+    # Status/Confirmation Tracking
+    queue_opt_in = Column(Boolean, default=False)
+    queue_opted_in_at = Column(DateTime(timezone=True), nullable=True)
+    confirmed = Column(Boolean, default=False)
+    confirmation_status = Column(String(50), nullable=True)
+    confirmed_at = Column(DateTime(timezone=True), nullable=True)
+    cancelled_at = Column(DateTime(timezone=True), nullable=True)
 
     # Relationships
     patient = relationship("User", back_populates="tokens")

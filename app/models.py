@@ -488,6 +488,14 @@ class SmartTokenResponse(BaseModel):
     doctor_specialization: Optional[str] = None
     doctor_avatar_initials: Optional[str] = None
     hospital_name: Optional[str] = None
+    patient_name: Optional[str] = None
+    patient_phone: Optional[str] = None
+    queue_opt_in: bool = False
+    queue_opted_in_at: Optional[datetime] = None
+    confirmed: bool = False
+    confirmation_status: Optional[str] = None
+    confirmed_at: Optional[datetime] = None
+    cancelled_at: Optional[datetime] = None
 
 # Payment Models
 class PaymentProcess(BaseModel):
