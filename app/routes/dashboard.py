@@ -628,6 +628,9 @@ async def get_recent_activities(user_id: str, limit: int = 10, activity_type: Op
     activities = []
     for obj in activities_objs:
         activity_data = {k: v for k, v in obj.__dict__.items() if not k.startswith('_')}
+        # Explicitly map meta_data (DB name) to metadata (Pydantic model name)
+        if "meta_data" in activity_data:
+            activity_data["metadata"] = activity_data.pop("meta_data")
         activities.append(ActivityLogModel(**activity_data))
     
     return activities
