@@ -162,7 +162,7 @@ class SmartTokenService:
     
     @staticmethod
     def get_queue_status(doctor_id: str, token_number: int = None, appointment_date: datetime = None) -> Dict:
-        """Get queue status for a doctor and specific token position
+        """Get queue status for a doctor and specific token position using PostgreSQL
         
         Args:
             doctor_id: ID of the doctor
@@ -177,64 +177,40 @@ class SmartTokenService:
             - estimated_wait_time: Estimated wait time in minutes
             - is_future_appointment: Boolean indicating if appointment is in future
         """
-        db = get_db()
+        from app.database import get_db as get_db_session
+        from app.db_models import Token, Doctor
+        from sqlalchemy import and_, func
+        from datetime import date
+        
+        db = next(get_db_session())
         today = datetime.utcnow().date()
 
         # Doctor leave / pause should hide wait-time to prevent UI confusion.
         doctor_unavailable = False
         try:
-            doctor_ref = db.collection(COLLECTIONS["DOCTORS"]).document(doctor_id)
-            dsnap = doctor_ref.get()
-            d = dsnap.to_dict() if getattr(dsnap, "exists", False) else {}
-            status_lower = str(d.get("status") or "").lower()
-            if status_lower == "on_leave" or bool(d.get("queue_paused")) or bool(d.get("paused")):
-                doctor_unavailable = True
+            doctor = db.query(Doctor).filter(Doctor.id == doctor_id).first()
+            if doctor:
+                status_lower = str(doctor.status.value if hasattr(doctor.status, 'value') else doctor.status or "").lower()
+                if status_lower == "on_leave" or bool(getattr(doctor, "queue_paused", False)) or bool(getattr(doctor, "paused", False)):
+                    doctor_unavailable = True
         except Exception:
             doctor_unavailable = False
 
-        # Normalize appointment_date (handle None, Timestamp-like, or string gracefully)
-        def _to_date(dt_val):
-            """Best-effort conversion of Firestore Timestamp/ISO string/python datetime to date.
-
-            We avoid depending on private Firestore helpers and instead:
-            - accept datetime -> date
-            - accept date as-is
-            - accept Firestore Timestamp objects via their to_datetime() method
-            - accept ISO-like strings via fromisoformat
-            """
-            try:
-                from datetime import datetime as _dt, date as _date  # local import to avoid top-level churn
-                if dt_val is None:
-                    return None
-                # Already a python datetime
-                if isinstance(dt_val, datetime):
-                    return dt_val.date()
-                # Already a python date
-                if isinstance(dt_val, _date):
-                    return dt_val
-                # Firestore Timestamp commonly exposes to_datetime()
-                to_dt = getattr(dt_val, "to_datetime", None)
-                if callable(to_dt):
-                    try:
-                        return to_dt().date()
-                    except Exception:
-                        pass
-                # Fallback: try ISO string
+        # Determine target date
+        target_date = today
+        if appointment_date:
+            if isinstance(appointment_date, datetime):
+                target_date = appointment_date.date()
+            elif hasattr(appointment_date, 'date'):
+                target_date = appointment_date.date()
+            else:
                 try:
-                    return _dt.fromisoformat(str(dt_val)).date()
+                    target_date = datetime.fromisoformat(str(appointment_date).replace('Z', '+00:00')).date()
                 except Exception:
-                    return None
-            except Exception:
-                return None
-
-        appt_date_only = _to_date(appointment_date)
-        # Determine which calendar date to use for queue grouping. If a specific
-        # appointment_date is provided, we must group by that date to avoid
-        # timezone drift and midnight boundary issues. Otherwise, fall back to UTC today.
-        target_date = appt_date_only or today
+                    target_date = today
 
         # If appointment is in the future, treat as future regardless of server TZ
-        if appt_date_only and appt_date_only > today:
+        if target_date > today:
             return {
                 "current_token": 0,
                 "total_queue": 0,
@@ -244,54 +220,23 @@ class SmartTokenService:
                 "doctor_unavailable": doctor_unavailable,
             }
 
-        # Get all tokens for this doctor (limit keeps memory bounded)
-        tokens_ref = db.collection(COLLECTIONS["TOKENS"])
-        query = tokens_ref.where("doctor_id", "==", doctor_id).limit(500)
+        # Get all tokens for this doctor for the target date from PostgreSQL
+        # We only include tokens that are not cancelled, completed, or rescheduled
+        query = db.query(Token).filter(
+            and_(
+                Token.doctor_id == doctor_id,
+                func.date(Token.appointment_date) == target_date,
+                Token.status.notin_(["cancelled", "completed", "rescheduled"])
+            )
+        ).order_by(Token.token_number.asc())
 
-        # Filter for target_date's non-cancelled/non-completed tokens in memory
-        # Only include tokens that opted-in for live queue updates.
-        tokens = []
-        for doc in query.stream():
-            token_data = doc.to_dict() or {}
-            # Ignore non-opted-in tokens
-            if not bool(token_data.get("queue_opt_in")):
-                continue
-            # Normalize appointment_date
-            appt = token_data.get("appointment_date")
-            appt_date = None
-            try:
-                if isinstance(appt, datetime):
-                    appt_date = appt.date()
-                else:
-                    to_dt = getattr(appt, "to_datetime", None)
-                    if callable(to_dt):
-                        appt_date = to_dt().date()
-                    else:
-                        from datetime import datetime as _dt
-                        appt_date = _dt.fromisoformat(str(appt)).date()
-            except Exception:
-                appt_date = None
-            if appt_date != target_date:
-                continue
-
-            # Normalize status to a lowercase string value
-            raw_status = token_data.get("status")
-            status_val = str(getattr(raw_status, "value", raw_status) or "").lower()
-
-            # Skip non-queue tokens
-            if status_val in ["cancelled", "completed", "rescheduled"]:
-                continue
-            tokens.append(token_data)
-
-        # Stable ordering by token number
-        try:
-            tokens.sort(key=lambda x: int(x.get("token_number") or 0))
-        except Exception:
-            pass
+        tokens_objs = query.all()
+        tokens = [{k: v for k, v in t.__dict__.items() if not k.startswith('_')} for t in tokens_objs]
 
         total_queue = len(tokens)
         people_ahead = 0
         estimated_wait_time = 0
+        current_token = 0
 
         if total_queue > 0:
             # Current serving token = first active in today's list
@@ -314,11 +259,9 @@ class SmartTokenService:
                     estimated_wait_time = 0
 
         # Derive a 1-based queue_position for UI clarity.
-        # Only assign when we actually matched a token_number; otherwise 0.
         queue_position = 0
         try:
             if total_queue > 0 and token_number is not None:
-                # If people_ahead is derived from a matched token, it's >= 0; else keep 0
                 queue_position = int(people_ahead) + 1 if people_ahead > 0 or any(
                     int(t.get("token_number", -1)) == int(token_number) for t in tokens
                 ) else 0
