@@ -44,38 +44,39 @@ async def get_profile(
             detail="User not found"
         )
     
-    user_data = {k: v for k, v in user.__dict__.items() if not k.startswith('_')}
-    # Ensure ID is a string and role is lowercase for Pydantic
-    if "id" in user_data and not isinstance(user_data["id"], str):
-        user_data["id"] = str(user_data["id"])
-    if "role" in user_data and user_data["role"]:
-        user_data["role"] = str(user_data["role"].value if hasattr(user_data["role"], 'value') else user_data["role"]).lower()
-    user_data.pop("password", None)  # Remove password from response
-    
     # Ensure a displayable name
-    name = (user_data.get("name") or "").strip()
+    name = (user.name or "").strip()
     if not name:
-        email = (user_data.get("email") or "").strip()
-        phone = (user_data.get("phone") or "").strip()
+        email = (user.email or "").strip()
+        phone = (user.phone or "").strip()
         if email and "@" in email:
             name = email.split("@")[0]
         elif phone:
             name = phone
         else:
             name = "User"
-        user_data["name"] = name
-
-    # Generate avatar initials if not set
-    if not user_data.get("avatar_initials"):
-        user_data["avatar_initials"] = "".join([word[0].upper() for word in name.split()[:2] if word])
     
-    # Populate alias fields for frontend compatibility
-    if user_data.get("date_of_birth") and not user_data.get("birthday"):
-        user_data["birthday"] = user_data.get("date_of_birth")
-    if user_data.get("address") and not user_data.get("location"):
-        user_data["location"] = user_data.get("address")
-
-    return UserResponse(**user_data)
+    # Normalize role
+    role_val = str(user.role.value if hasattr(user.role, 'value') else user.role).lower()
+    
+    # Generate avatar initials
+    avatar_initials = "".join([word[0].upper() for word in name.split()[:2] if word])
+    
+    return UserResponse(
+        id=str(user.id),
+        name=name,
+        email=user.email,
+        phone=user.phone,
+        role=role_val,
+        location_access=user.location_access or False,
+        date_of_birth=user.date_of_birth,
+        address=user.address,
+        birthday=user.date_of_birth,
+        location=user.address,
+        created_at=user.created_at,
+        updated_at=user.updated_at,
+        avatar_initials=avatar_initials
+    )
 
 @router.patch("")
 @router.patch("/", response_model=UserResponse)
@@ -131,23 +132,29 @@ async def update_profile(
         {"updated_fields": update_fields}
     )
     
-    # Get updated user data
-    updated_user = {k: v for k, v in user.__dict__.items() if not k.startswith('_')}
-    updated_user.pop("password", None)
+    # Construct UserResponse explicitly to ensure all fields are present
+    # Using __dict__ after db.refresh() can be unreliable as SQLAlchemy expires attributes
+    role_val = str(user.role.value if hasattr(user.role, 'value') else user.role).lower()
     
-    # Populate alias fields for frontend compatibility
-    if updated_user.get("date_of_birth") and not updated_user.get("birthday"):
-        updated_user["birthday"] = updated_user.get("date_of_birth")
-    if updated_user.get("address") and not updated_user.get("location"):
-        updated_user["location"] = updated_user.get("address")
-    
-    # Ensure ID is a string and role is lowercase for Pydantic
-    if "id" in updated_user and not isinstance(updated_user["id"], str):
-        updated_user["id"] = str(updated_user["id"])
-    if "role" in updated_user and updated_user["role"]:
-        updated_user["role"] = str(updated_user["role"].value if hasattr(updated_user["role"], 'value') else updated_user["role"]).lower()
-    
-    return UserResponse(**updated_user)
+    # Generate avatar initials if not set
+    name = (user.name or "").strip()
+    avatar_initials = "".join([word[0].upper() for word in name.split()[:2] if word])
+
+    return UserResponse(
+        id=str(user.id),
+        name=name,
+        email=user.email,
+        phone=user.phone,
+        role=role_val,
+        location_access=user.location_access or False,
+        date_of_birth=user.date_of_birth,
+        address=user.address,
+        birthday=user.date_of_birth,
+        location=user.address,
+        created_at=user.created_at,
+        updated_at=user.updated_at,
+        avatar_initials=avatar_initials
+    )
 
 # ==============================
 # Avatar: upload, generate, fetch, delete
