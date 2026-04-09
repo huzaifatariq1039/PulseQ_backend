@@ -252,3 +252,98 @@ class Department(Base):
     name = Column(String(100), nullable=False)
     hospital_id = Column(String, ForeignKey("hospitals.id"), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+# Quick Action Model
+class QuickAction(Base):
+    __tablename__ = "quick_actions"
+
+    id = Column(String, primary_key=True, index=True)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    action_type = Column(String(50), nullable=False)
+    title = Column(String(100), nullable=False)
+    description = Column(String(255), nullable=True)
+    icon = Column(String(50), nullable=True)
+    route = Column(String(255), nullable=True)
+    is_enabled = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+# Medical Record Model
+class MedicalRecord(Base):
+    __tablename__ = "medical_records"
+
+    id = Column(String, primary_key=True, index=True)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    filename = Column(String(255), nullable=False)
+    file_path = Column(String(500), nullable=False)
+    file_type = Column(String(100), nullable=False)
+    file_size = Column(Integer, nullable=False)
+    record_type = Column(String(50), default="general")
+    description = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+
+# Wallet Model
+class Wallet(Base):
+    __tablename__ = "wallets"
+
+    id = Column(String, primary_key=True, index=True)
+    user_id = Column(String, ForeignKey("users.id"), unique=True, nullable=False)
+    balance = Column(Float, default=0.0)
+    currency = Column(String(10), default="PKR")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+
+# Refund Model
+class Refund(Base):
+    __tablename__ = "refunds"
+
+    id = Column(String, primary_key=True, index=True)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    token_id = Column(String, ForeignKey("tokens.id"), nullable=False)
+    amount = Column(Float, nullable=False)
+    status = Column(String(20), default="pending")
+    method = Column(String(50), nullable=False)
+    reason = Column(String(255), nullable=True)
+    transaction_id = Column(String(255), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+
+# Support Ticket Model
+class SupportTicket(Base):
+    __tablename__ = "support_tickets"
+
+    id = Column(String, primary_key=True, index=True)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    subject = Column(String(255), nullable=False)
+    description = Column(Text, nullable=False)
+    category = Column(String(50), default="general")
+    priority = Column(String(20), default="medium")
+    status = Column(String(20), default="open")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+
+# Pharmacy Sale Model
+class PharmacySale(Base):
+    __tablename__ = "pharmacy_sales"
+
+    id = Column(String, primary_key=True, index=True)
+    hospital_id = Column(String, ForeignKey("hospitals.id"), nullable=True)
+    patient_id = Column(String, ForeignKey("users.id"), nullable=True)
+    doctor_id = Column(String, ForeignKey("doctors.id"), nullable=True)
+    medicine_id = Column(Integer, nullable=True)
+    medicine_name = Column(String(200), nullable=True)
+    quantity = Column(Integer, default=1)
+    unit_price = Column(Float, nullable=True)
+    total_price = Column(Float, nullable=True)
+    total_amount = Column(Float, nullable=True)  # Used in POS
+    items = Column(JSON, nullable=True)  # Used in POS for multiple items
+    payment_status = Column(String(20), default="paid")
+    sold_at = Column(DateTime(timezone=True), server_default=func.now())
+    performed_by = Column(String, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
