@@ -17,6 +17,7 @@ from app.models import (
 from app.database import get_db
 from sqlalchemy.orm import Session
 from app.db_models import Hospital, Doctor, Queue, HospitalStatus
+from app.security import get_current_active_user, require_roles
 from datetime import datetime
 import math
 import httpx
