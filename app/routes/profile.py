@@ -29,6 +29,7 @@ async def create_activity_log(db: Session, user_id: str, activity_type: Activity
     db.add(activity)
     db.commit()
 
+@router.get("")
 @router.get("/", response_model=UserResponse)
 async def get_profile(
     db: Session = Depends(get_db),
@@ -71,6 +72,9 @@ async def get_profile(
 
     return UserResponse(**user_data)
 
+@router.patch("")
+@router.patch("/", response_model=UserResponse)
+@router.put("")
 @router.put("/", response_model=UserResponse)
 async def update_profile(
     profile_update: ProfileUpdate,

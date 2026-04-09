@@ -95,6 +95,44 @@ async def search_medicine(
 
     return {"results": results}
 
+@public_router.get("/medicines")
+async def get_all_medicines(
+    db: Session = Depends(get_db),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=100)
+) -> Dict[str, Any]:
+    """Get a paginated list of all medicines in the inventory"""
+    from app.db_models import PharmacyMedicine
+    
+    total = db.query(PharmacyMedicine).count()
+    medicines = db.query(PharmacyMedicine).offset((page-1)*page_size).limit(page_size).all()
+    
+    results = []
+    for m in medicines:
+        results.append({
+            "product_id": m.product_id,
+            "name": m.name,
+            "generic_name": m.generic_name,
+            "type": m.type,
+            "distributor": m.distributor,
+            "selling_price": float(m.selling_price or 0),
+            "quantity": int(m.quantity or 0),
+            "expiration_date": m.expiration_date.isoformat() if m.expiration_date else None,
+            "category": m.category,
+            "sub_category": m.sub_category,
+            "low_stock": bool((m.quantity or 0) < 5)
+        })
+
+    return {
+        "success": True,
+        "data": results,
+        "meta": {
+            "total": total,
+            "page": page,
+            "page_size": page_size
+        }
+    }
+
 @public_router.post("/dispense-medicine", dependencies=[Depends(require_roles("pharmacy", "admin"))])
 async def dispense_medicine(
     payload: DispenseMedicineRequest,

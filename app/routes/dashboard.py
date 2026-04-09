@@ -89,7 +89,8 @@ def calculate_distance(lat1, lon1, lat2, lon2):
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
-@router.get("/", response_model=DashboardData)
+@router.get("")
+@router.get("/")
 async def get_dashboard_data(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_active_user)

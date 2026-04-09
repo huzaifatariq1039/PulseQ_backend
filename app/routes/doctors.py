@@ -475,15 +475,16 @@ async def get_available_slots(
 
     return {"doctor_id": doctor_id, "day": day, "slot_minutes": slot_minutes, "slots": out}
 
-@router.get("/", response_model=List[DoctorResponse])
+@router.get("/")
 async def list_doctors(
     hospital_id: Optional[str] = Query(None, description="Filter by hospital ID"),
     specialization: Optional[str] = Query(None, description="Filter by specialization"),
     subcategory: Optional[str] = Query(None, description="Filter by subcategory"),
+    page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db)
 ):
-    """List all doctors with optional filtering"""
+    """List all doctors with optional filtering and standardized response format"""
     # Build query
     query = db.query(Doctor)
     
@@ -491,38 +492,46 @@ async def list_doctors(
     if hospital_id:
         query = query.filter(Doctor.hospital_id == hospital_id)
     
-    # Fetch doctors
-    doctors = query.limit(500).all()
+    # Fetch doctors (standard limit for base query)
+    doctors = query.all()
     
     # Filter in Python for case-insensitive matching
     spec_norm = (specialization or "").strip().lower()
     sub_norm = (subcategory or "").strip().lower()
     
     results = []
-    for doctor in doctors:
-        doc_spec = (doctor.specialization or "").strip().lower()
-        doc_sub = (doctor.subcategory or "").strip().lower()
+    for d in doctors:
+        d_dict = {k: v for k, v in d.__dict__.items() if not k.startswith('_')}
         
-        ok = True
+        # Apply normalization/department compatibility
+        d_dict["department"] = d_dict.get("specialization")
+        
+        # Apply filters if provided
         if spec_norm:
-            ok = ok and (
-                doc_spec == spec_norm or doc_sub == spec_norm
-                or (spec_norm in doc_spec) or (spec_norm in doc_sub)
-            )
+            if spec_norm not in (d_dict.get("specialization") or "").lower() and \
+               spec_norm not in (d_dict.get("department") or "").lower():
+                continue
         if sub_norm:
-            ok = ok and (
-                doc_sub == sub_norm or doc_spec == sub_norm
-                or (sub_norm in doc_sub) or (sub_norm in doc_spec)
-            )
-        
-        if ok:
-            doctor_data = {k: v for k, v in doctor.__dict__.items() if not k.startswith('_')}
-            results.append(DoctorResponse(**doctor_data))
-        
-        if len(results) >= limit:
-            break
-    
-    return results
+            if sub_norm not in (d_dict.get("subcategory") or "").lower():
+                continue
+                
+        results.append(d_dict)
+
+    # Manual Pagination
+    total = len(results)
+    start = (page - 1) * limit
+    end = start + limit
+    paginated_results = results[start:end]
+
+    return {
+        "success": True,
+        "data": paginated_results,
+        "meta": {
+            "total": total,
+            "page": page,
+            "page_size": limit
+        }
+    }
 
 @router.get("/hospital/{hospital_id}", response_model=DoctorSearchResponse)
 async def get_doctors_by_hospital(

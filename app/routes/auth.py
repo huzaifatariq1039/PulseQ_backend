@@ -3,7 +3,7 @@ from datetime import timedelta
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, func
-from app.models import UserCreate, UserResponse, Token, TokenData, LoginRequest, LocationUpdate, AuthMethod, ActivityType
+from app.models import UserCreate, UserResponse, Token, TokenData, LoginRequest, LocationUpdate, AuthMethod, ActivityType, UserRole
 from app.security import (
     get_password_hash,
     verify_password,
@@ -302,6 +302,77 @@ async def login(login_data: LoginRequest):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Login failed: {str(e)}"
+        )
+    finally:
+        db.close()
+
+@router.post("/pharmacy/login", response_model=Token)
+async def pharmacy_login(login_data: PharmacyLoginRequest):
+    """Login specifically for pharmacy users with email and password"""
+    db = get_db_session()
+    try:
+        print(f"[DEBUG] Pharmacy login attempt: {login_data.email}")
+        
+        # Find user by email and ensure role is pharmacy or admin
+        user = db.query(UserDB).filter(
+            func.lower(UserDB.email) == login_data.email.lower()
+        ).filter(
+            or_(UserDB.role == UserRole.PHARMACY, UserDB.role == UserRole.ADMIN)
+        ).first()
+        
+        if not user:
+            print(f"[ERROR] Pharmacy user not found or role mismatch: {login_data.email}")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid credentials or insufficient permissions"
+            )
+        
+        # Verify password using SHA-256 + bcrypt
+        try:
+            password_valid = verify_password(login_data.password, user.password_hash)
+        except Exception as pwd_error:
+            print(f"[ERROR] Password verification error: {str(pwd_error)}")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid credentials"
+            )
+        
+        if not password_valid:
+            print(f"[ERROR] Invalid password for pharmacy user: {user.id}")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid credentials"
+            )
+        
+        print(f"[DEBUG] Pharmacy password verified successfully for user: {user.id}")
+        
+        # Convert role to string
+        user_role = user.role.value if hasattr(user.role, 'value') else str(user.role)
+        
+        # Create tokens
+        access_token = create_access_token(
+            data={"sub": str(user.id), "role": user_role},
+            expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        )
+        refresh_token = create_refresh_token(data={"sub": str(user.id)})
+        
+        print(f"[DEBUG] Pharmacy login successful: {user.id}")
+        
+        return Token(
+            access_token=access_token,
+            refresh_token=refresh_token,
+            token_type="bearer"
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[ERROR] Pharmacy login failed: {str(e)}")
+        import traceback
+        print(traceback.format_exc())
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Pharmacy login failed: {str(e)}"
         )
     finally:
         db.close()

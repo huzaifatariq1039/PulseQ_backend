@@ -1,12 +1,15 @@
 import argparse
-from datetime import datetime
+import os
+import uuid
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional, Set
 
 import pandas as pd
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
-import firebase_admin
-from firebase_admin import credentials, firestore
-
+from app.db_models import PharmacyMedicine
+from app.config import DATABASE_URL
 
 EXCEL_COLUMNS = {
     "product_id": "Product Id",
@@ -95,37 +98,32 @@ def _to_str(v: Any) -> Optional[str]:
         return None
 
 
-def init_firestore(cred_path: str):
-    if not firebase_admin._apps:
-        cred = credentials.Certificate(cred_path)
-        firebase_admin.initialize_app(cred)
-    return firestore.client()
-
-
 def load_excel(path: str, sheet: Optional[str] = None) -> pd.DataFrame:
-    df = pd.read_excel(path, sheet_name=sheet)
-    # Normalize column names (trim)
+    # If sheet is None, default to the first sheet (0)
+    sheet_to_read = sheet if sheet is not None else 0
+    
+    # Based on the screenshot, Row 1 contains 'Inventory Management > Products...'
+    # Row 2 contains the actual headers. We skip the first row (index 0).
+    df = pd.read_excel(path, sheet_name=sheet_to_read, skiprows=1)
+    
+    # Normalize column names (trim spaces and handle case)
     df.columns = [str(c).strip() for c in df.columns]
 
+    # Map the columns from the Excel to the internal model
     missing = [col for col in EXCEL_COLUMNS.values() if col not in df.columns]
     if missing:
+        print(f"DEBUG: Found columns in Excel: {list(df.columns)}")
         raise ValueError(f"Missing required columns in Excel: {missing}")
 
     return df
 
 
-def fetch_existing_product_ids(db) -> Set[int]:
-    existing: Set[int] = set()
-    ref = db.collection("pharmacy_medicines")
-    for doc in ref.stream():
-        d = doc.to_dict() or {}
-        pid = _to_int(d.get("product_id"))
-        if pid is not None:
-            existing.add(pid)
-    return existing
+def fetch_existing_product_ids(session) -> Set[int]:
+    existing = session.query(PharmacyMedicine.product_id).all()
+    return {pid[0] for pid in existing if pid[0] is not None}
 
 
-def row_to_doc(row: pd.Series) -> Optional[Dict[str, Any]]:
+def row_to_model(row: pd.Series) -> Optional[PharmacyMedicine]:
     if _is_empty_row(row):
         return None
 
@@ -137,89 +135,92 @@ def row_to_doc(row: pd.Series) -> Optional[Dict[str, Any]]:
     selling_price = _to_float(row.get(EXCEL_COLUMNS["selling_price"]))
     quantity = _to_int(row.get(EXCEL_COLUMNS["quantity"]))
 
-    doc: Dict[str, Any] = {
-        "product_id": product_id,
-        "batch_no": _to_str(row.get(EXCEL_COLUMNS["batch_no"])) or "",
-        "name": _to_str(row.get(EXCEL_COLUMNS["name"])) or "",
-        "generic_name": _to_str(row.get(EXCEL_COLUMNS["generic_name"])),
-        "type": _to_str(row.get(EXCEL_COLUMNS["type"])),
-        "distributor": _to_str(row.get(EXCEL_COLUMNS["distributor"])),
-        "purchase_price": float(purchase_price or 0.0),
-        "selling_price": float(selling_price or 0.0),
-        "stock_unit": _to_str(row.get(EXCEL_COLUMNS["stock_unit"])),
-        "quantity": int(quantity or 0),
-        "expiration_date": _to_dt(row.get(EXCEL_COLUMNS["expiration_date"])),
-        "category": _to_str(row.get(EXCEL_COLUMNS["category"])),
-        "sub_category": _to_str(row.get(EXCEL_COLUMNS["sub_category"])),
-        "created_at": datetime.utcnow(),
-    }
-
-    # Drop None expiration_date to avoid weird Firestore types
-    if doc.get("expiration_date") is None:
-        doc.pop("expiration_date", None)
-
-    return doc
+    return PharmacyMedicine(
+        id=str(uuid.uuid4()),
+        product_id=product_id,
+        batch_no=_to_str(row.get(EXCEL_COLUMNS["batch_no"])) or "",
+        name=_to_str(row.get(EXCEL_COLUMNS["name"])) or "",
+        generic_name=_to_str(row.get(EXCEL_COLUMNS["generic_name"])),
+        type=_to_str(row.get(EXCEL_COLUMNS["type"])),
+        distributor=_to_str(row.get(EXCEL_COLUMNS["distributor"])),
+        purchase_price=float(purchase_price or 0.0),
+        selling_price=float(selling_price or 0.0),
+        stock_unit=_to_str(row.get(EXCEL_COLUMNS["stock_unit"])),
+        quantity=int(quantity or 0),
+        expiration_date=_to_dt(row.get(EXCEL_COLUMNS["expiration_date"])),
+        category=_to_str(row.get(EXCEL_COLUMNS["category"])),
+        sub_category=_to_str(row.get(EXCEL_COLUMNS["sub_category"])),
+        created_at=datetime.now(timezone.utc),
+    )
 
 
-def import_medicines(excel_path: str, cred_path: str, sheet: Optional[str] = None) -> int:
-    db = init_firestore(cred_path)
-    df = load_excel(excel_path, sheet=sheet)
+def import_medicines(excel_path: str, db_url: str, sheet: Optional[str] = None) -> int:
+    engine = create_engine(db_url)
+    SessionLocal = sessionmaker(bind=engine)
+    session = SessionLocal()
 
-    existing = fetch_existing_product_ids(db)
-    seen_in_file: Set[int] = set()
+    try:
+        df = load_excel(excel_path, sheet=sheet)
+        existing = fetch_existing_product_ids(session)
+        seen_in_file: Set[int] = set()
 
-    imported = 0
-    ref = db.collection("pharmacy_medicines")
+        imported = 0
+        for _, row in df.iterrows():
+            med = row_to_model(row)
+            if not med:
+                continue
 
-    batch = db.batch()
-    batch_ops = 0
+            pid = med.product_id
+            if pid in seen_in_file:
+                print(f"Skipping duplicate product_id in file: {pid}")
+                continue
+            if pid in existing:
+                print(f"Skipping existing product_id in database: {pid}")
+                continue
 
-    for _, row in df.iterrows():
-        doc = row_to_doc(row)
-        if not doc:
-            continue
+            seen_in_file.add(pid)
+            session.add(med)
+            imported += 1
 
-        pid = int(doc["product_id"])
-        if pid in seen_in_file:
-            continue
-        if pid in existing:
-            continue
+            if imported % 50 == 0:
+                try:
+                    session.commit()
+                    print(f"Imported {imported} items...")
+                except Exception as commit_error:
+                    session.rollback()
+                    print(f"Commit error at {imported} items: {commit_error}")
+                    raise
 
-        seen_in_file.add(pid)
-
-        doc_ref = ref.document()  # generate Firestore ID
-        doc["id"] = doc_ref.id
-
-        batch.set(doc_ref, doc)
-        batch_ops += 1
-        imported += 1
-
-        if batch_ops >= 400:
-            batch.commit()
-            batch = db.batch()
-            batch_ops = 0
-
-    if batch_ops:
-        batch.commit()
-
-    return imported
+        session.commit()
+        return imported
+    except Exception as e:
+        session.rollback()
+        print(f"Error during import: {e}")
+        raise
+    finally:
+        session.close()
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Import pharmacy medicines from Excel into Firestore")
+    parser = argparse.ArgumentParser(description="Import pharmacy medicines from Excel into PostgreSQL")
     parser.add_argument("--excel", required=True, help="Path to Excel file")
     parser.add_argument("--sheet", required=False, default=None, help="Optional sheet name")
     parser.add_argument(
-        "--cred",
+        "--db-url",
         required=False,
-        default="firebase_key.json",
-        help="Path to Firebase service account json (default: firebase_key.json)",
+        default=DATABASE_URL,
+        help="Database URL. Example: postgresql://postgres:pulseq123@localhost:5432/dbname",
     )
 
     args = parser.parse_args()
 
-    count = import_medicines(args.excel, args.cred, sheet=args.sheet)
-    print(f"Imported {count} medicines into pharmacy_medicines")
+    if not args.db_url:
+        print("Error: DATABASE_URL not found in environment or arguments.")
+        return
+
+    print(f"Starting import from {args.excel}...")
+    count = import_medicines(args.excel, args.db_url, sheet=args.sheet)
+    print(f"Successfully imported {count} medicines into pharmacy_medicines table.")
 
 
 if __name__ == "__main__":

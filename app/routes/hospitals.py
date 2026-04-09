@@ -165,12 +165,33 @@ async def get_nearby_hospitals_overpass(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching from Overpass: {str(e)}")
 
-@router.get("/", response_model=List[HospitalResponse])
-async def list_hospitals(limit: int = Query(20, ge=1, le=100), db: Session = Depends(get_db)):
-    """List all hospitals"""
+@router.get("/")
+async def list_hospitals(
+    limit: int = Query(20, ge=1, le=100),
+    page: int = Query(1, ge=1),
+    db: Session = Depends(get_db)
+):
+    """List all hospitals with standardized response format"""
+    total = db.query(Hospital).count()
+    hospitals = db.query(Hospital).offset((page-1)*limit).limit(limit).all()
+    
+    results = []
+    for h in hospitals:
+        # Map DB model to response model
+        h_dict = {k: v for k, v in h.__dict__.items() if not k.startswith('_')}
+        # Ensure is_open is set based on status
+        h_dict["is_open"] = h.status == HospitalStatus.OPEN
+        results.append(h_dict)
 
-    hospitals = db.query(Hospital).limit(limit).all()
-    return [HospitalResponse(**{k: v for k, v in h.__dict__.items() if not k.startswith('_')}) for h in hospitals]
+    return {
+        "success": True,
+        "data": results,
+        "meta": {
+            "total": total,
+            "page": page,
+            "page_size": limit
+        }
+    }
 
 # (Google Maps live-nearby endpoint removed as requested; using OpenStreetMap endpoints instead)
 
