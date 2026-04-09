@@ -111,6 +111,9 @@ async def get_dashboard_data(
         )
     
     user_data = {k: v for k, v in user.__dict__.items() if not k.startswith('_')}
+    # Ensure ID is a string for Pydantic
+    if "id" in user_data and not isinstance(user_data["id"], str):
+        user_data["id"] = str(user_data["id"])
     user_data.pop("password", None)
     
     # Get statistics
@@ -628,9 +631,21 @@ async def get_recent_activities(user_id: str, limit: int = 10, activity_type: Op
     activities = []
     for obj in activities_objs:
         activity_data = {k: v for k, v in obj.__dict__.items() if not k.startswith('_')}
-        # Explicitly map meta_data (DB name) to metadata (Pydantic model name)
+        
+        # 1. Convert UUID objects to strings for Pydantic
+        if "id" in activity_data and not isinstance(activity_data["id"], str):
+            activity_data["id"] = str(activity_data["id"])
+        if "user_id" in activity_data and not isinstance(activity_data["user_id"], str):
+            activity_data["user_id"] = str(activity_data["user_id"])
+            
+        # 2. Normalize activity_type to lowercase to match Pydantic Enum
+        if "activity_type" in activity_data and isinstance(activity_data["activity_type"], str):
+            activity_data["activity_type"] = activity_data["activity_type"].lower()
+
+        # 3. Explicitly map meta_data (DB name) to metadata (Pydantic model name)
         if "meta_data" in activity_data:
             activity_data["metadata"] = activity_data.pop("meta_data")
+            
         activities.append(ActivityLogModel(**activity_data))
     
     return activities
@@ -645,10 +660,18 @@ async def create_activity_log_endpoint(
     import uuid
     activity_id = str(uuid.uuid4())
     activity_data = activity.dict()
+    # Normalize activity_type to lowercase for DB consistency
+    if "activity_type" in activity_data and activity_data["activity_type"] is not None:
+        activity_data["activity_type"] = str(activity_data["activity_type"].value if hasattr(activity_data["activity_type"], 'value') else activity_data["activity_type"]).lower()
+    
     activity_data["id"] = activity_id
     activity_data["user_id"] = current_user.user_id
     activity_data["created_at"] = datetime.utcnow()
     
+    # Map 'metadata' from Pydantic back to 'meta_data' for DB
+    if "metadata" in activity_data:
+        activity_data["meta_data"] = activity_data.pop("metadata")
+        
     new_activity = ActivityLog(**activity_data)
     db.add(new_activity)
     db.commit()
@@ -671,7 +694,15 @@ async def get_user_quick_actions(user_id: str, db: Session = None) -> List[Quick
     
     # Get user-specific actions first
     user_actions_objs = db.query(QuickAction).filter(QuickAction.user_id == user_id).all()
-    user_actions = [{k: v for k, v in obj.__dict__.items() if not k.startswith('_')} for obj in user_actions_objs]
+    user_actions = []
+    for obj in user_actions_objs:
+        data = {k: v for k, v in obj.__dict__.items() if not k.startswith('_')}
+        # Ensure IDs are strings for Pydantic
+        if "id" in data and not isinstance(data["id"], str):
+            data["id"] = str(data["id"])
+        if "user_id" in data and not isinstance(data["user_id"], str):
+            data["user_id"] = str(data["user_id"])
+        user_actions.append(data)
     
     # If no user-specific actions, get default actions
     if not user_actions:
@@ -752,6 +783,12 @@ async def create_quick_action(
     db.commit()
     db.refresh(new_action)
     
+    # Ensure IDs are strings for Pydantic response
+    if "id" in action_data and not isinstance(action_data["id"], str):
+        action_data["id"] = str(action_data["id"])
+    if "user_id" in action_data and not isinstance(action_data["user_id"], str):
+        action_data["user_id"] = str(action_data["user_id"])
+        
     return QuickActionModel(**action_data)
 
 @router.put("/quick-actions/{action_id}")
@@ -791,6 +828,10 @@ async def get_recent_tokens(user_id: str, limit: int = 3, db: Session = None) ->
     tokens = []
     for obj in tokens_objs:
         token_data = {k: v for k, v in obj.__dict__.items() if not k.startswith('_')}
+        # Ensure UUIDs are strings for Pydantic
+        for field in ["id", "patient_id", "doctor_id", "hospital_id"]:
+            if field in token_data and token_data[field] is not None and not isinstance(token_data[field], str):
+                token_data[field] = str(token_data[field])
         tokens.append(token_data)
     
     return tokens
