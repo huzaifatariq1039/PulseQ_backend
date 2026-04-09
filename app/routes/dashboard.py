@@ -111,9 +111,11 @@ async def get_dashboard_data(
         )
     
     user_data = {k: v for k, v in user.__dict__.items() if not k.startswith('_')}
-    # Ensure ID is a string for Pydantic
+    # Ensure ID is a string and role is lowercase for Pydantic
     if "id" in user_data and not isinstance(user_data["id"], str):
         user_data["id"] = str(user_data["id"])
+    if "role" in user_data and isinstance(user_data["role"], str):
+        user_data["role"] = user_data["role"].lower()
     user_data.pop("password", None)
     
     # Get statistics

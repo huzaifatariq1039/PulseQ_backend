@@ -192,13 +192,16 @@ async def register_user(user: UserCreate):
             {"auth_method": str(user.auth_method), "location_access": user.location_access}
         )
         
+        # Normalize role for Pydantic (case-insensitive)
+        role_val = str(new_user.role.value if hasattr(new_user.role, 'value') else new_user.role).lower()
+
         # Return user data (without password)
         return UserResponse(
             id=str(new_user.id),  # Ensure ID is string, not UUID object
             name=new_user.name,
             email=new_user.email,
             phone=new_user.phone,
-            role=user.role,
+            role=role_val,
             location_access=new_user.location_access,
             date_of_birth=new_user.date_of_birth,
             address=new_user.address,
@@ -389,6 +392,9 @@ async def get_current_user_info(current_user: TokenData = Depends(get_current_ac
                 detail="User profile not found"
             )
         
+        # Normalize role to lowercase for Pydantic enum validation
+        role_val = str(user.role.value if hasattr(user.role, 'value') else user.role).lower()
+
         # Extract attributes manually to avoid __dict__ internal fields
         # and ensure compatibility with UserResponse model
         return UserResponse(
@@ -396,7 +402,7 @@ async def get_current_user_info(current_user: TokenData = Depends(get_current_ac
             name=user.name,
             email=user.email,
             phone=user.phone,
-            role=user.role,
+            role=role_val,
             location_access=user.location_access or False,
             date_of_birth=user.date_of_birth,
             address=user.address,

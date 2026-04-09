@@ -45,6 +45,11 @@ async def get_profile(
         )
     
     user_data = {k: v for k, v in user.__dict__.items() if not k.startswith('_')}
+    # Ensure ID is a string and role is lowercase for Pydantic
+    if "id" in user_data and not isinstance(user_data["id"], str):
+        user_data["id"] = str(user_data["id"])
+    if "role" in user_data and user_data["role"]:
+        user_data["role"] = str(user_data["role"].value if hasattr(user_data["role"], 'value') else user_data["role"]).lower()
     user_data.pop("password", None)  # Remove password from response
     
     # Ensure a displayable name
@@ -135,6 +140,12 @@ async def update_profile(
         updated_user["birthday"] = updated_user.get("date_of_birth")
     if updated_user.get("address") and not updated_user.get("location"):
         updated_user["location"] = updated_user.get("address")
+    
+    # Ensure ID is a string and role is lowercase for Pydantic
+    if "id" in updated_user and not isinstance(updated_user["id"], str):
+        updated_user["id"] = str(updated_user["id"])
+    if "role" in updated_user and updated_user["role"]:
+        updated_user["role"] = str(updated_user["role"].value if hasattr(updated_user["role"], 'value') else updated_user["role"]).lower()
     
     return UserResponse(**updated_user)
 
