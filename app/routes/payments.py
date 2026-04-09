@@ -152,6 +152,7 @@ async def get_appointment_summary(
     )
 
 @router.post("/confirm", response_model=PaymentConfirmationResponse)
+@router.post("/process", response_model=PaymentConfirmationResponse)
 async def confirm_payment(
     payment_request: PaymentConfirmationRequest,
     request: Request,

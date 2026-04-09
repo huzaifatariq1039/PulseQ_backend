@@ -60,9 +60,9 @@ def _cache_set(key: str, val: object, ttl: int = _CACHE_TTL_SECONDS):
     except Exception:
         pass
 
-@router.post("/", response_model=HospitalResponse)
+@router.post("/", response_model=HospitalResponse, dependencies=[Depends(require_roles("admin"))])
 async def create_hospital(hospital: HospitalCreate, db: Session = Depends(get_db)):
-    """Create a new hospital"""
+    """Create a new hospital (Admin only)"""
 
     # Check if hospital with same name and address already exists
     existing = (
@@ -93,7 +93,7 @@ async def create_hospital(hospital: HospitalCreate, db: Session = Depends(get_db
     db.commit()
     db.refresh(h)
     out = {k: v for k, v in h.__dict__.items() if not k.startswith('_')}
-    return HospitalResponse(**out)
+    return ok(data=HospitalResponse(**out), message="Hospital created successfully")
 
 # ===============================
 # NEW: Live Nearby via OpenStreetMap (Overpass API)

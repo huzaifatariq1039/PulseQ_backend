@@ -37,6 +37,19 @@ async def list_tokens(
     """List tokens with pagination and filters from PostgreSQL"""
     query = db.query(Token)
 
+    # Role-based filtering: Patients only see their own tokens
+    from app.utils.audit import get_user_role
+    try:
+        role = get_user_role(current_user.user_id)
+    except Exception:
+        role = "patient"
+
+    if role == "patient":
+        query = query.filter(Token.patient_id == current_user.user_id)
+    elif role == "doctor":
+        query = query.filter(Token.doctor_id == current_user.user_id)
+    # Admin and Receptionist can see all (or filtered by doctor_id/status)
+
     norm_status = _norm_status(status)
     if norm_status:
         query = query.filter(Token.status == norm_status)

@@ -274,9 +274,7 @@ async def generate_smart_token_with_details(
 
 @router.post("/generate", response_model=SmartTokenResponse)
 async def generate_smart_token(
-    doctor_id: str,
-    hospital_id: str,
-    appointment_date: Optional[datetime] = None,
+    payload: SmartTokenGenerateRequest,
     db: Session = Depends(get_db),
     current_user = Depends(get_current_active_user),
     fingerprint_name: Optional[str] = None,
@@ -284,6 +282,10 @@ async def generate_smart_token(
     include_consultation_fee: Optional[bool] = None,
     include_session_fee: Optional[bool] = None,
 ):
+    doctor_id = payload.doctor_id
+    hospital_id = payload.hospital_id
+    appointment_date = payload.appointment_date
+
     doctor = db.query(Doctor).filter(Doctor.id == doctor_id).first()
     hospital = db.query(Hospital).filter(Hospital.id == hospital_id).first()
     if not doctor or not hospital:

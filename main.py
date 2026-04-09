@@ -183,6 +183,7 @@ app.include_router(queue.router, prefix="/api/v1/admin")
 app.include_router(realtime.router, prefix="/api/v1/admin")
 app.include_router(consultation.router, prefix="/api/v1/admin")
 app.include_router(doctors.router, prefix="/api/v1/admin")
+app.include_router(hospitals.router, prefix="/api/v1/admin")
 
 # POS integration (shared across roles / external systems)
 app.include_router(pos.router, prefix="/api")

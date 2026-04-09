@@ -362,12 +362,12 @@ def _normalize_time_to_hhmm(s: Optional[str]) -> Optional[str]:
     except Exception:
         return None
 
-@router.post("/", response_model=DoctorResponse)
+@router.post("/", response_model=DoctorResponse, dependencies=[Depends(require_roles("admin"))])
 async def create_doctor(
     doctor: DoctorCreate,
     db: Session = Depends(get_db)
 ):
-    """Create a new doctor"""
+    """Create a new doctor (Admin only)"""
     # Check if doctor with same name and hospital already exists
     existing_doctor = db.query(Doctor).filter(
         Doctor.name == doctor.name,
@@ -440,7 +440,8 @@ async def create_doctor(
     db.commit()
     db.refresh(new_doctor)
     
-    return DoctorResponse(**doctor_data)
+    from app.utils.responses import ok
+    return ok(data=DoctorResponse(**doctor_data), message="Doctor created successfully")
 
 
 @router.get("/{doctor_id}/available-slots")

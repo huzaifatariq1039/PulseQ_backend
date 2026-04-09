@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, status, Depends, Request
+from fastapi import APIRouter, HTTPException, status, Depends, Request, Body
 from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
@@ -54,6 +54,7 @@ async def get_doctor_queue_status(
     )
 
 @router.post("/doctor/{doctor_id}/advance")
+@router.post("/doctor/{doctor_id}/advance-queue")
 async def advance_queue(
     doctor_id: str,
     db: Session = Depends(get_db),
@@ -285,7 +286,7 @@ async def skip_patient(
 @router.post("/token/{token_id}/complete", dependencies=[Depends(require_roles("doctor", "admin"))])
 async def complete_consultation(
     token_id: str,
-    payload: Dict[str, Any],
+    payload: Optional[Dict[str, Any]] = Body(None),
     db: Session = Depends(get_db),
     current_user = Depends(get_current_active_user),
 ):
