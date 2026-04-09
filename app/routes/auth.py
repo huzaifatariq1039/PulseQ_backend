@@ -307,9 +307,35 @@ async def login(login_data: LoginRequest):
         db.close()
 
 @router.get("/me", response_model=UserResponse)
-async def get_current_user_info(current_user = Depends(get_current_active_user)):
+async def get_current_user_info(current_user: TokenData = Depends(get_current_active_user)):
     """Get current logged-in user details"""
-    return current_user
+    db = get_db_session()
+    try:
+        user = db.query(UserDB).filter(UserDB.id == current_user.user_id).first()
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User profile not found"
+            )
+        
+        # Extract attributes manually to avoid __dict__ internal fields
+        # and ensure compatibility with UserResponse model
+        return UserResponse(
+            id=str(user.id),
+            name=user.name,
+            email=user.email,
+            phone=user.phone,
+            role=user.role,
+            location_access=user.location_access or False,
+            date_of_birth=user.date_of_birth,
+            address=user.address,
+            birthday=user.date_of_birth,
+            location=user.address,
+            created_at=user.created_at,
+            updated_at=user.updated_at
+        )
+    finally:
+        db.close()
 
 @router.get("/location-access")
 async def get_location_access(current_user = Depends(get_current_active_user)):
