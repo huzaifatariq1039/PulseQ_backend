@@ -1,2 +1,6 @@
 # Smart Token Backend Package
-from main import app 
+# Note: Pointing Gunicorn to 'main:app' is recommended to avoid circular imports.
+try:
+    from main import app
+except ImportError:
+    pass

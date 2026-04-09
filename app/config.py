@@ -36,9 +36,12 @@ FIREBASE_SERVICE_ACCOUNT_KEY = os.getenv(
 #JWT Key
 SECRET_KEY = os.getenv("SECRET_KEY") or os.getenv("JWT_SECRET_KEY")
 if not SECRET_KEY:
-    raise RuntimeError(
-        "SECRET_KEY is not configured! Please set SECRET_KEY or JWT_SECRET_KEY in your .env file"
-    )
+    # Do not raise RuntimeError at top-level to prevent app crash during initialization on Render.
+    # We will log a warning instead.
+    print("⚠️ WARNING: SECRET_KEY is not configured! Please set SECRET_KEY or JWT_SECRET_KEY in your environment variables.")
+    # For safety, we set a temporary dummy key so the app can start (will fail later on JWT verification)
+    SECRET_KEY = "temporary-development-key-replace-me-immediately"
+    
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 30))
 REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", 7))

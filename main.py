@@ -39,7 +39,10 @@ from app.routes.pharmacy import router as pharmacy_portal_router
 async def lifespan(app: FastAPI):
     """Application lifespan manager"""
     # Startup
-    print("Starting PulseQ Backend...")
+    print("🚀 Starting PulseQ Backend...")
+    print(f"📁 Working Directory: {os.getcwd()}")
+    print(f"🔧 Debug Mode: {DEBUG}")
+    print(f"🌐 Allowed Origins: {cors_origins}")
 
     autoskip_task: asyncio.Task | None = None
     
@@ -54,7 +57,7 @@ async def lifespan(app: FastAPI):
         print(f"⚠️ Database initialization warning: {e}")
         print("⚠️ Continuing without database - some features may not work")
     
-    print("Backend started successfully!")
+    print("✨ Backend started successfully!")
 
     async def _autoskip_worker():
         # Run forever; best-effort (never crashes app)
