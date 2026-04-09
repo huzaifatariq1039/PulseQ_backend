@@ -3,7 +3,7 @@ from datetime import timedelta
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, func
-from app.models import UserCreate, UserResponse, Token, LoginRequest, LocationUpdate, AuthMethod, ActivityType
+from app.models import UserCreate, UserResponse, Token, TokenData, LoginRequest, LocationUpdate, AuthMethod, ActivityType
 from app.security import (
     get_password_hash,
     verify_password,
