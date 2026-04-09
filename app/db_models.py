@@ -58,7 +58,7 @@ class User(Base):
     email = Column(String(255), unique=True, nullable=True)
     phone = Column(String(20), unique=True, nullable=True)
     password_hash = Column(String(255), nullable=False)
-    role = Column(Enum(UserRole), default=UserRole.PATIENT)
+    role = Column(String(20), default="patient") # Using string for DB compatibility, validated by UserRole enum
     location_access = Column(Boolean, default=False)
     date_of_birth = Column(String(20), nullable=True)
     address = Column(String(500), nullable=True)
@@ -83,7 +83,7 @@ class Hospital(Base):
     email = Column(String(255), nullable=True)
     rating = Column(Float, nullable=True)
     review_count = Column(Integer, default=0)
-    status = Column(Enum(HospitalStatus), default=HospitalStatus.OPEN)
+    status = Column(String(20), default="open") # Using string for DB compatibility, validated by HospitalStatus enum
     specializations = Column(JSON, default=list)
     latitude = Column(Float, nullable=True)
     longitude = Column(Float, nullable=True)
@@ -112,7 +112,7 @@ class Doctor(Base):
     session_fee = Column(Float, nullable=True)
     has_session = Column(Boolean, default=False)
     pricing_type = Column(String(20), default="standard")
-    status = Column(Enum(DoctorStatus), default=DoctorStatus.AVAILABLE)
+    status = Column(String(20), default="available") # Using string for DB compatibility, validated by DoctorStatus enum
     available_days = Column(JSON, default=list)
     start_time = Column(String(10), nullable=False)
     end_time = Column(String(10), nullable=False)
@@ -139,9 +139,9 @@ class Token(Base):
     hex_code = Column(String(10), nullable=False)
     display_code = Column(String(20), nullable=True)
     appointment_date = Column(DateTime(timezone=True), nullable=False)
-    status = Column(Enum(TokenStatus), default=TokenStatus.PENDING)
-    payment_status = Column(Enum(PaymentStatus), default=PaymentStatus.PENDING)
-    payment_method = Column(Enum(PaymentMethod), nullable=True)
+    status = Column(String(20), default="pending") # Using string for DB compatibility, validated by TokenStatus enum
+    payment_status = Column(String(20), default="pending") # Using string for DB compatibility, validated by PaymentStatus enum
+    payment_method = Column(String(20), nullable=True) # Using string for DB compatibility, validated by PaymentMethod enum
     queue_position = Column(Integer, nullable=True)
     total_queue = Column(Integer, nullable=True)
     estimated_wait_time = Column(Integer, nullable=True)
@@ -182,8 +182,8 @@ class Payment(Base):
     id = Column(String, primary_key=True, index=True)
     token_id = Column(String, ForeignKey("tokens.id"), nullable=False)
     amount = Column(Float, nullable=False)
-    method = Column(Enum(PaymentMethod), nullable=False)
-    status = Column(Enum(PaymentStatus), default=PaymentStatus.PENDING)
+    method = Column(String(20), nullable=False) # Using string for DB compatibility, validated by PaymentMethod enum
+    status = Column(String(20), default="pending") # Using string for DB compatibility, validated by PaymentStatus enum
     transaction_id = Column(String(255), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
