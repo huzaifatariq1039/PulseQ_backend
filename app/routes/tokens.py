@@ -370,19 +370,26 @@ async def generate_smart_token(
     # --- AI Estimated Wait Time Calculation ---
     estimated_wait_time = 0
     try:
-        # 1. Gather all required features for the AI model
-        patients_ahead = calculate_patients_ahead(doctor_id, db)
+        # 1. Get today's tokens for this doctor that are in waiting/confirmed/pending status
+        # Note: We query BEFORE adding the new token, so 'patients_ahead' is the current queue count
+        today = datetime.utcnow().date()
+        patients_ahead = db.query(Token).filter(
+            Token.doctor_id == doctor_id,
+            Token.status.in_(["waiting", "confirmed", "pending", "called", "in_consultation"]),
+            func.date(Token.appointment_date) == today
+        ).count()
         
-        # If it's the first token (no one ahead), wait time is 0
+        # If no one is ahead, wait time is 0
         if patients_ahead == 0:
             estimated_wait_time = 0
+            print(f"[DEBUG] AI Wait Time: First token, setting to 0")
         else:
             # Gather all features as expected by AIEngine
             ai_input = {
                 "hour_of_day": get_current_hour(),
                 "day_of_week": get_current_day(),
                 "patients_ahead_of_user": patients_ahead,
-                "patients_in_queue": calculate_queue_length(doctor_id),
+                "patients_in_queue": patients_ahead, # Use ahead count as current queue length
                 "queue_velocity": calculate_queue_velocity(doctor_id, db),
                 "last_patient_duration": get_last_patient_duration(doctor_id, db),
                 "avg_service_time_last_5": avg_last_5(doctor_id, db),
@@ -392,7 +399,7 @@ async def generate_smart_token(
                 "avg_wait_time_this_weekday_past_month": get_weekday_history(),
                 "avg_service_time_doctor_history": get_doctor_history(doctor_id, db),
                 "doctor": doctor_data.get("name", "Unknown"),
-                "age": 30, # Default if not in user profile
+                "age": 30, # Default
                 "disease_type": payload.department or "General",
                 "clinic_type": "Specialist" if doctor_data.get("has_session") else "General"
             }
@@ -402,11 +409,17 @@ async def generate_smart_token(
             
             # 3. Calculate total wait time
             estimated_wait_time = int(patients_ahead * predicted_duration)
+            print(f"[DEBUG] AI Wait Time: {patients_ahead} ahead, predicted duration {predicted_duration}, total {estimated_wait_time}")
             
     except Exception as e:
-        logger.error(f"Failed to calculate AI estimated wait time: {e}")
-        # Fallback: simple calculation (e.g., 15 mins per patient)
-        estimated_wait_time = calculate_patients_ahead(doctor_id, db) * 15
+        print(f"[ERROR] AI Wait Time Calculation failed: {e}")
+        # Fallback
+        patients_ahead_fallback = db.query(Token).filter(
+            Token.doctor_id == doctor_id,
+            Token.status.in_(["waiting", "confirmed", "pending", "called", "in_consultation"]),
+            func.date(Token.appointment_date) == today
+        ).count()
+        estimated_wait_time = patients_ahead_fallback * 15
 
     token_doc = {
         "id": token_id,

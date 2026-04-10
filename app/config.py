@@ -77,3 +77,8 @@ QUEUE_SMART_NOTIFY_WAIT_THRESHOLD_MINUTES = int(os.getenv("QUEUE_SMART_NOTIFY_WA
 
 # Background auto-skip worker
 QUEUE_AUTOSKIP_INTERVAL_SECONDS = int(os.getenv("QUEUE_AUTOSKIP_INTERVAL_SECONDS", "60"))
+
+# POS System Integration
+POS_SYSTEM_BASE_URL = os.getenv("POS_SYSTEM_BASE_URL", "http://localhost:5000")
+POS_SYSTEM_API_KEY = os.getenv("POS_SYSTEM_API_KEY", "")
+POS_WEBHOOK_SECRET = os.getenv("POS_WEBHOOK_SECRET", "")
