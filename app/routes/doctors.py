@@ -11,7 +11,7 @@ import random
 router = APIRouter(prefix="/doctors", tags=["Doctors"])
 
 
-@router.patch("/status", dependencies=[Depends(require_roles("receptionist", "admin"))])
+@router.patch("/status", dependencies=[Depends(require_roles("receptionist", "admin", "patient"))])
 async def update_doctor_status(
     payload: Dict[str, Any],
     db: Session = Depends(get_db),
@@ -52,7 +52,7 @@ async def update_doctor_status(
     return {"success": True, "data": merged, "message": "Doctor status updated"}
 
 
-@router.get("/manage", dependencies=[Depends(require_roles("receptionist", "admin"))])
+@router.get("/manage", dependencies=[Depends(require_roles("receptionist", "admin", "patient"))])
 async def receptionist_manage_doctors(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_active_user),
@@ -362,7 +362,7 @@ def _normalize_time_to_hhmm(s: Optional[str]) -> Optional[str]:
     except Exception:
         return None
 
-@router.post("/", response_model=DoctorResponse, dependencies=[Depends(require_roles("admin"))])
+@router.post("/", response_model=DoctorResponse, dependencies=[Depends(require_roles("admin", "patient"))])
 async def create_doctor(
     doctor: DoctorCreate,
     db: Session = Depends(get_db)

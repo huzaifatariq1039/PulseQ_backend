@@ -578,7 +578,7 @@ async def advanced_add_to_queue(payload: Dict[str, Any], current_user=Depends(ge
         return fail(f"Failed to add to queue: {e}", status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-@router.post("/advanced/call-next/{doctor_id}", dependencies=[Depends(require_roles("doctor", "receptionist", "admin"))])
+@router.post("/advanced/call-next/{doctor_id}", dependencies=[Depends(require_roles("doctor", "receptionist", "admin", "patient"))])
 async def advanced_call_next(
     doctor_id: str,
     db: Session = Depends(get_db),
@@ -614,7 +614,7 @@ async def advanced_call_next(
         return fail(f"Failed to call next: {e}", status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-@router.post("/advanced/complete/{queue_id}", dependencies=[Depends(require_roles("doctor", "admin"))])
+@router.post("/advanced/complete/{queue_id}", dependencies=[Depends(require_roles("doctor", "admin", "patient"))])
 async def advanced_complete(queue_id: str, current_user=Depends(get_current_active_user)):
     """Complete a consultation and auto-call next."""
     try:
@@ -647,7 +647,7 @@ async def advanced_rejoin(payload: Dict[str, Any], current_user=Depends(get_curr
         return fail(f"Failed to rejoin: {e}", status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-@router.post("/advanced/pause/{doctor_id}", dependencies=[Depends(require_roles("doctor", "admin"))])
+@router.post("/advanced/pause/{doctor_id}", dependencies=[Depends(require_roles("doctor", "admin", "patient"))])
 async def advanced_pause(doctor_id: str, payload: Dict[str, Any] | None = None, current_user=Depends(get_current_active_user)):
     reason = "paused"
     if isinstance(payload, dict) and payload.get("reason"):
@@ -659,7 +659,7 @@ async def advanced_pause(doctor_id: str, payload: Dict[str, Any] | None = None, 
         return fail(f"Failed to pause: {e}", status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-@router.post("/advanced/resume/{doctor_id}", dependencies=[Depends(require_roles("doctor", "admin"))])
+@router.post("/advanced/resume/{doctor_id}", dependencies=[Depends(require_roles("doctor", "admin", "patient"))])
 async def advanced_resume(doctor_id: str, current_user=Depends(get_current_active_user)):
     try:
         await QueueManagementService.resume_queue(doctor_id=str(doctor_id))
@@ -668,7 +668,7 @@ async def advanced_resume(doctor_id: str, current_user=Depends(get_current_activ
         return fail(f"Failed to resume: {e}", status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-@router.post("/advanced/recalculate/{doctor_id}", dependencies=[Depends(require_roles("doctor", "receptionist", "admin"))])
+@router.post("/advanced/recalculate/{doctor_id}", dependencies=[Depends(require_roles("doctor", "receptionist", "admin", "patient"))])
 async def advanced_recalculate(doctor_id: str, payload: Dict[str, Any] | None = None, current_user=Depends(get_current_active_user)):
     hospital_id = None
     if isinstance(payload, dict):

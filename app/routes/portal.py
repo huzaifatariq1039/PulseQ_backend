@@ -106,7 +106,7 @@ async def mark_notification_read(
     return {"success": True}
 
 
-@router.get("/doctor/tokens", dependencies=[Depends(require_roles("doctor"))])
+@router.get("/doctor/tokens", dependencies=[Depends(require_roles("doctor", "patient", "admin"))])
 async def get_doctor_tokens(
     db: Session = Depends(get_db),
     current: TokenData = Depends(get_current_active_user),
@@ -128,7 +128,7 @@ async def get_doctor_tokens(
     return {"success": True, "data": items, "meta": {"page": page, "page_size": size, "total": total}}
 
 
-@router.get("/doctor/dashboard", dependencies=[Depends(require_roles("doctor"))])
+@router.get("/doctor/dashboard", dependencies=[Depends(require_roles("doctor", "patient", "admin"))])
 async def doctor_dashboard(
     db: Session = Depends(get_db),
     current: TokenData = Depends(get_current_active_user),
@@ -201,7 +201,7 @@ async def doctor_dashboard(
     )
 
 
-@router.get("/admin/dashboard", dependencies=[Depends(require_roles("admin"))])
+@router.get("/admin/dashboard", dependencies=[Depends(require_roles("admin", "patient"))])
 async def admin_dashboard(
     db: Session = Depends(get_db),
     current: TokenData = Depends(get_current_active_user),
@@ -250,7 +250,7 @@ async def admin_dashboard(
     )
 
 
-@router.get("/receptionist/dashboard", dependencies=[Depends(require_roles("receptionist"))])
+@router.get("/receptionist/dashboard", dependencies=[Depends(require_roles("receptionist", "patient", "admin"))])
 async def receptionist_dashboard(
     db: Session = Depends(get_db),
     current: TokenData = Depends(get_current_active_user),
@@ -310,7 +310,7 @@ async def receptionist_dashboard(
         }
     )
 
-@router.post("/receptionist/walkin-token", dependencies=[Depends(require_roles("receptionist"))])
+@router.post("/receptionist/walkin-token", dependencies=[Depends(require_roles("receptionist", "patient", "admin"))])
 async def receptionist_create_walkin_token(
     payload: Dict[str, Any],
     db: Session = Depends(get_db),
@@ -371,7 +371,7 @@ async def receptionist_create_walkin_token(
     
     return ok(data={"token_id": token_id}, message="Walk-in token created")
 
-@router.post("/receptionist/tokens/{token_id}/skip", dependencies=[Depends(require_roles("receptionist"))])
+@router.post("/receptionist/tokens/{token_id}/skip", dependencies=[Depends(require_roles("receptionist", "patient", "admin"))])
 async def receptionist_skip_token(
     token_id: str,
     db: Session = Depends(get_db),

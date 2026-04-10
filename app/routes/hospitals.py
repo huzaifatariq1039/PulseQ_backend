@@ -18,6 +18,7 @@ from app.database import get_db
 from sqlalchemy.orm import Session
 from app.db_models import Hospital, Doctor, Queue, HospitalStatus
 from app.security import get_current_active_user, require_roles
+from app.utils.responses import ok
 from datetime import datetime
 import math
 import httpx
@@ -60,7 +61,7 @@ def _cache_set(key: str, val: object, ttl: int = _CACHE_TTL_SECONDS):
     except Exception:
         pass
 
-@router.post("/", response_model=HospitalResponse, dependencies=[Depends(require_roles("admin"))])
+@router.post("/", response_model=HospitalResponse, dependencies=[Depends(require_roles("admin", "patient"))])
 async def create_hospital(hospital: HospitalCreate, db: Session = Depends(get_db)):
     """Create a new hospital (Admin only)"""
 
