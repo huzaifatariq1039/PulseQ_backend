@@ -443,8 +443,12 @@ async def create_doctor(
     db.commit()
     db.refresh(new_doctor)
     
+    # Map DB model to response dict, then to Pydantic for validation, then to dict for JSON serialization
+    out_dict = {k: v for k, v in new_doctor.__dict__.items() if not k.startswith('_')}
+    response_obj = DoctorResponse(**out_dict)
+    
     from app.utils.responses import ok
-    return ok(data=DoctorResponse(**doctor_data), message="Doctor created successfully")
+    return ok(data=response_obj.model_dump(), message="Doctor created successfully")
 
 
 @router.get("/{doctor_id}/available-slots")
