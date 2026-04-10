@@ -135,9 +135,10 @@ def require_roles(*allowed_roles: str):
                 detail="Role missing in token",
             )
         if allowed and role not in allowed:
+            # DEBUG: Provide more detail to the user to resolve the 403 error
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Insufficient permissions",
+                detail=f"Insufficient permissions. Role '{role}' not in {allowed}",
             )
         return current
 
