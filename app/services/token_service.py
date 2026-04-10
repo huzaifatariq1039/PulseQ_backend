@@ -2,6 +2,7 @@ import secrets
 import string
 from datetime import datetime
 from typing import Tuple, Dict
+from sqlalchemy.orm import Session
 from app.database import get_db
 from app.config import COLLECTIONS, AVG_CONSULTATION_TIME_MINUTES, TESTING_MODE
 

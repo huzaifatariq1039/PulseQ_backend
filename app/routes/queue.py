@@ -262,9 +262,11 @@ async def start_consultation(
     # Relax state transition for testing if needed, but is_transition_allowed should handle it
     
     token.status = TokenStatusEnum.IN_PROGRESS
-    token.start_time = datetime.utcnow()
-    token.started_at = token.start_time
     token.updated_at = datetime.utcnow()
+    # Safely set attributes if they exist in the model
+    for attr in ["start_time", "started_at"]:
+        if hasattr(token, attr):
+            setattr(token, attr, token.updated_at)
     db.commit()
     
     try:
@@ -326,38 +328,23 @@ async def complete_consultation(
     except Exception:
         role = "doctor"
 
-    end_time = datetime.utcnow()
-    start_time = token.start_time
-    duration_minutes = 0
-    try:
-        if start_time is not None:
-            duration_minutes = max(0, int((end_time - start_time).total_seconds() // 60))
-    except Exception:
-        duration_minutes = 0
-
     # Update token
     token.status = TokenStatusEnum.COMPLETED
-    token.completed_at = end_time
-    token.end_time = end_time
-    token.duration_minutes = duration_minutes
     token.updated_at = datetime.utcnow()
-
-    # Persist consultation details (optional)
-    if isinstance(payload, dict):
-        if payload.get("consultation_notes") is not None:
-            # You may want to store this in a separate consultation table
-            pass
-        if payload.get("diagnosis") is not None:
-            pass
-        if payload.get("prescription") is not None:
-            pass
-        if payload.get("medical_records_url") is not None:
-            pass
-        if payload.get("lab_reports") is not None:
-            pass
-        if payload.get("uploaded_files") is not None:
-            pass
-        if payload.get("attachments") is not None:
+    
+    # Safely calculate duration and set attributes if they exist
+    end_time = token.updated_at
+    start_time = getattr(token, "start_time", None) or getattr(token, "started_at", None)
+    
+    for attr, val in [("completed_at", end_time), ("end_time", end_time)]:
+        if hasattr(token, attr):
+            setattr(token, attr, val)
+            
+    if start_time and hasattr(token, "duration_minutes"):
+        try:
+            duration_minutes = max(0, int((end_time - start_time).total_seconds() // 60))
+            setattr(token, "duration_minutes", duration_minutes)
+        except Exception:
             pass
 
     db.commit()

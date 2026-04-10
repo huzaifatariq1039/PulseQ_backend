@@ -142,9 +142,12 @@ async def consultation_start(
 
     now = datetime.utcnow()
     token.status = "in_consultation"
-    token.started_at = now
-    token.start_time = now
     token.updated_at = now
+    
+    # Safely set attributes if they exist in the model
+    for attr in ["start_time", "started_at"]:
+        if hasattr(token, attr):
+            setattr(token, attr, now)
     
     doctor.status = "busy"
     doctor.updated_at = now
@@ -197,9 +200,12 @@ async def consultation_end(
 
     now = datetime.utcnow()
     token.status = "completed"
-    token.completed_at = now
-    token.end_time = now
     token.updated_at = now
+    
+    # Safely set attributes if they exist in the model
+    for attr in ["completed_at", "end_time"]:
+        if hasattr(token, attr):
+            setattr(token, attr, now)
     
     doctor.status = "available"
     doctor.updated_at = now
@@ -218,8 +224,12 @@ async def consultation_end(
     next_token_data = None
     if next_token_obj:
         next_token_obj.status = "called"
-        next_token_obj.called_at = now
         next_token_obj.updated_at = now
+        
+        # Safely set attributes if they exist in the model
+        if hasattr(next_token_obj, "called_at"):
+            setattr(next_token_obj, "called_at", now)
+        
         db.commit()
         next_token_data = {k: v for k, v in next_token_obj.__dict__.items() if not k.startswith('_')}
 
