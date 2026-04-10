@@ -369,14 +369,8 @@ async def generate_smart_token(
 
     # --- AI Estimated Wait Time Calculation ---
     estimated_wait_time = 0
+    today = datetime.utcnow().date()
     try:
-        # 1. Get today's tokens for this doctor that are in waiting/confirmed/pending status
-        # Note: We query BEFORE adding the new token, so 'patients_ahead' is the current queue count
-        today = datetime.utcnow().date()
-        
-        # DEBUG: Log the query parameters
-        print(f"[DEBUG] AI Wait Time: Querying for doctor_id={doctor_id}, date={today}")
-        
         # Check if there are ANY tokens today for this doctor to determine if this is the first one
         total_tokens_today = db.query(Token).filter(
             Token.doctor_id == doctor_id,
@@ -389,18 +383,18 @@ async def generate_smart_token(
             func.date(Token.appointment_date) == today
         ).count()
         
-        print(f"[DEBUG] AI Wait Time: total_tokens_today={total_tokens_today}, patients_ahead={patients_ahead}")
-        
         # If no one is ahead AND this is the first token of the day, wait time is 0
         if patients_ahead == 0 and total_tokens_today == 0:
             estimated_wait_time = 0
             print(f"[DEBUG] AI Wait Time: First token of the day, setting to 0")
         else:
             # If there are patients ahead OR it's not the first token, calculate using AI
-            # Ensure patients_ahead is at least 1 if it's not the first token but ahead count is 0
             calc_ahead = max(patients_ahead, 1)
             
-            # Gather all features as expected by AIEngine
+            # Ensure AI engine is loaded
+            if not ai_engine.model:
+                ai_engine.load()
+            
             ai_input = {
                 "hour_of_day": get_current_hour(),
                 "day_of_week": get_current_day(),
@@ -420,31 +414,18 @@ async def generate_smart_token(
                 "clinic_type": "Specialist" if doctor_data.get("has_session") else "General"
             }
             
-            # 2. Get prediction from AI Engine
-            # Ensure AI engine is loaded
-            if not ai_engine.model:
-                try:
-                    ai_engine.load()
-                except Exception as load_err:
-                    print(f"[ERROR] AI Engine load failed: {load_err}")
-            
             predicted_duration = ai_engine.predict_duration(ai_input)
-            
-            # 3. Calculate total wait time
             estimated_wait_time = int(calc_ahead * predicted_duration)
             print(f"[DEBUG] AI Wait Time: {calc_ahead} ahead, predicted duration {predicted_duration}, total {estimated_wait_time}")
             
     except Exception as e:
         print(f"[ERROR] AI Wait Time Calculation failed: {e}")
-        # Fallback to a base calculation if AI fails
-        today = datetime.utcnow().date()
         patients_ahead_fallback = db.query(Token).filter(
             Token.doctor_id == doctor_id,
             Token.status.in_(["waiting", "confirmed", "pending", "called", "in_consultation"]),
             func.date(Token.appointment_date) == today
         ).count()
         estimated_wait_time = max(patients_ahead_fallback, 1) * 15
-        print(f"[DEBUG] AI Wait Time: Fallback used, total {estimated_wait_time}")
 
     token_doc = {
         "id": token_id,
@@ -478,9 +459,18 @@ async def generate_smart_token(
     db.commit()
     db.refresh(new_token)
 
+    # RE-FETCH AND MAP FOR RESPONSE
+    # This ensures we return the data EXACTLY as it was just saved, including the calculated wait time
+    out_dict = {k: v for k, v in new_token.__dict__.items() if not k.startswith('_')}
+    # Force the calculated wait time into the dictionary in case the DB column is missing or doesn't persist it
+    out_dict["estimated_wait_time"] = estimated_wait_time
+    
+    response_obj = SmartTokenResponse(**out_dict)
+    print(f"[DEBUG] FINAL RETURN estimated_wait_time: {response_obj.estimated_wait_time}")
+
     await create_activity_log(current_user.user_id, ActivityType.TOKEN_GENERATED, f"Generated Token #{token_number}", {"token_id": token_id}, db=db)
     
-    return _to_smart_token_response(new_token)
+    return response_obj
 
 @router.post("/{token_id}/cancel", response_model=CancellationResponse)
 async def cancel_token_endpoint(
