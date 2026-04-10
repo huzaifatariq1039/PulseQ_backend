@@ -322,7 +322,9 @@ async def generate_smart_token(
         "payment_status": PaymentStatus.PENDING,
         "doctor_name": doctor_data.get("name"),
         "hospital_name": hospital_data.get("name"),
-        "total_amount": pricing.get("total_amount"),
+        "consultation_fee": pricing.get("consultation_fee"),
+        "session_fee": pricing.get("session_fee"),
+        "total_fee": pricing.get("total_amount"),
         "created_at": datetime.utcnow(),
         "updated_at": datetime.utcnow(),
     }
