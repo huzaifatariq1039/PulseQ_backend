@@ -137,7 +137,7 @@ class Token(Base):
     hospital_id = Column(String, ForeignKey("hospitals.id"), nullable=False)
     mrn = Column(String(50), nullable=True)
     token_number = Column(Integer, nullable=False)
-    hex_code = Column(String(10), nullable=False)
+    hex_code = Column(String(20), nullable=False)
     display_code = Column(String(20), nullable=True)
     appointment_date = Column(DateTime(timezone=True), nullable=False)
     status = Column(String(20), default="pending") # Using string for DB compatibility, validated by TokenStatus enum
