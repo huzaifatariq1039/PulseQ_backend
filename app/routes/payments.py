@@ -128,7 +128,8 @@ async def get_appointment_summary(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Token not found")
     
     # Verify token belongs to current user
-    if token.patient_id != current_user.id:
+    user_id = getattr(current_user, "user_id", getattr(current_user, "id", None))
+    if str(token.patient_id) != str(user_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
     
     # Get doctor details
@@ -168,7 +169,8 @@ async def confirm_payment(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Token not found")
         
         # Verify token belongs to current user
-        if token.patient_id != current_user.id:
+        user_id = getattr(current_user, "user_id", getattr(current_user, "id", None))
+        if str(token.patient_id) != str(user_id):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
             
         # Check if payment already exists
@@ -225,7 +227,7 @@ async def confirm_payment(
         summary = await get_appointment_summary(payment_request.token_id, db=db_session, current_user=current_user)
         
         # Notifications logic
-        phone_number = current_user.phone or ""
+        phone_number = getattr(current_user, "phone", None) or ""
         notif_types = [NotificationType.SMS]
         if payment_request.notification_types:
             notif_types = list(set(payment_request.notification_types + [NotificationType.SMS]))
