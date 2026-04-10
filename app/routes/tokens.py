@@ -190,8 +190,100 @@ def _queue_object_for(db: Session, doctor_id: str, hospital_id: str, day_local: 
         "is_future": day_local > datetime.utcnow().date()
     }
 
-def _recalculate_token_wait_times(db: Session, doctor_id: str, hospital_id: str, day_local: datetime.date, per_patient_minutes: int = 9):
-    pass
+def _recalculate_token_wait_times(db: Session, doctor_id: str, hospital_id: str, day_local: datetime.date):
+    """
+    Recalculates and updates wait times for all active tokens in a doctor's queue.
+    This should be triggered whenever the queue state changes (e.g., patient called, finished, or cancelled).
+    """
+    try:
+        # 1. Fetch doctor data for AI context
+        doctor = db.query(Doctor).filter(Doctor.id == doctor_id).first()
+        if not doctor:
+            return
+        doctor_data = {k: v for k, v in doctor.__dict__.items() if not k.startswith('_')}
+        
+        # 2. Get all active tokens for this doctor today, ordered by token number
+        active_tokens = db.query(Token).filter(
+            Token.doctor_id == doctor_id,
+            func.date(Token.appointment_date) == day_local,
+            Token.status.in_(["pending", "confirmed", "waiting", "called"])
+        ).order_by(Token.token_number.asc()).all()
+        
+        if not active_tokens:
+            return
+
+        # 3. Get currently serving patient (if any) to refine patients_ahead
+        # We consider someone "ahead" if they are in the queue and their token number is smaller
+        # than the current token being processed.
+        # However, for recalculation, we simply iterate through the active list.
+        
+        # 4. Prepare AI Engine
+        if not ai_engine.model:
+            ai_engine.load()
+            
+        # 5. Calculate common AI inputs (doctor history, etc.)
+        doc_history = get_doctor_history(doctor_id, db)
+        q_velocity = calculate_queue_velocity(doctor_id, db)
+        last_duration = get_last_patient_duration(doctor_id, db)
+        avg_5 = avg_last_5(doctor_id, db)
+        avg_30 = avg_last_30(doctor_id, db)
+        doctors_avail = count_available_doctors(db)
+        
+        # 6. Update each token
+        for i, token in enumerate(active_tokens):
+            # patients_ahead for this specific token is its index in the sorted active list
+            patients_ahead = i 
+            calc_ahead = max(patients_ahead, 1)
+            
+            # Prepare AI input for this specific patient
+            # We try to get their specific age/disease if stored, else defaults
+            user_age = 30
+            if token.patient_id:
+                patient_user = db.query(User).filter(User.id == token.patient_id).first()
+                if patient_user and patient_user.date_of_birth:
+                    try:
+                        dob = datetime.strptime(patient_user.date_of_birth, "%Y-%m-%d")
+                        user_age = (datetime.now() - dob).days // 365
+                    except Exception: pass
+
+            ai_input = {
+                "hour_of_day": get_current_hour(),
+                "day_of_week": get_current_day(),
+                "patients_ahead_of_user": calc_ahead,
+                "patients_in_queue": len(active_tokens), 
+                "queue_velocity": q_velocity,
+                "last_patient_duration": last_duration,
+                "avg_service_time_last_5": avg_5,
+                "avg_service_time_last_30": avg_30,
+                "doctors_available": doctors_avail,
+                "avg_wait_time_this_hour_past_week": get_hour_history(),
+                "avg_wait_time_this_weekday_past_month": get_weekday_history(),
+                "avg_service_time_doctor_history": doc_history,
+                "doctor": doctor_data.get("name", "Unknown"),
+                "age": user_age, 
+                "disease_type": getattr(token, "department", "General") or "General",
+                "clinic_type": "Specialist" if doctor_data.get("has_session") else "General"
+            }
+            
+            try:
+                predicted_duration = ai_engine.predict_duration(ai_input)
+                predicted_duration = max(predicted_duration, 8) # Reasonable floor
+                new_wait_time = int(calc_ahead * predicted_duration)
+            except Exception:
+                # Fallback: Use doctor's history if available, else 15m
+                fallback_per_patient = doc_history if doc_history > 5 else 15
+                new_wait_time = int(calc_ahead * fallback_per_patient)
+            
+            # Update token in DB
+            token.estimated_wait_time = new_wait_time
+            token.updated_at = datetime.utcnow()
+            
+        db.commit()
+        print(f"[DEBUG] Recalculated wait times for {len(active_tokens)} tokens (Doctor: {doctor_id})")
+        
+    except Exception as e:
+        print(f"[ERROR] Failed to recalculate wait times: {e}")
+        db.rollback()
 
 async def create_activity_log(user_id: str, activity_type: ActivityType, description: str, metadata: dict = None, db: Session = None):
     if db is None: return
@@ -263,6 +355,16 @@ async def cancel_token_logic(
     token.status = TokenStatus.CANCELLED
     token.updated_at = datetime.utcnow()
     db.commit()
+
+    # Problem 1 & 2 Fix: Recalculate wait times for everyone else after a cancellation
+    try:
+        doctor = db.query(Doctor).filter(Doctor.id == token.doctor_id).first()
+        doctor_data = {k: v for k, v in doctor.__dict__.items() if not k.startswith('_')} if doctor else {}
+        tz_minutes = _tz_offset_for(doctor_data)
+        day_local = _local_day_for(token.appointment_date, tz_minutes)
+        _recalculate_token_wait_times(db, token.doctor_id, token.hospital_id, day_local)
+    except Exception as e:
+        print(f"[ERROR] Recalculation failed after cancel: {e}")
 
     await create_activity_log(
         current_user.user_id,
@@ -382,9 +484,12 @@ async def generate_smart_token(
         ).count()
         
         # 2. Count patients currently ahead (active in queue)
+        # Problem 5 Fix: Only count patients who are actually in the queue lifecycle
+        # We exclude 'pending' if it means they haven't paid/confirmed, 
+        # but here the lifecycle seems to include waiting/confirmed as "present".
         patients_ahead = db.query(Token).filter(
             Token.doctor_id == doctor_id,
-            Token.status.in_(["waiting", "confirmed", "pending", "called", "in_consultation"]),
+            Token.status.in_(["waiting", "confirmed", "called", "in_consultation"]),
             func.date(Token.appointment_date) == target_date
         ).count()
         
@@ -418,11 +523,14 @@ async def generate_smart_token(
                 except Exception:
                     pass
 
+            # Problem 4 Fix: Ensure we pass actual session for live context
+            doc_history = get_doctor_history(doctor_id, db)
+
             ai_input = {
                 "hour_of_day": get_current_hour(),
                 "day_of_week": get_current_day(),
                 "patients_ahead_of_user": calc_ahead,
-                "patients_in_queue": calc_ahead, 
+                "patients_in_queue": patients_ahead + 1, # Including current user
                 "queue_velocity": calculate_queue_velocity(doctor_id, db),
                 "last_patient_duration": get_last_patient_duration(doctor_id, db),
                 "avg_service_time_last_5": avg_last_5(doctor_id, db),
@@ -430,7 +538,7 @@ async def generate_smart_token(
                 "doctors_available": count_available_doctors(db),
                 "avg_wait_time_this_hour_past_week": get_hour_history(),
                 "avg_wait_time_this_weekday_past_month": get_weekday_history(),
-                "avg_service_time_doctor_history": get_doctor_history(doctor_id, db),
+                "avg_service_time_doctor_history": doc_history,
                 "doctor": doctor_data.get("name", "Unknown"),
                 "age": user_age, 
                 "disease_type": payload.department or "General",
@@ -438,18 +546,20 @@ async def generate_smart_token(
             }
             
             predicted_duration = ai_engine.predict_duration(ai_input)
-            # Ensure the duration is at least a reasonable minimum (e.g., 10 mins) if AI returns something too low
-            predicted_duration = max(predicted_duration, 10)
+            # Ensure the duration is at least a reasonable minimum (e.g., 8 mins) if AI returns something too low
+            predicted_duration = max(predicted_duration, 8)
             
             estimated_wait_time = int(calc_ahead * predicted_duration)
             print(f"  - Result: AI Predicted {predicted_duration}m per patient. Total: {estimated_wait_time}m")
             
     except Exception as e:
         print(f"[ERROR] AI Wait Time Calculation failed: {e}")
-        # Fallback
+        # Problem 3 Fix: Better fallback using doctor history
         calc_ahead_fallback = max(patients_ahead if 'patients_ahead' in locals() else 0, 1)
-        estimated_wait_time = calc_ahead_fallback * 15
-        print(f"  - Result: Fallback used: {estimated_wait_time}m")
+        doc_hist = get_doctor_history(doctor_id, db) if 'db' in locals() else 15
+        fallback_val = doc_hist if doc_hist > 5 else 15
+        estimated_wait_time = int(calc_ahead_fallback * fallback_val)
+        print(f"  - Result: Fallback used ({fallback_val}m/patient): {estimated_wait_time}m")
 
     token_doc = {
         "id": token_id,
@@ -617,9 +727,28 @@ async def update_token_status(
 ):
     token = db.query(Token).filter(Token.id == token_id).first()
     if not token: raise HTTPException(status_code=404, detail="Token not found")
-    token.status = _coerce_status(payload.status)
+    
+    old_status = token.status
+    new_status = _coerce_status(payload.status)
+    token.status = new_status
     token.updated_at = datetime.utcnow()
-    db.commit()
+    
+    # If status is moving to completed or cancelled, trigger recalculation for remaining tokens
+    # Also if someone is "called", the wait times for others might change
+    if new_status != old_status:
+        db.commit() # Save the status change first
+        
+        # Determine the local day for this token's appointment
+        doctor = db.query(Doctor).filter(Doctor.id == token.doctor_id).first()
+        doctor_data = {k: v for k, v in doctor.__dict__.items() if not k.startswith('_')} if doctor else {}
+        tz_minutes = _tz_offset_for(doctor_data)
+        day_local = _local_day_for(token.appointment_date, tz_minutes)
+        
+        # Trigger recalculation
+        _recalculate_token_wait_times(db, token.doctor_id, token.hospital_id, day_local)
+    else:
+        db.commit()
+
     return {"success": True}
 
 @router.post("", status_code=status.HTTP_201_CREATED)
