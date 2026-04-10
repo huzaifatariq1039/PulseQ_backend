@@ -161,13 +161,14 @@ class SmartTokenService:
         return True
     
     @staticmethod
-    def get_queue_status(doctor_id: str, token_number: int = None, appointment_date: datetime = None) -> Dict:
+    def get_queue_status(doctor_id: str, token_number: int = None, appointment_date: datetime = None, db: Session = None) -> Dict:
         """Get queue status for a doctor and specific token position using PostgreSQL
         
         Args:
             doctor_id: ID of the doctor
             token_number: Optional token number to get position for
             appointment_date: The appointment date to check against current date
+            db: Optional SQLAlchemy session
             
         Returns:
             Dict containing queue status with keys:
@@ -182,107 +183,116 @@ class SmartTokenService:
         from sqlalchemy import and_, func
         from datetime import date
         
-        db = next(get_db_session())
-        today = datetime.utcnow().date()
-
-        # Doctor leave / pause should hide wait-time to prevent UI confusion.
-        doctor_unavailable = False
+        # If no session provided, get one from the generator
+        should_close = False
+        if db is None:
+            db = next(get_db_session())
+            should_close = True
+            
         try:
-            doctor = db.query(Doctor).filter(Doctor.id == doctor_id).first()
-            if doctor:
-                status_lower = str(doctor.status.value if hasattr(doctor.status, 'value') else doctor.status or "").lower()
-                if status_lower == "on_leave" or bool(getattr(doctor, "queue_paused", False)) or bool(getattr(doctor, "paused", False)):
-                    doctor_unavailable = True
-        except Exception:
+            today = datetime.utcnow().date()
+
+            # Doctor leave / pause should hide wait-time to prevent UI confusion.
             doctor_unavailable = False
+            try:
+                doctor = db.query(Doctor).filter(Doctor.id == doctor_id).first()
+                if doctor:
+                    status_lower = str(doctor.status.value if hasattr(doctor.status, 'value') else doctor.status or "").lower()
+                    if status_lower == "on_leave" or bool(getattr(doctor, "queue_paused", False)) or bool(getattr(doctor, "paused", False)):
+                        doctor_unavailable = True
+            except Exception:
+                doctor_unavailable = False
 
-        # Determine target date
-        target_date = today
-        if appointment_date:
-            if isinstance(appointment_date, datetime):
-                target_date = appointment_date.date()
-            elif hasattr(appointment_date, 'date'):
-                target_date = appointment_date.date()
-            else:
-                try:
-                    target_date = datetime.fromisoformat(str(appointment_date).replace('Z', '+00:00')).date()
-                except Exception:
-                    target_date = today
+            # Determine target date
+            target_date = today
+            if appointment_date:
+                if isinstance(appointment_date, datetime):
+                    target_date = appointment_date.date()
+                elif hasattr(appointment_date, 'date'):
+                    target_date = appointment_date.date()
+                else:
+                    try:
+                        target_date = datetime.fromisoformat(str(appointment_date).replace('Z', '+00:00')).date()
+                    except Exception:
+                        target_date = today
 
-        # If appointment is in the future, treat as future regardless of server TZ
-        if target_date > today:
+            # If appointment is in the future, treat as future regardless of server TZ
+            if target_date > today:
+                return {
+                    "current_token": 0,
+                    "total_queue": 0,
+                    "people_ahead": 0,
+                    "estimated_wait_time": None if doctor_unavailable else 0,
+                    "is_future_appointment": True,
+                    "doctor_unavailable": doctor_unavailable,
+                }
+
+            # Get all tokens for this doctor for the target date from PostgreSQL
+            # We only include tokens that are not cancelled, completed, or rescheduled
+            query = db.query(Token).filter(
+                and_(
+                    Token.doctor_id == doctor_id,
+                    func.date(Token.appointment_date) == target_date,
+                    Token.status.notin_(["cancelled", "completed", "rescheduled"])
+                )
+            ).order_by(Token.token_number.asc())
+
+            tokens_objs = query.all()
+            tokens = [{k: v for k, v in t.__dict__.items() if not k.startswith('_')} for t in tokens_objs]
+
+            total_queue = len(tokens)
+            people_ahead = 0
+            estimated_wait_time = 0
+            current_token = 0
+
+            if total_queue > 0:
+                # Current serving token = first active in today's list
+                current_token = int(tokens[0].get("token_number", 0))
+
+                # If specific token number provided, compute position among today's tokens
+                if token_number is not None:
+                    token_found = False
+                    for i, token in enumerate(tokens):
+                        if int(token.get("token_number", -1)) == int(token_number):
+                            # i is 0-based index relative to current serving position
+                            people_ahead = max(0, i)
+                            estimated_wait_time = people_ahead * int(AVG_CONSULTATION_TIME_MINUTES or 5)
+                            token_found = True
+                            break
+
+                    # If the requested token isn't in today's active queue, keep defaults (0)
+                    if not token_found:
+                        people_ahead = 0
+                        estimated_wait_time = 0
+
+            # Derive a 1-based queue_position for UI clarity.
+            queue_position = 0
+            try:
+                if total_queue > 0 and token_number is not None:
+                    queue_position = int(people_ahead) + 1 if people_ahead > 0 or any(
+                        int(t.get("token_number", -1)) == int(token_number) for t in tokens
+                    ) else 0
+            except Exception:
+                queue_position = 0
+
+            if doctor_unavailable:
+                current_token = 0
+                people_ahead = 0
+                queue_position = 0
+                estimated_wait_time = None
+
             return {
-                "current_token": 0,
-                "total_queue": 0,
-                "people_ahead": 0,
-                "estimated_wait_time": None if doctor_unavailable else 0,
-                "is_future_appointment": True,
+                "current_token": current_token,
+                "total_queue": total_queue,
+                "people_ahead": people_ahead,
+                "queue_position": queue_position,
+                "estimated_wait_time": None if doctor_unavailable else estimated_wait_time,
+                "is_future_appointment": False,
                 "doctor_unavailable": doctor_unavailable,
             }
-
-        # Get all tokens for this doctor for the target date from PostgreSQL
-        # We only include tokens that are not cancelled, completed, or rescheduled
-        query = db.query(Token).filter(
-            and_(
-                Token.doctor_id == doctor_id,
-                func.date(Token.appointment_date) == target_date,
-                Token.status.notin_(["cancelled", "completed", "rescheduled"])
-            )
-        ).order_by(Token.token_number.asc())
-
-        tokens_objs = query.all()
-        tokens = [{k: v for k, v in t.__dict__.items() if not k.startswith('_')} for t in tokens_objs]
-
-        total_queue = len(tokens)
-        people_ahead = 0
-        estimated_wait_time = 0
-        current_token = 0
-
-        if total_queue > 0:
-            # Current serving token = first active in today's list
-            current_token = int(tokens[0].get("token_number", 0))
-
-            # If specific token number provided, compute position among today's tokens
-            if token_number is not None:
-                token_found = False
-                for i, token in enumerate(tokens):
-                    if int(token.get("token_number", -1)) == int(token_number):
-                        # i is 0-based index relative to current serving position
-                        people_ahead = max(0, i)
-                        estimated_wait_time = people_ahead * int(AVG_CONSULTATION_TIME_MINUTES or 5)
-                        token_found = True
-                        break
-
-                # If the requested token isn't in today's active queue, keep defaults (0)
-                if not token_found:
-                    people_ahead = 0
-                    estimated_wait_time = 0
-
-        # Derive a 1-based queue_position for UI clarity.
-        queue_position = 0
-        try:
-            if total_queue > 0 and token_number is not None:
-                queue_position = int(people_ahead) + 1 if people_ahead > 0 or any(
-                    int(t.get("token_number", -1)) == int(token_number) for t in tokens
-                ) else 0
-        except Exception:
-            queue_position = 0
-
-        if doctor_unavailable:
-            current_token = 0
-            people_ahead = 0
-            queue_position = 0
-            estimated_wait_time = None
-
-        return {
-            "current_token": current_token,
-            "total_queue": total_queue,
-            "people_ahead": people_ahead,
-            "queue_position": queue_position,
-            "estimated_wait_time": None if doctor_unavailable else estimated_wait_time,
-            "is_future_appointment": False,
-            "doctor_unavailable": doctor_unavailable,
-        }
+        finally:
+            if should_close:
+                db.close()
     
     @staticmethod
     def cancel_token(token_id: str, reason: str = None) -> bool:

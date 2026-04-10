@@ -25,6 +25,8 @@ from app.services.queue_management_service import QueueManagementService
 @router.get("/doctor/{doctor_id}", response_model=QueueResponse)
 async def get_doctor_queue_status(
     doctor_id: str,
+    appointment_date: Optional[datetime] = None,
+    token_number: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user = Depends(get_current_active_user)
 ):
@@ -39,7 +41,7 @@ async def get_doctor_queue_status(
         )
     
     # Get queue status
-    queue_status = SmartTokenService.get_queue_status(doctor_id)
+    queue_status = SmartTokenService.get_queue_status(doctor_id, token_number, appointment_date, db=db)
     
     return QueueResponse(
         id=f"queue_{doctor_id}",
@@ -47,8 +49,9 @@ async def get_doctor_queue_status(
         current_token=queue_status["current_token"],
         total_patients=queue_status["total_queue"],
         estimated_wait_time=queue_status["estimated_wait_time"],
-        people_ahead=0,  # This is for general queue, not specific to a token
+        people_ahead=queue_status["people_ahead"],
         total_queue=queue_status["total_queue"],
+        is_future_appointment=bool(queue_status.get("is_future_appointment")),
         doctor_unavailable=bool(queue_status.get("doctor_unavailable")),
         updated_at=datetime.utcnow()
     )

@@ -473,12 +473,7 @@ async def get_token_queue_status(
     token = db.query(Token).filter(Token.id == token_id).first()
     if not token: raise HTTPException(status_code=404, detail="Token not found")
     
-    doctor = db.query(Doctor).filter(Doctor.id == token.doctor_id).first()
-    doctor_data = {k: v for k, v in doctor.__dict__.items() if not k.startswith('_')} if doctor else {}
-    tz_minutes = _tz_offset_for(doctor_data)
-    day_local = _local_day_for(token.appointment_date, tz_minutes)
-    
-    return _queue_object_for(db, token.doctor_id, token.hospital_id, day_local, token.token_number)
+    return SmartTokenService.get_queue_status(token.doctor_id, token.token_number, token.appointment_date, db=db)
 
 @router.post("/{token_id}/payment", response_model=PaymentResponse)
 async def process_payment(
