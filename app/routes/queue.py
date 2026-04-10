@@ -67,9 +67,30 @@ async def get_doctor_queue_status(
     )
 
 @router.post("/doctor/{doctor_id}/advance")
+@router.post("/test/advance")
+async def test_advance_queue(
+    doctor_id: str,
+    db: Session = Depends(get_db)
+):
+    """Debug endpoint to advance queue without auth or complex routing"""
+    tokens = db.query(Token).filter(
+        Token.doctor_id == doctor_id,
+        Token.status != "completed",
+        Token.status != "cancelled"
+    ).order_by(Token.token_number).all()
+    
+    if not tokens:
+        return {"message": "No active tokens found for this doctor", "doctor_id": doctor_id}
+    
+    t = tokens[0]
+    t.status = "completed"
+    t.completed_at = datetime.utcnow()
+    db.commit()
+    
+    return {"message": "Queue advanced", "completed_token": t.token_number, "next_token": tokens[1].token_number if len(tokens) > 1 else None}
+
 @router.post("/{doctor_id}/advance")
 @router.post("/{doctor_id}/advance-queue")
-@router.post("/doctor/{doctor_id}/advance-queue")
 async def advance_queue(
     doctor_id: str,
     db: Session = Depends(get_db),
