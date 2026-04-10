@@ -310,6 +310,9 @@ async def generate_smart_token(
         include_consultation_fee=include_consultation_fee,
         include_session_fee=include_session_fee,
     )
+    
+    # Generate patient MRN if not exists
+    mrn = get_or_create_patient_mrn(db, current_user.user_id, hospital_id)
 
     token_doc = {
         "id": token_id,
@@ -317,11 +320,15 @@ async def generate_smart_token(
         "patient_id": current_user.user_id,
         "doctor_id": doctor_id,
         "hospital_id": hospital_id,
+        "mrn": mrn,
+        "hex_code": f"{token_id[:8]}{token_number:03d}",
         "appointment_date": appointment_date,
         "status": TokenStatus.PENDING,
         "payment_status": PaymentStatus.PENDING,
         "doctor_name": doctor_data.get("name"),
         "hospital_name": hospital_data.get("name"),
+        "patient_name": getattr(current_user, "name", None),
+        "patient_phone": getattr(current_user, "phone", None),
         "consultation_fee": pricing.get("consultation_fee"),
         "session_fee": pricing.get("session_fee"),
         "total_fee": pricing.get("total_amount"),
@@ -496,11 +503,15 @@ async def create_token(
     )
     
     token_id = str(uuid.uuid4())
+    # Generate patient MRN if not exists
+    mrn = get_or_create_patient_mrn(db, current_user.user_id, spec.hospital_id)
+
     token_doc = {
         "id": token_id,
         "patient_id": current_user.user_id,
         "doctor_id": spec.doctor_id,
         "hospital_id": spec.hospital_id,
+        "mrn": mrn,
         "token_number": token_number,
         "hex_code": f"{token_id[:8]}{token_number:03d}",
         "appointment_date": appt_dt_utc,
@@ -508,6 +519,8 @@ async def create_token(
         "payment_status": PaymentStatus.PENDING,
         "doctor_name": doctor_data.get("name"),
         "hospital_name": hospital.name,
+        "patient_name": getattr(current_user, "name", None),
+        "patient_phone": getattr(current_user, "phone", None),
         "created_at": datetime.utcnow(),
         "updated_at": datetime.utcnow(),
     }
