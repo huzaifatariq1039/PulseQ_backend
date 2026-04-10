@@ -263,6 +263,7 @@ async def start_consultation(
     
     token.status = TokenStatusEnum.IN_PROGRESS
     token.start_time = datetime.utcnow()
+    token.started_at = token.start_time
     token.updated_at = datetime.utcnow()
     db.commit()
     
@@ -336,7 +337,7 @@ async def complete_consultation(
 
     # Update token
     token.status = TokenStatusEnum.COMPLETED
-    token.completed_at = datetime.utcnow()
+    token.completed_at = end_time
     token.end_time = end_time
     token.duration_minutes = duration_minutes
     token.updated_at = datetime.utcnow()

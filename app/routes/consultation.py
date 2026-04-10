@@ -143,6 +143,7 @@ async def consultation_start(
     now = datetime.utcnow()
     token.status = "in_consultation"
     token.started_at = now
+    token.start_time = now
     token.updated_at = now
     
     doctor.status = "busy"
@@ -197,6 +198,7 @@ async def consultation_end(
     now = datetime.utcnow()
     token.status = "completed"
     token.completed_at = now
+    token.end_time = now
     token.updated_at = now
     
     doctor.status = "available"
