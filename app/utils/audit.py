@@ -1,17 +1,18 @@
 from typing import Optional, Dict, Any
 from datetime import datetime
+from sqlalchemy.orm import Session
 from app.database import get_db
 from app.config import COLLECTIONS
 
 AUDIT_COLLECTION = "audit_logs"
 
 
-def get_user_role(user_id: str) -> Optional[str]:
+def get_user_role(user_id: str, db: Session) -> Optional[str]:
     try:
-        db = get_db()
-        user_doc = db.collection(COLLECTIONS["USERS"]).document(user_id).get()
-        if getattr(user_doc, "exists", False):
-            return (user_doc.to_dict() or {}).get("role")
+        from app.db_models import User
+        user = db.query(User).filter(User.id == user_id).first()
+        if user:
+            return str(user.role.value if hasattr(user.role, 'value') else user.role).strip().lower()
     except Exception:
         return None
     return None
