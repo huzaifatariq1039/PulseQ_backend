@@ -4,6 +4,7 @@ from typing import Dict, Set
 STATUS_WAITING = "pending"      # alias: waiting
 STATUS_CONFIRMED = "confirmed"
 STATUS_CALLED = "called"
+STATUS_IN_QUEUE = "in_queue"
 STATUS_IN_CONSULTATION = "in_consultation"  # explicit web state before done
 STATUS_COMPLETED = "completed"
 STATUS_SKIPPED = "skipped"
@@ -13,10 +14,11 @@ STATUS_IN_PROGRESS = "in_progress"  # legacy alias used in some mobile flows
 # Allowed state transitions for web safety
 # Key: from_status -> set of to_status
 ALLOWED_TRANSITIONS: Dict[str, Set[str]] = {
-    STATUS_WAITING: {STATUS_CALLED, STATUS_IN_CONSULTATION, STATUS_CANCELLED},
+    STATUS_WAITING: {STATUS_CALLED, STATUS_IN_CONSULTATION, STATUS_CANCELLED, STATUS_CONFIRMED, STATUS_IN_QUEUE},
+    STATUS_CONFIRMED: {STATUS_WAITING, STATUS_CALLED, STATUS_IN_CONSULTATION, STATUS_IN_QUEUE},
+    STATUS_IN_QUEUE: {STATUS_CALLED, STATUS_IN_CONSULTATION, STATUS_CANCELLED},
     STATUS_CALLED: {STATUS_IN_CONSULTATION, STATUS_SKIPPED},
     STATUS_IN_PROGRESS: {STATUS_IN_CONSULTATION, STATUS_COMPLETED}, # legacy -> map to stricter flow
-    STATUS_CONFIRMED: {STATUS_WAITING, STATUS_CALLED, STATUS_IN_CONSULTATION},
     STATUS_IN_CONSULTATION: {STATUS_COMPLETED},                     # DONE allowed only from in_consultation
 }
 
