@@ -409,6 +409,15 @@ async def generate_smart_token(
             if not ai_engine.model:
                 ai_engine.load()
             
+            # Calculate age from DOB if available, else default to 30
+            user_age = 30
+            if hasattr(current_user, 'date_of_birth') and current_user.date_of_birth:
+                try:
+                    dob = datetime.strptime(current_user.date_of_birth, "%Y-%m-%d")
+                    user_age = (datetime.now() - dob).days // 365
+                except Exception:
+                    pass
+
             ai_input = {
                 "hour_of_day": get_current_hour(),
                 "day_of_week": get_current_day(),
@@ -423,7 +432,7 @@ async def generate_smart_token(
                 "avg_wait_time_this_weekday_past_month": get_weekday_history(),
                 "avg_service_time_doctor_history": get_doctor_history(doctor_id, db),
                 "doctor": doctor_data.get("name", "Unknown"),
-                "age": 30, 
+                "age": user_age, 
                 "disease_type": payload.department or "General",
                 "clinic_type": "Specialist" if doctor_data.get("has_session") else "General"
             }

@@ -118,7 +118,21 @@ class AIEngine:
         # Set default values for required features if missing
         if 'queue_length_last_10_min' not in features:
             features['queue_length_last_10_min'] = features.get('patients_in_queue', 0)
-            
+        
+        # Ensure all numeric features are actually numbers
+        numeric_features = [
+            "hour_of_day", "day_of_week", "patients_ahead_of_user", "patients_in_queue",
+            "queue_length_last_10_min", "queue_velocity", "last_patient_duration",
+            "avg_service_time_last_5", "avg_service_time_last_10", "avg_service_time_doctor_historic",
+            "doctors_available", "avg_wait_time_this_hour_past_week", "avg_wait_time_this_weekday_past_month"
+        ]
+        for nf in numeric_features:
+            if nf in features:
+                try:
+                    features[nf] = float(features[nf])
+                except (ValueError, TypeError):
+                    features[nf] = 0.0
+
         # Set default clinic_type if missing
         if 'clinic_type' not in features:
             features['clinic_type'] = 'General'
@@ -126,15 +140,19 @@ class AIEngine:
         # Encode clinic_type to integer before creating DataFrame
         features['clinic_type'] = self._encode_clinic_type(features['clinic_type'])
         
-        # Encode categorical features
-        if 'Doctor Name' in features and 'doctor' in self.encoders:
-            features['Doctor Name'] = self._safe_encode('doctor', features['Doctor Name'])
-        if 'Disease' in features and 'disease_type' in self.encoders:
-            features['Disease'] = self._safe_encode('disease_type', features['Disease'])
+        # Encode categorical features - use both possible keys for robustness
+        for feat_name, possible_enc_keys in [('Doctor Name', ['Doctor Name', 'doctor']), 
+                                             ('Disease', ['Disease', 'disease_type'])]:
+            if feat_name in features:
+                for enc_key in possible_enc_keys:
+                    if enc_key in self.encoders:
+                        features[feat_name] = self._safe_encode(enc_key, features[feat_name])
+                        break # Successfully encoded this feature, move to next feat_name
         
         # Ensure all expected features are present
         missing = set(self.expected_features) - set(features.keys())
         if missing:
+            print(f"[ERROR] AI Engine: Missing features: {missing}")
             raise ValueError(f"Missing required features: {', '.join(sorted(missing))}")
         
         try:
@@ -142,10 +160,16 @@ class AIEngine:
             df = pd.DataFrame([features])[self.expected_features]
             
             # Make prediction and round to nearest whole number
-            prediction = float(self.model.predict(df)[0])
-            return int(round(prediction))
+            if hasattr(self.model, 'predict'):
+                prediction = float(self.model.predict(df)[0])
+                return int(round(prediction))
+            else:
+                raise ValueError("Model object has no 'predict' method")
             
         except Exception as e:
+            print(f"[ERROR] AI Engine Prediction failed: {e}")
+            import traceback
+            traceback.print_exc()
             raise ValueError(f"Prediction failed: {str(e)}")
 
 
