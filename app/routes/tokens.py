@@ -373,23 +373,39 @@ async def generate_smart_token(
         # 1. Get today's tokens for this doctor that are in waiting/confirmed/pending status
         # Note: We query BEFORE adding the new token, so 'patients_ahead' is the current queue count
         today = datetime.utcnow().date()
+        
+        # DEBUG: Log the query parameters
+        print(f"[DEBUG] AI Wait Time: Querying for doctor_id={doctor_id}, date={today}")
+        
+        # Check if there are ANY tokens today for this doctor to determine if this is the first one
+        total_tokens_today = db.query(Token).filter(
+            Token.doctor_id == doctor_id,
+            func.date(Token.appointment_date) == today
+        ).count()
+        
         patients_ahead = db.query(Token).filter(
             Token.doctor_id == doctor_id,
             Token.status.in_(["waiting", "confirmed", "pending", "called", "in_consultation"]),
             func.date(Token.appointment_date) == today
         ).count()
         
-        # If no one is ahead, wait time is 0
-        if patients_ahead == 0:
+        print(f"[DEBUG] AI Wait Time: total_tokens_today={total_tokens_today}, patients_ahead={patients_ahead}")
+        
+        # If no one is ahead AND this is the first token of the day, wait time is 0
+        if patients_ahead == 0 and total_tokens_today == 0:
             estimated_wait_time = 0
-            print(f"[DEBUG] AI Wait Time: First token, setting to 0")
+            print(f"[DEBUG] AI Wait Time: First token of the day, setting to 0")
         else:
+            # If there are patients ahead OR it's not the first token, calculate using AI
+            # Ensure patients_ahead is at least 1 if it's not the first token but ahead count is 0
+            calc_ahead = max(patients_ahead, 1)
+            
             # Gather all features as expected by AIEngine
             ai_input = {
                 "hour_of_day": get_current_hour(),
                 "day_of_week": get_current_day(),
-                "patients_ahead_of_user": patients_ahead,
-                "patients_in_queue": patients_ahead, # Use ahead count as current queue length
+                "patients_ahead_of_user": calc_ahead,
+                "patients_in_queue": calc_ahead, 
                 "queue_velocity": calculate_queue_velocity(doctor_id, db),
                 "last_patient_duration": get_last_patient_duration(doctor_id, db),
                 "avg_service_time_last_5": avg_last_5(doctor_id, db),
@@ -399,27 +415,36 @@ async def generate_smart_token(
                 "avg_wait_time_this_weekday_past_month": get_weekday_history(),
                 "avg_service_time_doctor_history": get_doctor_history(doctor_id, db),
                 "doctor": doctor_data.get("name", "Unknown"),
-                "age": 30, # Default
+                "age": 30, 
                 "disease_type": payload.department or "General",
                 "clinic_type": "Specialist" if doctor_data.get("has_session") else "General"
             }
             
             # 2. Get prediction from AI Engine
+            # Ensure AI engine is loaded
+            if not ai_engine.model:
+                try:
+                    ai_engine.load()
+                except Exception as load_err:
+                    print(f"[ERROR] AI Engine load failed: {load_err}")
+            
             predicted_duration = ai_engine.predict_duration(ai_input)
             
             # 3. Calculate total wait time
-            estimated_wait_time = int(patients_ahead * predicted_duration)
-            print(f"[DEBUG] AI Wait Time: {patients_ahead} ahead, predicted duration {predicted_duration}, total {estimated_wait_time}")
+            estimated_wait_time = int(calc_ahead * predicted_duration)
+            print(f"[DEBUG] AI Wait Time: {calc_ahead} ahead, predicted duration {predicted_duration}, total {estimated_wait_time}")
             
     except Exception as e:
         print(f"[ERROR] AI Wait Time Calculation failed: {e}")
-        # Fallback
+        # Fallback to a base calculation if AI fails
+        today = datetime.utcnow().date()
         patients_ahead_fallback = db.query(Token).filter(
             Token.doctor_id == doctor_id,
             Token.status.in_(["waiting", "confirmed", "pending", "called", "in_consultation"]),
             func.date(Token.appointment_date) == today
         ).count()
-        estimated_wait_time = patients_ahead_fallback * 15
+        estimated_wait_time = max(patients_ahead_fallback, 1) * 15
+        print(f"[DEBUG] AI Wait Time: Fallback used, total {estimated_wait_time}")
 
     token_doc = {
         "id": token_id,
