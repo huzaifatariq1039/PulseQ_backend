@@ -25,12 +25,22 @@ from app.services.queue_management_service import QueueManagementService
 @router.get("/doctor/{doctor_id}", response_model=QueueResponse)
 async def get_doctor_queue_status(
     doctor_id: str,
-    appointment_date: Optional[datetime] = None,
-    token_number: Optional[int] = None,
+    appointment_date: Optional[datetime] = Query(None),
+    token_number: Optional[int] = Query(None),
+    payload: Optional[Dict[str, Any]] = Body(None),
     db: Session = Depends(get_db),
     current_user = Depends(get_current_active_user)
 ):
     """Get current queue status for a doctor"""
+    
+    # Fallback for Postman testing: if params not in query string, look in JSON body
+    if appointment_date is None and payload and "appointment_date" in payload:
+        try:
+            appointment_date = datetime.fromisoformat(str(payload["appointment_date"]).replace('Z', '+00:00'))
+        except Exception:
+            pass
+    if token_number is None and payload and "token_number" in payload:
+        token_number = payload.get("token_number")
     
     # Verify doctor exists
     doctor = db.query(Doctor).filter(Doctor.id == doctor_id).first()

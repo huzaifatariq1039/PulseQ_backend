@@ -228,12 +228,12 @@ class SmartTokenService:
                 }
 
             # Get all tokens for this doctor for the target date from PostgreSQL
-            # We only include tokens that are not cancelled, completed, or rescheduled
+            # We include all tokens that are actively in the queue lifecycle
             query = db.query(Token).filter(
                 and_(
                     Token.doctor_id == doctor_id,
                     func.date(Token.appointment_date) == target_date,
-                    Token.status.notin_(["cancelled", "completed", "rescheduled"])
+                    Token.status.in_(["pending", "confirmed", "in_queue", "in_progress"])
                 )
             ).order_by(Token.token_number.asc())
 
