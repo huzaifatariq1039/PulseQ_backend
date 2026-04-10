@@ -427,7 +427,8 @@ async def update_location_access(
     """Update user's location access"""
     db = get_db_session()
     try:
-        user = db.query(UserDB).filter(UserDB.id == current_user.id).first()
+        user_id = getattr(current_user, "user_id", getattr(current_user, "id", None))
+        user = db.query(UserDB).filter(UserDB.id == user_id).first()
         if user:
             user.location_access = update.location_access
             user.updated_at = datetime.utcnow()

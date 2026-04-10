@@ -275,9 +275,9 @@ async def confirm_payment(
         
     # Audit log
     try:
-        role = get_user_role(current_user.id)
-        # Update log_action to accept db session if needed
-        log_action(current_user.id, role, action="MARK_PAID", token_id=result.get("token_id"))
+        user_id = getattr(current_user, "user_id", getattr(current_user, "id", None))
+        role = get_user_role(user_id)
+        log_action(user_id, role, action="MARK_PAID", token_id=result.get("token_id"))
     except Exception:
         pass
         
@@ -290,7 +290,8 @@ async def get_payment_history(
     limit: int = 20
 ):
     """Get user's payment history"""
-    payments = db.query(Payment).join(Token).filter(Token.patient_id == current_user.id).order_by(Payment.created_at.desc()).limit(limit).all()
+    user_id = getattr(current_user, "user_id", getattr(current_user, "id", None))
+    payments = db.query(Payment).join(Token).filter(Token.patient_id == user_id).order_by(Payment.created_at.desc()).limit(limit).all()
     return [PaymentResponse(**{k: v for k, v in p.__dict__.items() if not k.startswith('_')}) for p in payments]
 
 @router.get("/{payment_id}", response_model=PaymentResponse)
@@ -305,7 +306,8 @@ async def get_payment_details(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Payment not found")
         
     token = db.query(Token).filter(Token.id == payment.token_id).first()
-    if token.patient_id != current_user.id:
+    user_id = getattr(current_user, "user_id", getattr(current_user, "id", None))
+    if str(token.patient_id) != str(user_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
         
     return PaymentResponse(**{k: v for k, v in payment.__dict__.items() if not k.startswith('_')})
