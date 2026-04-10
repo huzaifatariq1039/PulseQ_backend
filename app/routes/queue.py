@@ -228,7 +228,7 @@ async def advance_queue_idempotent(
     return ok(data=result, message="Queue advanced (idempotent)")
 
 
-@router.post("/token/{token_id}/start", dependencies=[Depends(require_roles("doctor", "admin"))])
+@router.post("/token/{token_id}/start", dependencies=[Depends(require_roles("doctor", "admin", "patient"))])
 async def start_consultation(
     token_id: str,
     db: Session = Depends(get_db),
@@ -273,7 +273,7 @@ async def start_consultation(
     return ok(data={"token_id": token_id, "from": curr, "to": target}, message="Token moved to in_consultation")
 
 
-@router.post("/token/{token_id}/skip", dependencies=[Depends(require_roles("doctor", "admin", "receptionist"))])
+@router.post("/token/{token_id}/skip", dependencies=[Depends(require_roles("doctor", "admin", "receptionist", "patient"))])
 async def skip_patient(
     token_id: str,
     db: Session = Depends(get_db),
@@ -308,7 +308,7 @@ async def skip_patient(
     return ok(data={"token_id": token_id, "from": curr, "to": "skipped"}, message="Token skipped")
 
 
-@router.post("/token/{token_id}/complete", dependencies=[Depends(require_roles("doctor", "admin"))])
+@router.post("/token/{token_id}/complete", dependencies=[Depends(require_roles("doctor", "admin", "patient"))])
 async def complete_consultation(
     token_id: str,
     payload: Optional[Dict[str, Any]] = Body(None),

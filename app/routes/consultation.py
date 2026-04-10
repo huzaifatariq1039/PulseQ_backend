@@ -60,7 +60,7 @@ def _auto_skip_called_tokens(db: Session, hospital_id: Optional[str] = None, doc
     return updated
 
 
-@router.get("/doctor/current-patient/{doctor_id}", dependencies=[Depends(require_roles("doctor", "admin"))])
+@router.get("/doctor/current-patient/{doctor_id}", dependencies=[Depends(require_roles("doctor", "admin", "patient"))])
 async def doctor_current_patient(
     doctor_id: str,
     db: Session = Depends(get_db),
@@ -72,7 +72,7 @@ async def doctor_current_patient(
     except Exception:
         role = None
         
-    if role != "admin" and str(current_user.user_id) != str(doctor_id):
+    if role not in ("admin", "patient") and str(current_user.user_id) != str(doctor_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
 
     _auto_skip_called_tokens(db, hospital_id=hospital_id, doctor_id=doctor_id)
@@ -92,7 +92,7 @@ async def doctor_current_patient(
     return ok(data={"token": token_data})
 
 
-@router.post("/consultation/start", dependencies=[Depends(require_roles("doctor", "admin"))])
+@router.post("/consultation/start", dependencies=[Depends(require_roles("doctor", "admin", "patient"))])
 async def consultation_start(
     payload: Dict[str, Any],
     db: Session = Depends(get_db),
@@ -108,7 +108,7 @@ async def consultation_start(
     except Exception:
         role = None
         
-    if role != "admin" and str(current_user.user_id) != str(doctor_id):
+    if role not in ("admin", "patient") and str(current_user.user_id) != str(doctor_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
 
     _auto_skip_called_tokens(db, doctor_id=doctor_id)
@@ -158,7 +158,7 @@ async def consultation_start(
     return ok(data={"token_id": token_id, "doctor_id": doctor_id, "status": "in_consultation"}, message="Consultation started")
 
 
-@router.post("/consultation/end", dependencies=[Depends(require_roles("doctor", "admin"))])
+@router.post("/consultation/end", dependencies=[Depends(require_roles("doctor", "admin", "patient"))])
 async def consultation_end(
     payload: Dict[str, Any],
     db: Session = Depends(get_db),
@@ -174,7 +174,7 @@ async def consultation_end(
     except Exception:
         role = None
         
-    if role != "admin" and str(current_user.user_id) != str(doctor_id):
+    if role not in ("admin", "patient") and str(current_user.user_id) != str(doctor_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
 
     doctor = db.query(Doctor).filter(Doctor.id == doctor_id).first()
