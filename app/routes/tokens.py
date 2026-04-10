@@ -31,6 +31,13 @@ from app.utils.mrn import get_or_create_patient_mrn
 from app.utils.state import is_transition_allowed
 from app.utils.responses import ok
 from app.services.fee_calculator import compute_total_amount
+from app.routes.ai import (
+    get_current_hour, get_current_day, calculate_patients_ahead,
+    calculate_queue_length, calculate_queue_velocity, get_last_patient_duration,
+    avg_last_5, avg_last_30, count_available_doctors, get_hour_history,
+    get_weekday_history, get_doctor_history
+)
+from app.services.ai_engine import ai_engine
 
 router = APIRouter(prefix="/tokens", tags=["SmartTokens"])
 logger = logging.getLogger(__name__)
@@ -360,6 +367,47 @@ async def generate_smart_token(
     # Generate patient MRN if not exists
     mrn = get_or_create_patient_mrn(db, current_user.user_id, hospital_id)
 
+    # --- AI Estimated Wait Time Calculation ---
+    estimated_wait_time = 0
+    try:
+        # 1. Gather all required features for the AI model
+        patients_ahead = calculate_patients_ahead(doctor_id, db)
+        
+        # If it's the first token (no one ahead), wait time is 0
+        if patients_ahead == 0:
+            estimated_wait_time = 0
+        else:
+            # Gather all features as expected by AIEngine
+            ai_input = {
+                "hour_of_day": get_current_hour(),
+                "day_of_week": get_current_day(),
+                "patients_ahead_of_user": patients_ahead,
+                "patients_in_queue": calculate_queue_length(doctor_id),
+                "queue_velocity": calculate_queue_velocity(doctor_id, db),
+                "last_patient_duration": get_last_patient_duration(doctor_id, db),
+                "avg_service_time_last_5": avg_last_5(doctor_id, db),
+                "avg_service_time_last_30": avg_last_30(doctor_id, db),
+                "doctors_available": count_available_doctors(db),
+                "avg_wait_time_this_hour_past_week": get_hour_history(),
+                "avg_wait_time_this_weekday_past_month": get_weekday_history(),
+                "avg_service_time_doctor_history": get_doctor_history(doctor_id, db),
+                "doctor": doctor_data.get("name", "Unknown"),
+                "age": 30, # Default if not in user profile
+                "disease_type": payload.department or "General",
+                "clinic_type": "Specialist" if doctor_data.get("has_session") else "General"
+            }
+            
+            # 2. Get prediction from AI Engine
+            predicted_duration = ai_engine.predict_duration(ai_input)
+            
+            # 3. Calculate total wait time
+            estimated_wait_time = int(patients_ahead * predicted_duration)
+            
+    except Exception as e:
+        logger.error(f"Failed to calculate AI estimated wait time: {e}")
+        # Fallback: simple calculation (e.g., 15 mins per patient)
+        estimated_wait_time = calculate_patients_ahead(doctor_id, db) * 15
+
     token_doc = {
         "id": token_id,
         "token_number": token_number,
@@ -378,6 +426,7 @@ async def generate_smart_token(
         "consultation_fee": pricing.get("consultation_fee"),
         "session_fee": pricing.get("session_fee"),
         "total_fee": pricing.get("total_amount"),
+        "estimated_wait_time": estimated_wait_time,
         "created_at": datetime.utcnow(),
         "updated_at": datetime.utcnow(),
     }
