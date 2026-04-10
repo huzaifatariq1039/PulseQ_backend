@@ -67,6 +67,8 @@ async def get_doctor_queue_status(
     )
 
 @router.post("/doctor/{doctor_id}/advance")
+@router.post("/{doctor_id}/advance")
+@router.post("/{doctor_id}/advance-queue")
 @router.post("/doctor/{doctor_id}/advance-queue")
 async def advance_queue(
     doctor_id: str,
