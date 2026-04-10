@@ -382,7 +382,11 @@ async def generate_smart_token(
         "updated_at": datetime.utcnow(),
     }
     
-    new_token = Token(**token_doc)
+    # Create token model in PostgreSQL
+    valid_fields = {c.name for c in Token.__table__.columns}
+    filtered_token_doc = {k: v for k, v in token_doc.items() if k in valid_fields}
+    
+    new_token = Token(**filtered_token_doc)
     db.add(new_token)
     db.commit()
     db.refresh(new_token)
@@ -566,7 +570,11 @@ async def create_token(
         "updated_at": datetime.utcnow(),
     }
     
-    new_token = Token(**token_doc)
+    # Create token model in PostgreSQL
+    valid_fields = {c.name for c in Token.__table__.columns}
+    filtered_token_doc = {k: v for k, v in token_doc.items() if k in valid_fields}
+    
+    new_token = Token(**filtered_token_doc)
     db.add(new_token)
     db.commit()
     db.refresh(new_token)

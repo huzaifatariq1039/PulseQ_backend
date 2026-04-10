@@ -435,7 +435,10 @@ async def create_doctor(
             doctor_data["avatar_initials"] = doctor.name[:2].upper()
 
     # Create doctor in PostgreSQL
-    new_doctor = Doctor(**doctor_data)
+    valid_fields = {c.name for c in Doctor.__table__.columns}
+    filtered_doctor_data = {k: v for k, v in doctor_data.items() if k in valid_fields}
+    
+    new_doctor = Doctor(**filtered_doctor_data)
     db.add(new_doctor)
     db.commit()
     db.refresh(new_doctor)

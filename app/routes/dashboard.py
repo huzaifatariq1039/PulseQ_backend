@@ -674,7 +674,11 @@ async def create_activity_log_endpoint(
     if "metadata" in activity_data:
         activity_data["meta_data"] = activity_data.pop("metadata")
         
-    new_activity = ActivityLog(**activity_data)
+    # Create activity log model in PostgreSQL
+    valid_fields = {c.name for c in ActivityLog.__table__.columns}
+    filtered_activity_data = {k: v for k, v in activity_data.items() if k in valid_fields}
+    
+    new_activity = ActivityLog(**filtered_activity_data)
     db.add(new_activity)
     db.commit()
     db.refresh(new_activity)

@@ -81,6 +81,11 @@ async def create_hospital(hospital: HospitalCreate, db: Session = Depends(get_db
     hospital_data = hospital.dict()
     # Normalize city name to title case for consistent searching
     hospital_data["city"] = hospital_data["city"].strip().title()
+    
+    # Filter out fields that are not in the Hospital model (like distance_km, estimated_time_minutes)
+    valid_fields = {c.name for c in Hospital.__table__.columns}
+    filtered_data = {k: v for k, v in hospital_data.items() if k in valid_fields}
+    
     hospital_id = str(uuid.uuid4())
     now = datetime.utcnow()
 
@@ -88,7 +93,7 @@ async def create_hospital(hospital: HospitalCreate, db: Session = Depends(get_db
         id=hospital_id,
         created_at=now,
         updated_at=now,
-        **hospital_data,
+        **filtered_data,
     )
     db.add(h)
     db.commit()
