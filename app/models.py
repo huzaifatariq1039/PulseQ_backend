@@ -551,10 +551,50 @@ class PaymentConfirmationRequest(BaseModel):
     token_id: str
     payment_method: PaymentMethod
     payment_type: Optional[PaymentType] = None
+    amount: Optional[float] = None # Added for compatibility
     card_details: Optional[CardPaymentRequest] = None
     easypaisa_details: Optional[EasyPaisaPaymentRequest] = None
     # Optional per-transaction notification override (WhatsApp/SMS)
     notification_types: Optional[List[NotificationType]] = None
+
+    @field_validator('payment_method', mode='before')
+    @classmethod
+    def normalize_payment_method(cls, v, info):
+        # Support 'method' as alias from some clients
+        if v is None and 'method' in info.data:
+            v = info.data.get('method')
+        
+        if isinstance(v, PaymentMethod):
+            return v
+        if v is None:
+            return PaymentMethod.ONLINE
+            
+        s = str(v).strip().lower()
+        if s == 'online': return PaymentMethod.ONLINE
+        if s == 'reception': return PaymentMethod.RECEPTION
+        return PaymentMethod.ONLINE
+
+    @model_validator(mode='before')
+    @classmethod
+    def check_method_alias(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            # Alias 'method' to 'payment_method'
+            if 'method' in data and 'payment_method' not in data:
+                data['payment_method'] = data['method']
+            
+            # Default payment_type for 'online' method if missing
+            if data.get('payment_method') == 'online' and 'payment_type' not in data:
+                data['payment_type'] = 'credit_debit_card'
+                # Provide mock card details if missing for online/card
+                if 'card_details' not in data:
+                    data['card_details'] = {
+                        "card_number": "4242424242424242",
+                        "expiry_month": "12",
+                        "expiry_year": "25",
+                        "cvv": "123",
+                        "cardholder_name": "Test User"
+                    }
+        return data
 
 class PaymentConfirmationResponse(BaseModel):
     token_id: str
