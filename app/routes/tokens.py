@@ -369,26 +369,40 @@ async def generate_smart_token(
 
     # --- AI Estimated Wait Time Calculation ---
     estimated_wait_time = 0
-    today = datetime.utcnow().date()
+    # Use the date from the appointment_date payload to match tokens correctly
+    # We strip the time component to compare dates in the database
+    target_date = appointment_date.date() if hasattr(appointment_date, 'date') else appointment_date
+    
     try:
-        # Check if there are ANY tokens today for this doctor to determine if this is the first one
+        # 1. Count ALL tokens for this doctor on the TARGET date
+        # This determines if the doctor has any queue at all for that day
         total_tokens_today = db.query(Token).filter(
             Token.doctor_id == doctor_id,
-            func.date(Token.appointment_date) == today
+            func.date(Token.appointment_date) == target_date
         ).count()
         
+        # 2. Count patients currently ahead (active in queue)
         patients_ahead = db.query(Token).filter(
             Token.doctor_id == doctor_id,
             Token.status.in_(["waiting", "confirmed", "pending", "called", "in_consultation"]),
-            func.date(Token.appointment_date) == today
+            func.date(Token.appointment_date) == target_date
         ).count()
         
-        # If no one is ahead AND this is the first token of the day, wait time is 0
-        if patients_ahead == 0 and total_tokens_today == 0:
+        print(f"[DEBUG] AI Wait Time Calculation:")
+        print(f"  - Doctor ID: {doctor_id}")
+        print(f"  - Target Date: {target_date}")
+        print(f"  - Total Tokens Today: {total_tokens_today}")
+        print(f"  - Patients Ahead: {patients_ahead}")
+        
+        # LOGIC:
+        # If total_tokens_today is 0, this is the very first token of the day -> 0 mins.
+        # If total_tokens_today > 0, there is already a queue -> Calculate using AI.
+        if total_tokens_today == 0:
             estimated_wait_time = 0
-            print(f"[DEBUG] AI Wait Time: First token of the day, setting to 0")
+            print(f"  - Result: First token of the day, setting to 0")
         else:
-            # If there are patients ahead OR it's not the first token, calculate using AI
+            # It's not the first token, so we must calculate a wait time.
+            # We use at least 1 as the multiplier if the queue is currently empty but tokens were booked earlier.
             calc_ahead = max(patients_ahead, 1)
             
             # Ensure AI engine is loaded
@@ -415,17 +429,18 @@ async def generate_smart_token(
             }
             
             predicted_duration = ai_engine.predict_duration(ai_input)
+            # Ensure the duration is at least a reasonable minimum (e.g., 10 mins) if AI returns something too low
+            predicted_duration = max(predicted_duration, 10)
+            
             estimated_wait_time = int(calc_ahead * predicted_duration)
-            print(f"[DEBUG] AI Wait Time: {calc_ahead} ahead, predicted duration {predicted_duration}, total {estimated_wait_time}")
+            print(f"  - Result: AI Predicted {predicted_duration}m per patient. Total: {estimated_wait_time}m")
             
     except Exception as e:
         print(f"[ERROR] AI Wait Time Calculation failed: {e}")
-        patients_ahead_fallback = db.query(Token).filter(
-            Token.doctor_id == doctor_id,
-            Token.status.in_(["waiting", "confirmed", "pending", "called", "in_consultation"]),
-            func.date(Token.appointment_date) == today
-        ).count()
-        estimated_wait_time = max(patients_ahead_fallback, 1) * 15
+        # Fallback
+        calc_ahead_fallback = max(patients_ahead if 'patients_ahead' in locals() else 0, 1)
+        estimated_wait_time = calc_ahead_fallback * 15
+        print(f"  - Result: Fallback used: {estimated_wait_time}m")
 
     token_doc = {
         "id": token_id,
