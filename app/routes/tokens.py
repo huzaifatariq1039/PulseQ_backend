@@ -733,6 +733,17 @@ async def update_token_status(
     token.status = new_status
     token.updated_at = datetime.utcnow()
     
+    # Update timing fields based on status
+    if new_status == "in_progress" and old_status != "in_progress":
+        token.started_at = datetime.utcnow()
+    elif new_status == "completed" and old_status != "completed":
+        token.completed_at = datetime.utcnow()
+        if token.started_at:
+            duration = (token.completed_at - token.started_at).total_seconds() / 60.0
+            token.duration_minutes = round(duration, 2)
+    elif new_status == "cancelled" and old_status != "cancelled":
+        token.cancelled_at = datetime.utcnow()
+    
     # If status is moving to completed or cancelled, trigger recalculation for remaining tokens
     # Also if someone is "called", the wait times for others might change
     if new_status != old_status:

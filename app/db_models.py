@@ -170,6 +170,9 @@ class Token(Base):
     confirmation_status = Column(String(50), nullable=True)
     confirmed_at = Column(DateTime(timezone=True), nullable=True)
     cancelled_at = Column(DateTime(timezone=True), nullable=True)
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    duration_minutes = Column(Float, nullable=True)
 
     # Relationships
     patient = relationship("User", back_populates="tokens")
