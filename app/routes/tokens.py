@@ -49,6 +49,52 @@ def _tz_offset_for(doctor_data: dict, hospital_data: dict | None = None) -> int:
         pass
     return 300
 
+def _to_smart_token_response(t: Token) -> SmartTokenResponse:
+    """Explicitly map Token model to SmartTokenResponse schema."""
+    # Handle status/payment_status enum normalization
+    status_val = str(t.status.value if hasattr(t.status, 'value') else t.status).lower()
+    pay_status_val = str(t.payment_status.value if hasattr(t.payment_status, 'value') else t.payment_status).lower()
+    
+    # Calculate is_active flag
+    is_active = status_val not in ["cancelled", "completed"]
+
+    return SmartTokenResponse(
+        id=str(t.id),
+        patient_id=str(t.patient_id),
+        doctor_id=str(t.doctor_id),
+        hospital_id=str(t.hospital_id),
+        mrn=t.mrn,
+        token_number=t.token_number,
+        hex_code=t.hex_code,
+        display_code=t.display_code,
+        appointment_date=t.appointment_date,
+        status=status_val,
+        payment_status=pay_status_val,
+        payment_method=t.payment_method,
+        queue_position=t.queue_position,
+        total_queue=t.total_queue,
+        estimated_wait_time=t.estimated_wait_time,
+        consultation_fee=t.consultation_fee,
+        session_fee=t.session_fee,
+        total_fee=t.total_fee,
+        department=t.department,
+        created_at=t.created_at,
+        updated_at=t.updated_at,
+        is_active=is_active,
+        doctor_name=t.doctor_name,
+        doctor_specialization=t.doctor_specialization,
+        doctor_avatar_initials=t.doctor_avatar_initials,
+        hospital_name=t.hospital_name,
+        patient_name=t.patient_name,
+        patient_phone=t.patient_phone,
+        queue_opt_in=bool(t.queue_opt_in),
+        queue_opted_in_at=t.queue_opted_in_at,
+        confirmed=bool(t.confirmed),
+        confirmation_status=t.confirmation_status,
+        confirmed_at=t.confirmed_at,
+        cancelled_at=t.cancelled_at
+    )
+
 def _local_day_for(dt_utc: datetime, tz_minutes: int) -> datetime.date:
     try:
         if dt_utc.tzinfo is None:
@@ -343,7 +389,7 @@ async def generate_smart_token(
 
     await create_activity_log(current_user.user_id, ActivityType.TOKEN_GENERATED, f"Generated Token #{token_number}", {"token_id": token_id}, db=db)
     
-    return SmartTokenResponse(**{k: v for k, v in new_token.__dict__.items() if not k.startswith('_')})
+    return _to_smart_token_response(new_token)
 
 @router.post("/{token_id}/cancel", response_model=CancellationResponse)
 async def cancel_token_endpoint(
@@ -369,7 +415,7 @@ async def get_my_tokens(
     if only_active:
         query = query.filter(Token.status.notin_(["cancelled", "completed"]))
     tokens = query.order_by(Token.created_at.desc()).all()
-    return [SmartTokenResponse(**{k: v for k, v in t.__dict__.items() if not k.startswith('_')}) for t in tokens]
+    return [_to_smart_token_response(t) for t in tokens]
 
 @router.get("/my-upcoming")
 async def get_my_upcoming_tokens(
@@ -412,7 +458,7 @@ async def get_appointment_details(
     queue = SmartTokenService.get_queue_status(token.doctor_id, token.token_number, token.appointment_date)
     
     return {
-        "token": SmartTokenResponse(**{k: v for k, v in token.__dict__.items() if not k.startswith('_')}),
+        "token": _to_smart_token_response(token),
         "doctor": {k: v for k, v in doctor.__dict__.items() if not k.startswith('_')} if doctor else {},
         "hospital": {k: v for k, v in hospital.__dict__.items() if not k.startswith('_')} if hospital else {},
         "queue": queue
@@ -531,13 +577,11 @@ async def create_token(
     db.refresh(new_token)
 
     q = _queue_object_for(db, spec.doctor_id, spec.hospital_id, day, token_number)
+    token_resp = _to_smart_token_response(new_token)
+    
+    # We return a custom object here because the frontend expects 'queue' embedded
     return {
-        "id": token_id,
-        "token_number": token_number,
-        "doctor_id": spec.doctor_id,
-        "hospital_id": spec.hospital_id,
-        "appointment_date": appt_dt_utc,
-        "status": TokenStatus.PENDING,
+        **token_resp.model_dump(),
         "queue": q,
     }
 
@@ -573,7 +617,7 @@ async def get_my_active_token(
     if not token:
         raise HTTPException(status_code=404, detail="No active token found")
     
-    return SmartTokenResponse(**{k: v for k, v in token.__dict__.items() if not k.startswith('_')})
+    return _to_smart_token_response(token)
 
 @router.get("/my-active-details")
 async def get_my_active_token_details(
@@ -592,7 +636,7 @@ async def get_token_history(
         Token.patient_id == current_user.user_id,
         Token.status.in_(["cancelled", "completed"])
     ).order_by(Token.created_at.desc()).all()
-    return [SmartTokenResponse(**{k: v for k, v in t.__dict__.items() if not k.startswith('_')}) for t in tokens]
+    return [_to_smart_token_response(t) for t in tokens]
 
 @router.get("/generate/form-data")
 async def generate_token_form_data(

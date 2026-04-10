@@ -66,7 +66,48 @@ async def list_tokens(
     offset = (page - 1) * limit
     tokens_objs = query.order_by(Token.created_at.desc()).offset(offset).limit(limit).all()
     
-    page_items = [{k: v for k, v in t.__dict__.items() if not k.startswith('_')} for t in tokens_objs]
+    # Map objects explicitly to avoid __dict__ issues after db.refresh() or similar
+    page_items = []
+    for t in tokens_objs:
+        status_val = str(t.status.value if hasattr(t.status, 'value') else t.status).lower()
+        pay_status_val = str(t.payment_status.value if hasattr(t.payment_status, 'value') else t.payment_status).lower()
+        
+        page_items.append({
+            "id": str(t.id),
+            "patient_id": str(t.patient_id),
+            "doctor_id": str(t.doctor_id),
+            "hospital_id": str(t.hospital_id),
+            "mrn": t.mrn,
+            "token_number": t.token_number,
+            "hex_code": t.hex_code,
+            "display_code": t.display_code,
+            "appointment_date": t.appointment_date,
+            "status": status_val,
+            "payment_status": pay_status_val,
+            "payment_method": t.payment_method,
+            "queue_position": t.queue_position,
+            "total_queue": t.total_queue,
+            "estimated_wait_time": t.estimated_wait_time,
+            "consultation_fee": t.consultation_fee,
+            "session_fee": t.session_fee,
+            "total_fee": t.total_fee,
+            "department": t.department,
+            "created_at": t.created_at,
+            "updated_at": t.updated_at,
+            "is_active": status_val not in ["cancelled", "completed"],
+            "doctor_name": t.doctor_name,
+            "doctor_specialization": t.doctor_specialization,
+            "doctor_avatar_initials": t.doctor_avatar_initials,
+            "hospital_name": t.hospital_name,
+            "patient_name": t.patient_name,
+            "patient_phone": t.patient_phone,
+            "queue_opt_in": bool(t.queue_opt_in),
+            "queue_opted_in_at": t.queue_opted_in_at,
+            "confirmed": bool(t.confirmed),
+            "confirmation_status": t.confirmation_status,
+            "confirmed_at": t.confirmed_at,
+            "cancelled_at": t.cancelled_at
+        })
 
     return ok(
         data=page_items,
