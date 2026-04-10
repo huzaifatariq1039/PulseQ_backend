@@ -65,7 +65,8 @@ def _cache_set(key: str, val: object, ttl: int = _CACHE_TTL_SECONDS):
 async def create_hospital(hospital: HospitalCreate, db: Session = Depends(get_db)):
     """Create a new hospital (Admin only)"""
 
-    # Check if hospital with same name and address already exists
+    # Check if exact same hospital (name AND address) already exists
+    # We allow same name at different addresses, and different names at same address.
     existing = (
         db.query(Hospital)
         .filter(Hospital.name == hospital.name)
@@ -75,7 +76,7 @@ async def create_hospital(hospital: HospitalCreate, db: Session = Depends(get_db
     if existing:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Hospital with this name and address already exists"
+            detail="This exact hospital (same name and address) is already registered"
         )
 
     hospital_data = hospital.dict()
@@ -98,8 +99,12 @@ async def create_hospital(hospital: HospitalCreate, db: Session = Depends(get_db
     db.add(h)
     db.commit()
     db.refresh(h)
-    out = {k: v for k, v in h.__dict__.items() if not k.startswith('_')}
-    return ok(data=HospitalResponse(**out), message="Hospital created successfully")
+    
+    # Map DB model to response dict, then to Pydantic for validation, then to dict for JSON serialization
+    out_dict = {k: v for k, v in h.__dict__.items() if not k.startswith('_')}
+    response_obj = HospitalResponse(**out_dict)
+    
+    return ok(data=response_obj.model_dump(), message="Hospital created successfully")
 
 # ===============================
 # NEW: Live Nearby via OpenStreetMap (Overpass API)
