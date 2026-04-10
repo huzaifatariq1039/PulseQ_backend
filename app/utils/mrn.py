@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Any, Dict, Optional
-
-from app.config import COLLECTIONS
-
+from sqlalchemy.orm import Session
+from app.db_models import User, HospitalSequence
+import uuid
 
 def format_mrn(seq: int) -> str:
     # Frontend format: MRN-0001
@@ -15,98 +15,49 @@ def format_mrn(seq: int) -> str:
     return f"MRN-{max(n, 0):04d}"
 
 
-def get_or_create_patient_mrn(db, hospital_id: str, patient_id: str) -> Optional[str]:
-
+def get_or_create_patient_mrn(db: Session, patient_id: str, hospital_id: str) -> Optional[str]:
+    """
+    Get or create a patient MRN for a specific hospital.
+    The order of arguments (db, patient_id, hospital_id) matches what's used in routes/tokens.py.
+    """
     hid = str(hospital_id or "").strip()
     pid = str(patient_id or "").strip()
     if not hid or not pid:
         return None
 
-    users_ref = db.collection(COLLECTIONS["USERS"]).document(pid)
-    counter_ref = db.collection(COLLECTIONS["COUNTERS"]).document(f"mrn_{hid}")
-
-    def _extract_existing(user_doc: Dict[str, Any]) -> Optional[str]:
-        try:
-            by_h = user_doc.get("mrn_by_hospital") or {}
-            if isinstance(by_h, dict):
-                val = by_h.get(hid)
-                if isinstance(val, str) and val.strip():
-                    return val.strip()
-        except Exception:
-            pass
-
-        # Back-compat legacy fields (not per-hospital)
-        for k in ("mrn", "patient_mrn"):
-            v = user_doc.get(k)
-            if isinstance(v, str) and v.strip():
-                return v.strip()
+    # Get user
+    user = db.query(User).filter(User.id == pid).first()
+    if not user:
         return None
 
-    # Fast path: user doc already has mapping
-    try:
-        snap = users_ref.get()
-        user_doc = snap.to_dict() if getattr(snap, "exists", False) else {}
-        existing = _extract_existing(user_doc or {})
-        if existing:
-            # Ensure mapping exists for this hospital if old global mrn exists
-            try:
-                by_h = (user_doc or {}).get("mrn_by_hospital")
-                if not isinstance(by_h, dict) or not by_h.get(hid):
-                    users_ref.set({"mrn_by_hospital": {hid: existing}, "updated_at": datetime.utcnow()}, merge=True)
-            except Exception:
-                pass
-            return existing
-    except Exception:
-        pass
+    # Check if user already has an MRN for this hospital
+    mrn_by_hospital = user.mrn_by_hospital or {}
+    if hid in mrn_by_hospital:
+        return mrn_by_hospital[hid]
 
-    # Transactional allocation
-    tx_factory = getattr(db, "transaction", None)
-    if callable(tx_factory):
-        transaction = tx_factory()
+    # Need to generate a new MRN
+    # Use HospitalSequence for atomic counting (simplified)
+    seq_record = db.query(HospitalSequence).filter(HospitalSequence.hospital_id == hid).with_for_update().first()
+    if not seq_record:
+        # Create a new sequence record for this hospital if it doesn't exist
+        seq_record = HospitalSequence(
+            id=str(uuid.uuid4()),
+            hospital_id=hid,
+            mrn_seq=0
+        )
+        db.add(seq_record)
+        db.flush() # Ensure it's in the DB for the current transaction
 
-        def _txn(txn):
-            usnap = users_ref.get(transaction=txn)
-            udoc = usnap.to_dict() if getattr(usnap, "exists", False) else {}
-            existing2 = _extract_existing(udoc or {})
-            if existing2:
-                txn.set(users_ref, {"mrn_by_hospital": {hid: existing2}, "updated_at": datetime.utcnow()}, merge=True)
-                return existing2
+    seq_record.mrn_seq += 1
+    new_seq = seq_record.mrn_seq
+    mrn_val = format_mrn(new_seq)
 
-            csnap = counter_ref.get(transaction=txn)
-            cdoc = csnap.to_dict() if getattr(csnap, "exists", False) else {}
-            try:
-                seq = int((cdoc or {}).get("seq") or 0)
-            except Exception:
-                seq = 0
-            new_seq = seq + 1
-            mrn_val = format_mrn(new_seq)
+    # Update user's MRN map
+    # Create a new dict for mrn_by_hospital to ensure SQLAlchemy detects the change
+    new_mrn_map = dict(user.mrn_by_hospital or {})
+    new_mrn_map[hid] = mrn_val
+    user.mrn_by_hospital = new_mrn_map
+    user.updated_at = datetime.utcnow()
 
-            txn.set(counter_ref, {"seq": new_seq, "hospital_id": hid, "updated_at": datetime.utcnow()}, merge=True)
-            txn.set(
-                users_ref,
-                {"mrn_by_hospital": {hid: mrn_val}, "updated_at": datetime.utcnow()},
-                merge=True,
-            )
-            return mrn_val
-
-        try:
-            return _txn(transaction)
-        except Exception:
-            # Fall back to non-transactional best-effort
-            pass
-
-    # Fallback (best-effort): not fully race-proof but avoids total failure
-    try:
-        csnap = counter_ref.get()
-        cdoc = csnap.to_dict() if getattr(csnap, "exists", False) else {}
-        try:
-            seq = int((cdoc or {}).get("seq") or 0)
-        except Exception:
-            seq = 0
-        new_seq = seq + 1
-        mrn_val = format_mrn(new_seq)
-        counter_ref.set({"seq": new_seq, "hospital_id": hid, "updated_at": datetime.utcnow()}, merge=True)
-        users_ref.set({"mrn_by_hospital": {hid: mrn_val}, "updated_at": datetime.utcnow()}, merge=True)
-        return mrn_val
-    except Exception:
-        return None
+    # Commit is handled by the caller (routes)
+    return mrn_val

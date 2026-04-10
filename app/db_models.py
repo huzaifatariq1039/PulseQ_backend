@@ -62,6 +62,7 @@ class User(Base):
     location_access = Column(Boolean, default=False)
     date_of_birth = Column(String(20), nullable=True)
     address = Column(String(500), nullable=True)
+    mrn_by_hospital = Column(JSON, default=dict) # Added for MRN tracking
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
@@ -174,6 +175,15 @@ class Token(Base):
     doctor = relationship("Doctor", back_populates="tokens")
     payments = relationship("Payment", back_populates="token")
 
+
+# Hospital Sequence for MRN and other numbering
+class HospitalSequence(Base):
+    __tablename__ = "hospital_sequences"
+    
+    id = Column(String, primary_key=True, index=True)
+    hospital_id = Column(String, ForeignKey("hospitals.id"), nullable=False, unique=True)
+    mrn_seq = Column(Integer, default=0)
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
 # Payment Model
 class Payment(Base):
