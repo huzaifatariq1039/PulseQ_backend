@@ -40,9 +40,14 @@ def calculate_patients_ahead(doctor_id: str, db: Session) -> int:
     return count
 
 
-def calculate_queue_length(doctor_id: str) -> int:
-    # TODO: integrate with queue snapshot for real-time value
-    return 0
+def calculate_queue_length(doctor_id: str, db: Session) -> int:
+    """Returns the total number of patients currently in the queue for a doctor."""
+    today = datetime.utcnow().date()
+    return db.query(Token).filter(
+        Token.doctor_id == doctor_id,
+        Token.status.in_(["waiting", "confirmed", "pending", "called", "in_consultation"]),
+        func.date(Token.appointment_date) == today
+    ).count()
 
 
 def calculate_queue_velocity(doctor_id: str, db: Session) -> float:
@@ -86,12 +91,32 @@ def count_available_doctors(db: Session) -> int:
         return 1
 
 
-def get_hour_history() -> float:
-    return 0.0
+def get_hour_history(db: Session) -> float:
+    """Average duration for all doctors during the current hour of the day."""
+    current_hour = get_current_hour()
+    tokens = db.query(Token).filter(
+        Token.status == "completed",
+        func.extract('hour', Token.completed_at) == current_hour
+    ).limit(100).all()
+    
+    durations = [_extract_duration_minutes(t) for t in tokens]
+    if not durations:
+        return 12.0 # Default fallback for empty history
+    return float(sum(durations) / len(durations))
 
 
-def get_weekday_history() -> float:
-    return 0.0
+def get_weekday_history(db: Session) -> float:
+    """Average duration for all doctors on the current day of the week."""
+    current_day = get_current_day()
+    tokens = db.query(Token).filter(
+        Token.status == "completed",
+        func.extract('dow', Token.completed_at) == current_day
+    ).limit(100).all()
+    
+    durations = [_extract_duration_minutes(t) for t in tokens]
+    if not durations:
+        return 15.0 # Default fallback for empty history
+    return float(sum(durations) / len(durations))
 
 
 def get_doctor_history(doctor_id: str, db: Session) -> float:
@@ -148,14 +173,14 @@ def predict_wait_time(req: AIPredictRequest, db: Session = Depends(get_db)):
         "hour_of_day": get_current_hour(),
         "day_of_week": get_current_day(),
         "patients_ahead_of_user": calculate_patients_ahead(req.doctor, db),
-        "patients_in_queue": calculate_queue_length(req.doctor),
+        "patients_in_queue": calculate_queue_length(req.doctor, db),
         "queue_velocity": calculate_queue_velocity(req.doctor, db),
         "last_patient_duration": get_last_patient_duration(req.doctor, db),
         "avg_service_time_last_5": avg_last_5(req.doctor, db),
         "avg_service_time_last_30": avg_last_30(req.doctor, db),
         "doctors_available": count_available_doctors(db),
-        "avg_wait_time_this_hour_past_week": get_hour_history(),
-        "avg_wait_time_this_weekday_past_month": get_weekday_history(),
+        "avg_wait_time_this_hour_past_week": get_hour_history(db),
+        "avg_wait_time_this_weekday_past_month": get_weekday_history(db),
         "avg_service_time_doctor_history": get_doctor_history(req.doctor, db),
         "weather": get_weather_code(),
         "total_clinic_duration": get_clinic_duration(),

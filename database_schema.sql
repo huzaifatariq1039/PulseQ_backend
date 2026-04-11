@@ -103,6 +103,13 @@ CREATE TABLE tokens (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     
+    -- Status/Confirmation Tracking
+    confirmed_at TIMESTAMP WITH TIME ZONE,
+    cancelled_at TIMESTAMP WITH TIME ZONE,
+    started_at TIMESTAMP WITH TIME ZONE,
+    completed_at TIMESTAMP WITH TIME ZONE,
+    duration_minutes FLOAT,
+    
     -- Embedded snapshots
     doctor_name VARCHAR(100),
     doctor_specialization VARCHAR(100),
