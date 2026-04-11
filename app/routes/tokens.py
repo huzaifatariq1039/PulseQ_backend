@@ -203,10 +203,11 @@ def _recalculate_token_wait_times(db: Session, doctor_id: str, hospital_id: str,
         doctor_data = {k: v for k, v in doctor.__dict__.items() if not k.startswith('_')}
         
         # 2. Get all active tokens for this doctor today, ordered by token number
+        # Include all statuses that represent someone ahead in the queue
         active_tokens = db.query(Token).filter(
             Token.doctor_id == doctor_id,
             func.date(Token.appointment_date) == day_local,
-            Token.status.in_(["pending", "confirmed", "waiting", "called"])
+            Token.status.in_(["pending", "confirmed", "waiting", "called", "in_progress", "in_consultation"])
         ).order_by(Token.token_number.asc()).all()
         
         if not active_tokens:
@@ -476,20 +477,20 @@ async def generate_smart_token(
     target_date = appointment_date.date() if hasattr(appointment_date, 'date') else appointment_date
     
     try:
-        # 1. Count ALL tokens for this doctor on the TARGET date
+        # 1. Count ALL ACTIVE tokens for this doctor on the TARGET date
         # This determines if the doctor has any queue at all for that day
         total_tokens_today = db.query(Token).filter(
             Token.doctor_id == doctor_id,
+            Token.status.notin_(["cancelled"]),
             func.date(Token.appointment_date) == target_date
         ).count()
         
         # 2. Count patients currently ahead (active in queue)
-        # Problem 5 Fix: Only count patients who are actually in the queue lifecycle
-        # We exclude 'pending' if it means they haven't paid/confirmed, 
-        # but here the lifecycle seems to include waiting/confirmed as "present".
+        # Problem 5 Refined: Include 'pending' tokens so that every new booking increments the wait time for the next person.
+        # We only exclude 'cancelled' and 'completed' tokens.
         patients_ahead = db.query(Token).filter(
             Token.doctor_id == doctor_id,
-            Token.status.in_(["waiting", "confirmed", "called", "in_consultation"]),
+            Token.status.in_(["pending", "waiting", "confirmed", "called", "in_consultation"]),
             func.date(Token.appointment_date) == target_date
         ).count()
         
