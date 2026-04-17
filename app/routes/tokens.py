@@ -228,14 +228,20 @@ def _recalculate_token_wait_times(db: Session, doctor_id: str, hospital_id: str,
         hour_hist = get_hour_history(db)
         weekday_hist = get_weekday_history(db)
         
-        # 6. Update each token: Use the AI model to predict individual durations and sum them
-        # Token 0 (serving) -> Wait = 0
-        # Token 1 -> Wait = Prediction(Token 0)
-        # Token 2 -> Wait = Prediction(Token 0) + Prediction(Token 1)
+        # 6. Update each token: Use the Core Formula (Σ Ti * L * H)
         cumulative_wait = 0
+        current_hour = get_current_hour()
+        is_peak = 9 <= current_hour <= 12 or 17 <= current_hour <= 20
+        hour_factor = 1.3 if is_peak else 1.0
+        
+        # Load Factor (L) - busy doctor = slower
+        # We calculate it once for the doctor's current state
+        q_len = len(active_tokens)
+        load_factor = 1 + (min(q_len, 20) / 20) # Max 2.0 factor for very busy queues
+        
         for i, token in enumerate(active_tokens):
             # 1. This token's wait is the current cumulative sum
-            token.estimated_wait_time = int(cumulative_wait)
+            token.estimated_wait_time = int(round(cumulative_wait))
             token.updated_at = datetime.utcnow()
             
             # 2. Predict THIS patient's duration to add for the NEXT person in queue
@@ -249,10 +255,10 @@ def _recalculate_token_wait_times(db: Session, doctor_id: str, hospital_id: str,
                     except Exception: pass
 
             ai_input = {
-                "hour_of_day": get_current_hour(),
+                "hour_of_day": current_hour,
                 "day_of_week": get_current_day(),
                 "patients_ahead_of_user": i,
-                "patients_in_queue": len(active_tokens), 
+                "patients_in_queue": q_len, 
                 "queue_velocity": q_velocity,
                 "last_patient_duration": last_duration,
                 "avg_service_time_last_5": avg_5,
@@ -269,23 +275,29 @@ def _recalculate_token_wait_times(db: Session, doctor_id: str, hospital_id: str,
             
             try:
                 # --- TRACE LOGGING (STEP 3) ---
-                print(f"➡️ Predicting duration for patient at index {i} to add to queue wait")
+                print(f"➡️ Predicting duration for patient at index {i} using Core Formula")
                 
-                # The model predicts the duration of a single consultation
-                predicted_duration = ai_engine.predict_duration(ai_input)
+                # Model prediction (Ti)
+                base_time = ai_engine.predict_duration(ai_input)
                 
-                print(f"   Returned AI Duration: {predicted_duration}")
+                # 🔥 SAFETY: avoid constant output problem
+                if base_time < 3:
+                    base_time = 5   # minimum realistic consultation time
                 
-                # Add to cumulative wait (strictly follow model output)
-                cumulative_wait += max(float(predicted_duration), 1.0)
+                # Adjusted time = Ti * L * H
+                adjusted_time = base_time * load_factor * hour_factor
+                
+                print(f"   Base Ti: {base_time}, L: {load_factor:.2f}, H: {hour_factor}, Adjusted: {adjusted_time:.2f}")
+                
+                cumulative_wait += adjusted_time
             except Exception as e:
                 # --- SILENT FALLBACK CHECK (STEP 4) ---
                 print(f"❌ AI DURATION PREDICTION FAILED for index {i}: {e}")
-                # Fallback: Use doctor's history or 10m
-                cumulative_wait += doc_history if doc_history > 5 else 10
+                fallback_per_patient = (doc_history if doc_history > 5 else 10) * load_factor * hour_factor
+                cumulative_wait += fallback_per_patient
             
         db.commit()
-        print(f"[DEBUG] Recalculated dynamic wait times using Cumulative Duration logic.")
+        print(f"[DEBUG] Recalculated dynamic wait times using Core Formula (Σ Ti * L * H).")
         
     except Exception as e:
         print(f"[ERROR] Failed to recalculate wait times: {e}")
@@ -505,10 +517,7 @@ async def generate_smart_token(
             estimated_wait_time = 0
             print(f"  - Result: First token of the day, setting to 0")
         else:
-            # Revert to Cumulative Duration logic: Sum predicted durations of ALL patients ahead
-            # P1 wait = 0
-            # P2 wait = Dur(P1)
-            # P3 wait = Dur(P1) + Dur(P2)
+            # Core Formula: Σ Ti * L * H
             active_ahead = db.query(Token).filter(
                 Token.doctor_id == doctor_id,
                 Token.status.in_(["pending", "waiting", "confirmed", "called", "in_consultation"]),
@@ -516,6 +525,13 @@ async def generate_smart_token(
             ).order_by(Token.token_number.asc()).all()
             
             cumulative_wait = 0
+            current_hour = get_current_hour()
+            is_peak = 9 <= current_hour <= 12 or 17 <= current_hour <= 20
+            hour_factor = 1.3 if is_peak else 1.0
+            
+            # Load Factor (L)
+            q_len = len(active_ahead)
+            load_factor = 1 + (min(q_len, 20) / 20)
             
             # Ensure AI engine is loaded
             if not ai_engine.model:
@@ -543,10 +559,10 @@ async def generate_smart_token(
                         except Exception: pass
 
                 ai_input = {
-                    "hour_of_day": get_current_hour(),
+                    "hour_of_day": current_hour,
                     "day_of_week": get_current_day(),
                     "patients_ahead_of_user": i,
-                    "patients_in_queue": len(active_ahead), 
+                    "patients_in_queue": q_len, 
                     "queue_velocity": q_velocity,
                     "last_patient_duration": last_duration,
                     "avg_service_time_last_5": avg_5,
@@ -563,21 +579,29 @@ async def generate_smart_token(
                 
                 try:
                     # --- TRACE LOGGING (STEP 3) ---
-                    print(f"➡️ Generating token: Predicting duration for patient ahead at index {i}")
+                    print(f"➡️ Generating token: Predicting duration for patient ahead at index {i} using Core Formula")
                     
-                    predicted_dur = ai_engine.predict_duration(ai_input)
+                    # Model prediction (Ti)
+                    base_time = ai_engine.predict_duration(ai_input)
                     
-                    print(f"   Returned Duration: {predicted_dur}")
+                    # 🔥 SAFETY: avoid constant output problem
+                    if base_time < 3:
+                        base_time = 5   # minimum realistic consultation time
                     
-                    # Add this person's predicted duration to the cumulative wait
-                    cumulative_wait += max(float(predicted_dur), 1.0)
+                    # Adjusted time = Ti * L * H
+                    adjusted_time = base_time * load_factor * hour_factor
+                    
+                    print(f"   Base Ti: {base_time}, L: {load_factor:.2f}, H: {hour_factor}, Adjusted: {adjusted_time:.2f}")
+                    
+                    cumulative_wait += adjusted_time
                 except Exception as e:
                     # --- SILENT FALLBACK CHECK (STEP 4) ---
                     print(f"❌ AI PREDICTION FAILED for patient ahead {i}: {e}")
-                    cumulative_wait += doc_history if doc_history > 5 else 10
+                    fallback_per_patient = (doc_history if doc_history > 5 else 10) * load_factor * hour_factor
+                    cumulative_wait += fallback_per_patient
             
-            estimated_wait_time = int(cumulative_wait)
-            print(f"  - Result: AI Dynamic Wait Time calculated as {estimated_wait_time}m")
+            estimated_wait_time = int(round(cumulative_wait))
+            print(f"  - Result: AI Dynamic Wait Time (Core Formula) calculated as {estimated_wait_time}m")
             
     except Exception as e:
         print(f"[ERROR] AI Wait Time Calculation failed: {e}")
