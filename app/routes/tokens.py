@@ -232,14 +232,19 @@ def _recalculate_token_wait_times(db: Session, doctor_id: str, hospital_id: str,
         hour_hist = get_hour_history(db)
         weekday_hist = get_weekday_history(db)
         
-        # 6. Update each token using cumulative duration for dynamic wait times
-        cumulative_wait = 0
+        # 6. Update each token: Use the AI model to predict the TOTAL wait time directly
+        # Based on the current number of people ahead of each token.
         for i, token in enumerate(active_tokens):
-            # 1. This token's wait is the current cumulative sum
-            token.estimated_wait_time = int(cumulative_wait)
-            token.updated_at = datetime.utcnow()
+            # patients_ahead for this specific token is its index in the sorted active list
+            patients_ahead = i 
             
-            # 2. Predict THIS patient's duration to add for the NEXT person
+            # If it's the very first person in the queue, wait time is 0
+            if patients_ahead == 0:
+                token.estimated_wait_time = 0
+                token.updated_at = datetime.utcnow()
+                continue
+
+            # Predict TOTAL wait time for this position
             user_age = 30
             if token.patient_id:
                 patient_user = db.query(User).filter(User.id == token.patient_id).first()
@@ -252,7 +257,7 @@ def _recalculate_token_wait_times(db: Session, doctor_id: str, hospital_id: str,
             ai_input = {
                 "hour_of_day": get_current_hour(),
                 "day_of_week": get_current_day(),
-                "patients_ahead_of_user": i,
+                "patients_ahead_of_user": patients_ahead,
                 "patients_in_queue": len(active_tokens), 
                 "queue_velocity": q_velocity,
                 "last_patient_duration": last_duration,
@@ -270,24 +275,26 @@ def _recalculate_token_wait_times(db: Session, doctor_id: str, hospital_id: str,
             
             try:
                 # --- TRACE LOGGING (STEP 3) ---
-                print(f"➡️ Calculating dynamic wait for token index: {i}")
+                print(f"➡️ Calculating direct AI wait for token index: {patients_ahead}")
                 
-                predicted_this_duration = ai_engine.predict_duration(ai_input)
+                # Fix 4: Directly predict the total wait time
+                predicted_wait = ai_engine.predict_duration(ai_input)
                 
-                print(f"   Returned Duration: {predicted_this_duration}")
+                print(f"   Returned AI Wait Time: {predicted_wait}")
                 
-                # Strictly follow the model - only a 1m floor to ensure positivity
-                predicted_this_duration = max(predicted_this_duration, 1) 
+                # Use model output directly (ensuring it's at least 1m if not first)
+                token.estimated_wait_time = max(int(predicted_wait), 1)
             except Exception as e:
                 # --- SILENT FALLBACK CHECK (STEP 4) ---
-                print(f"❌ AI PREDICTION FAILED for index {i}: {e}")
-                # Fallback: Use doctor's history if available, else 10m
-                predicted_this_duration = doc_history if doc_history > 5 else 10
+                print(f"❌ AI PREDICTION FAILED for index {patients_ahead}: {e}")
+                # Fallback: Use doctor's history * patients_ahead
+                per_patient = doc_history if doc_history > 5 else 10
+                token.estimated_wait_time = int(patients_ahead * per_patient)
             
-            cumulative_wait += predicted_this_duration
+            token.updated_at = datetime.utcnow()
             
         db.commit()
-        print(f"[DEBUG] Recalculated dynamic wait times for {len(active_tokens)} tokens (Doctor: {doctor_id})")
+        print(f"[DEBUG] Recalculated dynamic wait times for {len(active_tokens)} tokens using direct AI prediction.")
         
     except Exception as e:
         print(f"[ERROR] Failed to recalculate wait times: {e}")
@@ -514,16 +521,16 @@ async def generate_smart_token(
             estimated_wait_time = 0
             print(f"  - Result: First token of the day, setting to 0")
         else:
-            # Problem 1 Fix: Sum predicted durations of ALL patients ahead for truly dynamic wait times
-            # 0 -> 6 -> 11 -> 17 instead of fixed 0 -> 8 -> 16
-            active_ahead = db.query(Token).filter(
+            # Fix 4: Directly predict the TOTAL wait time for the new token
+            # Instead of summing durations, we call the model with the exact number of patients ahead.
+            
+            # Count patients currently ahead
+            patients_ahead = db.query(Token).filter(
                 Token.doctor_id == doctor_id,
                 Token.status.in_(["pending", "waiting", "confirmed", "called", "in_consultation"]),
                 func.date(Token.appointment_date) == target_date
-            ).order_by(Token.token_number.asc()).all()
-            
-            cumulative_wait = 0
-            
+            ).count()
+
             # Ensure AI engine is loaded
             if not ai_engine.model:
                 ai_engine.load()
@@ -538,55 +545,50 @@ async def generate_smart_token(
             hour_hist = get_hour_history(db)
             weekday_hist = get_weekday_history(db)
 
-            for i, ahead_token in enumerate(active_ahead):
-                # Calculate age for the patient ahead
-                ahead_user_age = 30
-                if ahead_token.patient_id:
-                    ahead_user = db.query(User).filter(User.id == ahead_token.patient_id).first()
-                    if ahead_user and ahead_user.date_of_birth:
-                        try:
-                            dob = datetime.strptime(ahead_user.date_of_birth, "%Y-%m-%d")
-                            ahead_user_age = (datetime.now() - dob).days // 365
-                        except Exception: pass
-
-                ai_input = {
-                    "hour_of_day": get_current_hour(),
-                    "day_of_week": get_current_day(),
-                    "patients_ahead_of_user": i,
-                    "patients_in_queue": len(active_ahead), 
-                    "queue_velocity": q_velocity,
-                    "last_patient_duration": last_duration,
-                    "avg_service_time_last_5": avg_5,
-                    "avg_service_time_last_30": avg_30,
-                    "doctors_available": doctors_avail,
-                    "avg_wait_time_this_hour_past_week": hour_hist,
-                    "avg_wait_time_this_weekday_past_month": weekday_hist,
-                    "avg_service_time_doctor_history": doc_history,
-                    "doctor": doctor_data.get("name", "Unknown"),
-                    "age": ahead_user_age, 
-                    "disease_type": getattr(ahead_token, "department", "General") or "General",
-                    "clinic_type": "Specialist" if doctor_data.get("has_session") else "General"
-                }
-                
+            # Calculate age for the current user
+            user_age = 30
+            if hasattr(current_user, 'date_of_birth') and current_user.date_of_birth:
                 try:
-                    # --- TRACE LOGGING (STEP 3) ---
-                    print(f"➡️ Generating token: Calculating wait for patient ahead at index {i}")
-                    
-                    predicted_duration = ai_engine.predict_duration(ai_input)
-                    
-                    print(f"   Returned Duration: {predicted_duration}")
-                    
-                    # Strictly follow the model - only a 1m floor to ensure positivity
-                    predicted_duration = max(predicted_duration, 1)
-                except Exception as e:
-                    # --- SILENT FALLBACK CHECK (STEP 4) ---
-                    print(f"❌ AI PREDICTION FAILED for patient ahead {i}: {e}")
-                    predicted_duration = doc_history if doc_history > 5 else 10
-                
-                cumulative_wait += predicted_duration
+                    dob = datetime.strptime(current_user.date_of_birth, "%Y-%m-%d")
+                    user_age = (datetime.now() - dob).days // 365
+                except Exception: pass
+
+            ai_input = {
+                "hour_of_day": get_current_hour(),
+                "day_of_week": get_current_day(),
+                "patients_ahead_of_user": patients_ahead,
+                "patients_in_queue": patients_ahead + 1, 
+                "queue_velocity": q_velocity,
+                "last_patient_duration": last_duration,
+                "avg_service_time_last_5": avg_5,
+                "avg_service_time_last_30": avg_30,
+                "doctors_available": doctors_avail,
+                "avg_wait_time_this_hour_past_week": hour_hist,
+                "avg_wait_time_this_weekday_past_month": weekday_hist,
+                "avg_service_time_doctor_history": doc_history,
+                "doctor": doctor_data.get("name", "Unknown"),
+                "age": user_age, 
+                "disease_type": payload.department or "General",
+                "clinic_type": "Specialist" if doctor_data.get("has_session") else "General"
+            }
             
-            estimated_wait_time = int(cumulative_wait)
-            print(f"  - Result: AI Dynamic Wait Time calculated as {estimated_wait_time}m")
+            try:
+                # --- TRACE LOGGING (STEP 3) ---
+                print(f"➡️ Generating token: Calculating direct AI wait for index {patients_ahead}")
+                
+                predicted_wait = ai_engine.predict_duration(ai_input)
+                
+                print(f"   Returned AI Wait Time: {predicted_wait}")
+                
+                # Strictly follow the model - only a 1m floor
+                estimated_wait_time = max(int(predicted_wait), 1)
+            except Exception as e:
+                # --- SILENT FALLBACK CHECK (STEP 4) ---
+                print(f"❌ AI PREDICTION FAILED for generating token: {e}")
+                per_patient = doc_history if doc_history > 5 else 10
+                estimated_wait_time = int(patients_ahead * per_patient)
+            
+            print(f"  - Result: AI Direct Wait Time calculated as {estimated_wait_time}m")
             
     except Exception as e:
         print(f"[ERROR] AI Wait Time Calculation failed: {e}")
