@@ -228,23 +228,28 @@ def _recalculate_token_wait_times(db: Session, doctor_id: str, hospital_id: str,
         hour_hist = get_hour_history(db)
         weekday_hist = get_weekday_history(db)
         
-        # 6. Update each token: Use the Core Formula (Σ Ti * L * H)
-        cumulative_wait = 0
-        current_hour = get_current_hour()
-        is_peak = 9 <= current_hour <= 12 or 17 <= current_hour <= 20
-        hour_factor = 1.3 if is_peak else 1.0
+        # 6. Update each token: Use the Alpha-weighted ETA formula
+        # ETA = α * AI_ETA + (1-α) * (patients_ahead * rolling_service_time)
+        # alpha = 0.7 (trust factor for AI model)
+        alpha = 0.7
         
-        # Load Factor (L) - busy doctor = slower
-        # We calculate it once for the doctor's current state
-        q_len = len(active_tokens)
-        load_factor = 1 + (min(q_len, 20) / 20) # Max 2.0 factor for very busy queues
+        # Calculate rolling_service_time from recent averages
+        # (avg last 5 + avg last 30 + last patient) / 3
+        metrics = [m for m in [avg_5, avg_30, last_duration] if m > 0]
+        rolling_service_time = sum(metrics) / len(metrics) if metrics else (doc_history if doc_history > 0 else 12.0)
         
         for i, token in enumerate(active_tokens):
-            # 1. This token's wait is the current cumulative sum
-            token.estimated_wait_time = int(round(cumulative_wait))
-            token.updated_at = datetime.utcnow()
+            # patients_ahead for this specific token is its index
+            patients_ahead = i 
             
-            # 2. Predict THIS patient's duration to add for the NEXT person in queue
+            # If it's the very first person in the queue, wait time is 0
+            if patients_ahead == 0:
+                token.estimated_wait_time = 0
+                token.updated_at = datetime.utcnow()
+                continue
+
+            # Predict individual consultation durations and sum them for cumulative AI_ETA
+            # We calculate this specifically for each position
             user_age = 30
             if token.patient_id:
                 patient_user = db.query(User).filter(User.id == token.patient_id).first()
@@ -257,7 +262,7 @@ def _recalculate_token_wait_times(db: Session, doctor_id: str, hospital_id: str,
             ai_input = {
                 "hour_of_day": current_hour,
                 "day_of_week": get_current_day(),
-                "patients_ahead_of_user": i,
+                "patients_ahead_of_user": patients_ahead,
                 "patients_in_queue": q_len, 
                 "queue_velocity": q_velocity,
                 "last_patient_duration": last_duration,
@@ -275,29 +280,28 @@ def _recalculate_token_wait_times(db: Session, doctor_id: str, hospital_id: str,
             
             try:
                 # --- TRACE LOGGING (STEP 3) ---
-                print(f"➡️ Predicting duration for patient at index {i} using Core Formula")
+                print(f"➡️ Predicting AI_ETA for token index: {patients_ahead}")
                 
-                # Model prediction (Ti)
-                base_time = ai_engine.predict_duration(ai_input)
+                # Base AI prediction for this position
+                ai_predicted_wait = ai_engine.predict_duration(ai_input)
                 
-                # 🔥 SAFETY: avoid constant output problem
-                if base_time < 3:
-                    base_time = 5   # minimum realistic consultation time
+                # Formula: α * AI_ETA + (1-α) * (patients_ahead * rolling_avg)
+                historical_wait = patients_ahead * rolling_service_time
+                final_eta = (alpha * ai_predicted_wait) + ((1 - alpha) * historical_wait)
                 
-                # Adjusted time = Ti * L * H
-                adjusted_time = base_time * load_factor * hour_factor
+                print(f"   AI_ETA: {ai_predicted_wait}, Historical_Wait: {historical_wait:.2f}, Final: {final_eta:.2f}")
                 
-                print(f"   Base Ti: {base_time}, L: {load_factor:.2f}, H: {hour_factor}, Adjusted: {adjusted_time:.2f}")
-                
-                cumulative_wait += adjusted_time
+                token.estimated_wait_time = int(round(final_eta))
             except Exception as e:
                 # --- SILENT FALLBACK CHECK (STEP 4) ---
-                print(f"❌ AI DURATION PREDICTION FAILED for index {i}: {e}")
-                fallback_per_patient = (doc_history if doc_history > 5 else 10) * load_factor * hour_factor
-                cumulative_wait += fallback_per_patient
+                print(f"❌ AI PREDICTION FAILED for index {patients_ahead}: {e}")
+                # Fallback: Just use rolling_service_time * patients_ahead
+                token.estimated_wait_time = int(round(patients_ahead * rolling_service_time))
+            
+            token.updated_at = datetime.utcnow()
             
         db.commit()
-        print(f"[DEBUG] Recalculated dynamic wait times using Core Formula (Σ Ti * L * H).")
+        print(f"[DEBUG] Recalculated dynamic wait times using Alpha-weighted ETA formula.")
         
     except Exception as e:
         print(f"[ERROR] Failed to recalculate wait times: {e}")
@@ -517,27 +521,22 @@ async def generate_smart_token(
             estimated_wait_time = 0
             print(f"  - Result: First token of the day, setting to 0")
         else:
-            # Core Formula: Σ Ti * L * H
-            active_ahead = db.query(Token).filter(
+            # Alpha-weighted ETA Formula: α * AI_ETA + (1-α) * (patients_ahead * rolling_avg)
+            # alpha = 0.7 (trust factor for AI model)
+            alpha = 0.7
+            
+            # Count patients currently ahead
+            patients_ahead = db.query(Token).filter(
                 Token.doctor_id == doctor_id,
                 Token.status.in_(["pending", "waiting", "confirmed", "called", "in_consultation"]),
                 func.date(Token.appointment_date) == target_date
-            ).order_by(Token.token_number.asc()).all()
-            
-            cumulative_wait = 0
-            current_hour = get_current_hour()
-            is_peak = 9 <= current_hour <= 12 or 17 <= current_hour <= 20
-            hour_factor = 1.3 if is_peak else 1.0
-            
-            # Load Factor (L)
-            q_len = len(active_ahead)
-            load_factor = 1 + (min(q_len, 20) / 20)
-            
+            ).count()
+
             # Ensure AI engine is loaded
             if not ai_engine.model:
                 ai_engine.load()
             
-            # Common metrics for AI
+            # Common metrics for AI and historical average
             doc_history = get_doctor_history(doctor_id, db)
             q_velocity = calculate_queue_velocity(doctor_id, db)
             last_duration = get_last_patient_duration(doctor_id, db)
@@ -546,62 +545,57 @@ async def generate_smart_token(
             doctors_avail = count_available_doctors(db)
             hour_hist = get_hour_history(db)
             weekday_hist = get_weekday_history(db)
-
-            for i, ahead_token in enumerate(active_ahead):
-                # Calculate age for the patient ahead
-                ahead_user_age = 30
-                if ahead_token.patient_id:
-                    ahead_user = db.query(User).filter(User.id == ahead_token.patient_id).first()
-                    if ahead_user and ahead_user.date_of_birth:
-                        try:
-                            dob = datetime.strptime(ahead_user.date_of_birth, "%Y-%m-%d")
-                            ahead_user_age = (datetime.now() - dob).days // 365
-                        except Exception: pass
-
-                ai_input = {
-                    "hour_of_day": current_hour,
-                    "day_of_week": get_current_day(),
-                    "patients_ahead_of_user": i,
-                    "patients_in_queue": q_len, 
-                    "queue_velocity": q_velocity,
-                    "last_patient_duration": last_duration,
-                    "avg_service_time_last_5": avg_5,
-                    "avg_service_time_last_30": avg_30,
-                    "doctors_available": doctors_avail,
-                    "avg_wait_time_this_hour_past_week": hour_hist,
-                    "avg_wait_time_this_weekday_past_month": weekday_hist,
-                    "avg_service_time_doctor_history": doc_history,
-                    "doctor": doctor_data.get("name", "Unknown"),
-                    "age": ahead_user_age, 
-                    "disease_type": getattr(ahead_token, "department", "General") or "General",
-                    "clinic_type": "Specialist" if doctor_data.get("has_session") else "General"
-                }
-                
-                try:
-                    # --- TRACE LOGGING (STEP 3) ---
-                    print(f"➡️ Generating token: Predicting duration for patient ahead at index {i} using Core Formula")
-                    
-                    # Model prediction (Ti)
-                    base_time = ai_engine.predict_duration(ai_input)
-                    
-                    # 🔥 SAFETY: avoid constant output problem
-                    if base_time < 3:
-                        base_time = 5   # minimum realistic consultation time
-                    
-                    # Adjusted time = Ti * L * H
-                    adjusted_time = base_time * load_factor * hour_factor
-                    
-                    print(f"   Base Ti: {base_time}, L: {load_factor:.2f}, H: {hour_factor}, Adjusted: {adjusted_time:.2f}")
-                    
-                    cumulative_wait += adjusted_time
-                except Exception as e:
-                    # --- SILENT FALLBACK CHECK (STEP 4) ---
-                    print(f"❌ AI PREDICTION FAILED for patient ahead {i}: {e}")
-                    fallback_per_patient = (doc_history if doc_history > 5 else 10) * load_factor * hour_factor
-                    cumulative_wait += fallback_per_patient
             
-            estimated_wait_time = int(round(cumulative_wait))
-            print(f"  - Result: AI Dynamic Wait Time (Core Formula) calculated as {estimated_wait_time}m")
+            # Calculate rolling_service_time from recent averages
+            metrics = [m for m in [avg_5, avg_30, last_duration] if m > 0]
+            rolling_service_time = sum(metrics) / len(metrics) if metrics else (doc_history if doc_history > 0 else 12.0)
+
+            # Calculate age for the current user
+            user_age = 30
+            if hasattr(current_user, 'date_of_birth') and current_user.date_of_birth:
+                try:
+                    dob = datetime.strptime(current_user.date_of_birth, "%Y-%m-%d")
+                    user_age = (datetime.now() - dob).days // 365
+                except Exception: pass
+
+            ai_input = {
+                "hour_of_day": get_current_hour(),
+                "day_of_week": get_current_day(),
+                "patients_ahead_of_user": patients_ahead,
+                "patients_in_queue": patients_ahead + 1, 
+                "queue_velocity": q_velocity,
+                "last_patient_duration": last_duration,
+                "avg_service_time_last_5": avg_5,
+                "avg_service_time_last_30": avg_30,
+                "doctors_available": doctors_avail,
+                "avg_wait_time_this_hour_past_week": hour_hist,
+                "avg_wait_time_this_weekday_past_month": weekday_hist,
+                "avg_service_time_doctor_history": doc_history,
+                "doctor": doctor_data.get("name", "Unknown"),
+                "age": user_age, 
+                "disease_type": payload.department or "General",
+                "clinic_type": "Specialist" if doctor_data.get("has_session") else "General"
+            }
+            
+            try:
+                # --- TRACE LOGGING (STEP 3) ---
+                print(f"➡️ Generating token: Calculating AI_ETA for index {patients_ahead}")
+                
+                ai_predicted_wait = ai_engine.predict_duration(ai_input)
+                
+                # Formula: α * AI_ETA + (1-α) * (patients_ahead * rolling_avg)
+                historical_wait = patients_ahead * rolling_service_time
+                final_eta = (alpha * ai_predicted_wait) + ((1 - alpha) * historical_wait)
+                
+                print(f"   AI_ETA: {ai_predicted_wait}, Historical_Wait: {historical_wait:.2f}, Final: {final_eta:.2f}")
+                
+                estimated_wait_time = int(round(final_eta))
+            except Exception as e:
+                # --- SILENT FALLBACK CHECK (STEP 4) ---
+                print(f"❌ AI PREDICTION FAILED for generating token: {e}")
+                estimated_wait_time = int(round(patients_ahead * rolling_service_time))
+            
+            print(f"  - Result: AI Dynamic Wait Time (Alpha Formula) calculated as {estimated_wait_time}m")
             
     except Exception as e:
         print(f"[ERROR] AI Wait Time Calculation failed: {e}")
