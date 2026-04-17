@@ -159,15 +159,20 @@ class AIEngine:
             # Create dataframe with features in exact order
             df = pd.DataFrame([features])[self.expected_features]
             
+            # --- DIAGNOSTIC LOGGING (STEP 1) ---
+            print("🔥 AI MODEL predict_duration CALLED")
+            print(f"   Input Features (sample): { {k: features[k] for k in ['Age', 'Doctor Name', 'Disease', 'patients_ahead_of_user'] if k in features} }")
+            
             # Make prediction and round to nearest whole number
             if hasattr(self.model, 'predict'):
                 prediction = float(self.model.predict(df)[0])
+                print(f"   ✅ Prediction Success: {prediction}")
                 return int(round(prediction))
             else:
                 raise ValueError("Model object has no 'predict' method")
             
         except Exception as e:
-            print(f"[ERROR] AI Engine Prediction failed: {e}")
+            print(f"❌ AI MODEL predict_duration FAILED: {e}")
             import traceback
             traceback.print_exc()
             raise ValueError(f"Prediction failed: {str(e)}")

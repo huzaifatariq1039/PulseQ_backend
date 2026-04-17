@@ -269,11 +269,18 @@ def _recalculate_token_wait_times(db: Session, doctor_id: str, hospital_id: str,
             }
             
             try:
+                # --- TRACE LOGGING (STEP 3) ---
+                print(f"➡️ Calculating dynamic wait for token index: {i}")
+                
                 predicted_this_duration = ai_engine.predict_duration(ai_input)
+                
+                print(f"   Returned Duration: {predicted_this_duration}")
+                
                 # Strictly follow the model - only a 1m floor to ensure positivity
                 predicted_this_duration = max(predicted_this_duration, 1) 
             except Exception as e:
-                logger.error(f"AI Prediction failed for token {token.id}: {e}")
+                # --- SILENT FALLBACK CHECK (STEP 4) ---
+                print(f"❌ AI PREDICTION FAILED for index {i}: {e}")
                 # Fallback: Use doctor's history if available, else 10m
                 predicted_this_duration = doc_history if doc_history > 5 else 10
             
@@ -562,11 +569,18 @@ async def generate_smart_token(
                 }
                 
                 try:
+                    # --- TRACE LOGGING (STEP 3) ---
+                    print(f"➡️ Generating token: Calculating wait for patient ahead at index {i}")
+                    
                     predicted_duration = ai_engine.predict_duration(ai_input)
+                    
+                    print(f"   Returned Duration: {predicted_duration}")
+                    
                     # Strictly follow the model - only a 1m floor to ensure positivity
                     predicted_duration = max(predicted_duration, 1)
                 except Exception as e:
-                    logger.error(f"AI Prediction failed for patient {i} ahead: {e}")
+                    # --- SILENT FALLBACK CHECK (STEP 4) ---
+                    print(f"❌ AI PREDICTION FAILED for patient ahead {i}: {e}")
                     predicted_duration = doc_history if doc_history > 5 else 10
                 
                 cumulative_wait += predicted_duration
