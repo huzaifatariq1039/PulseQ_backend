@@ -222,19 +222,17 @@ def _recalculate_token_wait_times(db: Session, doctor_id: str, hospital_id: str,
         if not ai_engine.model:
             ai_engine.load()
             
-        # 5. Calculate common AI inputs (doctor history, etc.)
+        # 5. Calculate common AI inputs (doctor history, etc.) once outside the loop
         doc_history = get_doctor_history(doctor_id, db)
         q_velocity = calculate_queue_velocity(doctor_id, db)
         last_duration = get_last_patient_duration(doctor_id, db)
         avg_5 = avg_last_5(doctor_id, db)
         avg_30 = avg_last_30(doctor_id, db)
         doctors_avail = count_available_doctors(db)
+        hour_hist = get_hour_history(db)
+        weekday_hist = get_weekday_history(db)
         
         # 6. Update each token using cumulative duration for dynamic wait times
-        # Token 0 wait = 0
-        # Token 1 wait = Duration(Token 0)
-        # Token 2 wait = Duration(Token 0) + Duration(Token 1)
-        # etc.
         cumulative_wait = 0
         for i, token in enumerate(active_tokens):
             # 1. This token's wait is the current cumulative sum
@@ -261,8 +259,8 @@ def _recalculate_token_wait_times(db: Session, doctor_id: str, hospital_id: str,
                 "avg_service_time_last_5": avg_5,
                 "avg_service_time_last_30": avg_30,
                 "doctors_available": doctors_avail,
-                "avg_wait_time_this_hour_past_week": get_hour_history(db),
-                "avg_wait_time_this_weekday_past_month": get_weekday_history(db),
+                "avg_wait_time_this_hour_past_week": hour_hist,
+                "avg_wait_time_this_weekday_past_month": weekday_hist,
                 "avg_service_time_doctor_history": doc_history,
                 "doctor": doctor_data.get("name", "Unknown"),
                 "age": user_age, 
@@ -272,11 +270,12 @@ def _recalculate_token_wait_times(db: Session, doctor_id: str, hospital_id: str,
             
             try:
                 predicted_this_duration = ai_engine.predict_duration(ai_input)
-                # Lower floor to 5m to allow more dynamic behavior
-                predicted_this_duration = max(predicted_this_duration, 5) 
-            except Exception:
-                # Fallback: Use doctor's history if available, else 12m
-                predicted_this_duration = doc_history if doc_history > 5 else 12
+                # Strictly follow the model - only a 1m floor to ensure positivity
+                predicted_this_duration = max(predicted_this_duration, 1) 
+            except Exception as e:
+                logger.error(f"AI Prediction failed for token {token.id}: {e}")
+                # Fallback: Use doctor's history if available, else 10m
+                predicted_this_duration = doc_history if doc_history > 5 else 10
             
             cumulative_wait += predicted_this_duration
             
@@ -529,6 +528,8 @@ async def generate_smart_token(
             avg_5 = avg_last_5(doctor_id, db)
             avg_30 = avg_last_30(doctor_id, db)
             doctors_avail = count_available_doctors(db)
+            hour_hist = get_hour_history(db)
+            weekday_hist = get_weekday_history(db)
 
             for i, ahead_token in enumerate(active_ahead):
                 # Calculate age for the patient ahead
@@ -551,8 +552,8 @@ async def generate_smart_token(
                     "avg_service_time_last_5": avg_5,
                     "avg_service_time_last_30": avg_30,
                     "doctors_available": doctors_avail,
-                    "avg_wait_time_this_hour_past_week": get_hour_history(db),
-                    "avg_wait_time_this_weekday_past_month": get_weekday_history(db),
+                    "avg_wait_time_this_hour_past_week": hour_hist,
+                    "avg_wait_time_this_weekday_past_month": weekday_hist,
                     "avg_service_time_doctor_history": doc_history,
                     "doctor": doctor_data.get("name", "Unknown"),
                     "age": ahead_user_age, 
@@ -562,9 +563,11 @@ async def generate_smart_token(
                 
                 try:
                     predicted_duration = ai_engine.predict_duration(ai_input)
-                    predicted_duration = max(predicted_duration, 5) # Lower floor for more dynamism
-                except Exception:
-                    predicted_duration = doc_history if doc_history > 5 else 12
+                    # Strictly follow the model - only a 1m floor to ensure positivity
+                    predicted_duration = max(predicted_duration, 1)
+                except Exception as e:
+                    logger.error(f"AI Prediction failed for patient {i} ahead: {e}")
+                    predicted_duration = doc_history if doc_history > 5 else 10
                 
                 cumulative_wait += predicted_duration
             
