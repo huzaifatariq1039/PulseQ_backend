@@ -592,7 +592,7 @@ async def generate_smart_token(
                 estimated_wait_time = int(round(final_eta))
             except Exception as e:
                 # --- SILENT FALLBACK CHECK (STEP 4) ---
-                print(f"❌ AI PREDICTION FAILED for generating token: {e}")
+                print(f"AI PREDICTION FAILED for generating token: {e}")
                 estimated_wait_time = int(round(patients_ahead * rolling_service_time))
             
             print(f"  - Result: AI Dynamic Wait Time (Alpha Formula) calculated as {estimated_wait_time}m")
@@ -648,6 +648,20 @@ async def generate_smart_token(
 
     await create_activity_log(current_user.user_id, ActivityType.TOKEN_GENERATED, f"Generated Token #{token_number}", {"token_id": token_id}, db=db)
     
+    # 🔥 WHATSAPP NOTIFICATION (Fix 4 Logic)
+    try:
+        from app.services.whatsapp_service import send_queue_message
+        # Calculate current position (total tokens today)
+        position = total_tokens_today + 1
+        send_queue_message(
+            phone=new_token.patient_phone,
+            name=new_token.patient_name or "Patient",
+            position=position,
+            wait_time=estimated_wait_time
+        )
+    except Exception as e:
+        print(f"[ERROR] Failed to trigger WhatsApp notification: {e}")
+
     return response_obj
 
 @router.post("/{token_id}/cancel", response_model=CancellationResponse)
