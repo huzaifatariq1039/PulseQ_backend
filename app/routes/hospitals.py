@@ -61,7 +61,7 @@ def _cache_set(key: str, val: object, ttl: int = _CACHE_TTL_SECONDS):
     except Exception:
         pass
 
-@router.post("/", response_model=HospitalResponse, dependencies=[Depends(require_roles("admin", "patient"))])
+@router.post("", response_model=HospitalResponse, dependencies=[Depends(require_roles("admin"))])
 async def create_hospital(hospital: HospitalCreate, db: Session = Depends(get_db)):
     """Create a new hospital (Admin only)"""
 
