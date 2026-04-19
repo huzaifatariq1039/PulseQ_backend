@@ -7,7 +7,7 @@ from sqlalchemy import func
 from app.db_models import User, Doctor, Hospital, Token
 from app.utils.responses import ok
 
-router = APIRouter(prefix="/tokens", tags=["SmartTokens (Listing)"])
+router = APIRouter()
 
 
 _STATUS_ALIASES = {

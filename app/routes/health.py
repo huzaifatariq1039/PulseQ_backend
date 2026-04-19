@@ -3,7 +3,7 @@ from app.database import get_db, get_engine
 from app.services.ai_engine import ai_engine
 from sqlalchemy import text
 
-router = APIRouter(tags=["Health"]) 
+router = APIRouter() 
 
 @router.get("/health")
 async def health_check():

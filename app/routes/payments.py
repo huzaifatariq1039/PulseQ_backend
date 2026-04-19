@@ -19,7 +19,7 @@ from app.services.token_service import SmartTokenService
 from app.utils.idempotency import Idempotency
 from app.utils.audit import log_action, get_user_role
 
-router = APIRouter(prefix="/payments", tags=["Payments"])
+router = APIRouter()
 
 # ---------------- Queue calc helpers (match tokens router logic) ----------------
 

@@ -129,67 +129,41 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# -------------------- Routers (Strict RBAC Portal Isolation) --------------------
-# Public / unauth routes
-app.include_router(auth.router, prefix="/api/v1")
-app.include_router(health.router, prefix="/api/v1")
-app.include_router(ml.router, prefix="/api/v1/ml", tags=["ML"])
-app.include_router(ai.router, prefix="/api/v1/ai", tags=["AI"])
-app.include_router(whatsapp_webhook_router, prefix="/api/v1")
+# -------------------- Centralized API Routing (Professional Clean UI) --------------------
 
-# Public discovery endpoints (no auth)
-app.include_router(hospitals.router, prefix="/api/v1/public")
-app.include_router(doctors.router, prefix="/api/v1/public")
-app.include_router(pharmacy_public_router, prefix="/api/v1/public")
+# 1. Core & System
+app.include_router(auth.router, prefix="/api/v1/auth", tags=["Core Authentication"])
+app.include_router(health.router, prefix="/api/v1/system", tags=["System Health"])
+app.include_router(whatsapp_webhook_router, prefix="/api/v1/webhooks", tags=["Integrations & Webhooks"])
 
-# Patient portal
-app.include_router(dashboard.router, prefix="/api/v1/patient")
-app.include_router(profile.router, prefix="/api/v1/patient")
-app.include_router(tokens.router, prefix="/api/v1/patient")
-app.include_router(tokens_listing.router, prefix="/api/v1/patient")
-app.include_router(tokens_idempotent.router, prefix="/api/v1/patient")
-app.include_router(payments.router, prefix="/api/v1/patient")
-app.include_router(patient.router, prefix="/api/v1/patient")
-app.include_router(portal.router, prefix="/api/v1/patient")
-app.include_router(queue.router, prefix="/api/v1/patient")
+# 2. Public Discovery (Patient/Guest)
+app.include_router(hospitals.router, prefix="/api/v1/public/hospitals", tags=["Public Discovery"])
+app.include_router(doctors.router, prefix="/api/v1/public/doctors", tags=["Public Discovery"])
+app.include_router(pharmacy_public_router, prefix="/api/v1/public/pharmacy", tags=["Public Discovery"])
 
-# Doctor portal
-app.include_router(portal.router, prefix="/api/v1/doctor")
-app.include_router(consultation.router, prefix="/api/v1/doctor")
-app.include_router(queue.router, prefix="/api/v1/doctor")
-app.include_router(realtime.router, prefix="/api/v1/doctor")
+# 3. Patient Services
+app.include_router(dashboard.router, prefix="/api/v1/patient/dashboard", tags=["Patient Portal"])
+app.include_router(profile.router, prefix="/api/v1/patient/profile", tags=["Patient Portal"])
+app.include_router(patient.router, prefix="/api/v1/patient/actions", tags=["Patient Portal"])
+app.include_router(tokens.router, prefix="/api/v1/patient/tokens", tags=["Token Management"])
+app.include_router(tokens_listing.router, prefix="/api/v1/patient/tokens/list", tags=["Token Management"])
+app.include_router(tokens_idempotent.router, prefix="/api/v1/patient/tokens/secure", tags=["Token Management"])
+app.include_router(payments.router, prefix="/api/v1/patient/payments", tags=["Payment Services"])
+app.include_router(queue.router, prefix="/api/v1/patient/queue", tags=["Queue Services"])
 
-# Receptionist portal
-app.include_router(tokens.router, prefix="/api/v1/receptionist")
-app.include_router(queue.router, prefix="/api/v1/receptionist")
-app.include_router(realtime.router, prefix="/api/v1/receptionist")
-app.include_router(doctors.router, prefix="/api/v1/receptionist")
-app.include_router(consultation.router, prefix="/api/v1/receptionist")
-app.include_router(portal.router, prefix="/api/v1/receptionist")
+# 4. Staff & Provider Services
+app.include_router(consultation.router, prefix="/api/v1/staff/consultation", tags=["Staff Portal"])
+app.include_router(realtime.router, prefix="/api/v1/staff/realtime", tags=["Staff Portal"])
+app.include_router(portal.router, prefix="/api/v1/staff/portal", tags=["Staff Portal"])
+app.include_router(pharmacy_portal_router, prefix="/api/v1/staff/pharmacy", tags=["Staff Portal"])
 
-# Pharmacist portal
-app.include_router(pharmacy_portal_router, prefix="/api/v1/pharmacist")
+# 5. Intelligence & AI
+app.include_router(ml.router, prefix="/api/v1/ai/ml", tags=["Intelligence Services"])
+app.include_router(ai.router, prefix="/api/v1/ai/core", tags=["Intelligence Services"])
 
-# Admin portal
-app.include_router(dashboard.router, prefix="/api/v1/admin")
-app.include_router(profile.router, prefix="/api/v1/admin")
-app.include_router(tokens.router, prefix="/api/v1/admin")
-app.include_router(tokens_listing.router, prefix="/api/v1/admin")
-app.include_router(tokens_idempotent.router, prefix="/api/v1/admin")
-app.include_router(payments.router, prefix="/api/v1/admin")
-app.include_router(patient.router, prefix="/api/v1/admin")
-app.include_router(portal.router, prefix="/api/v1/admin")
-app.include_router(queue.router, prefix="/api/v1/admin")
-app.include_router(realtime.router, prefix="/api/v1/admin")
-app.include_router(consultation.router, prefix="/api/v1/admin")
-app.include_router(doctors.router, prefix="/api/v1/admin")
-app.include_router(hospitals.router, prefix="/api/v1/admin")
-
-# POS integration (shared across roles / external systems)
-app.include_router(pos.router, prefix="/api")
-
-# Reception queue (fees) - POS/Retailer friendly path
-app.include_router(reception.router, prefix="/api")
+# 6. External Integrations (POS & Reception)
+app.include_router(pos.router, prefix="/api/v1/external/pos", tags=["External Integrations"])
+app.include_router(reception.router, prefix="/api/v1/external/reception", tags=["External Integrations"])
 
 # Root endpoint
 @app.get("/")

@@ -13,7 +13,7 @@ from app.utils.responses import ok
 from app.services.token_service import SmartTokenService
 
 
-router = APIRouter(prefix="/patient", tags=["Patient"])
+router = APIRouter()
 
 
 def _to_dt(v: Any) -> Optional[datetime]:

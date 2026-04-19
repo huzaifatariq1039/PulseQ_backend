@@ -16,7 +16,7 @@ from app.utils.idempotency import Idempotency
 from app.utils.state import is_transition_allowed, STATUS_COMPLETED
 from app.utils.audit import log_action, get_user_role
 
-router = APIRouter(prefix="/queue", tags=["Queue Management"])
+router = APIRouter()
 
 # -------------------- Advanced queue management (queues collection) --------------------
 from app.services.queue_management_service import QueueManagementService

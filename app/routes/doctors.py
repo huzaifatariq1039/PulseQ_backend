@@ -8,7 +8,7 @@ from app.security import get_current_active_user, require_roles
 from datetime import datetime
 import random
 
-router = APIRouter(prefix="/doctors", tags=["Doctors"])
+router = APIRouter()
 
 
 @router.patch("/status", dependencies=[Depends(require_roles("receptionist", "admin", "patient"))])

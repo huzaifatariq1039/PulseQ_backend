@@ -13,7 +13,7 @@ from app.services.token_service import SmartTokenService
 from app.routes.pharmacy import router as pharmacy_router
 from app.utils.mrn import get_or_create_patient_mrn
 
-router = APIRouter(prefix="/portal", tags=["Portal (Role-Protected)"])
+router = APIRouter()
 
 # Include Pharmacy portal endpoints under the centralized portal router
 router.include_router(pharmacy_router)

@@ -15,7 +15,7 @@ from app.services.whatsapp_service import send_template_message
 from app.templates import TEMPLATES
 
 
-router = APIRouter(tags=["Consultation Flow"])
+router = APIRouter()
 
 
 def _to_dt(v: Any) -> Optional[datetime]:

@@ -14,7 +14,7 @@ from app.services.token_service import SmartTokenService
 from app.utils.responses import ok
 
 
-router = APIRouter(prefix="/reception", tags=["Reception (Queue Fees)"])
+router = APIRouter()
 
 
 def _to_dt(v: Any) -> Optional[datetime]:

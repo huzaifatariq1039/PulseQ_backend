@@ -17,8 +17,8 @@ from app.models import TokenData
 from app.security import require_roles
 from app.utils.responses import ok
 
-router = APIRouter(prefix="/portal/pharmacy", tags=["Pharmacy (Role-Protected)"])
-public_router = APIRouter(prefix="/pharmacy", tags=["Pharmacy"])
+router = APIRouter()
+public_router = APIRouter()
 
 logger = logging.getLogger(__name__)
 

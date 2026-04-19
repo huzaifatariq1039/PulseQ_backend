@@ -14,7 +14,7 @@ import uuid
 import base64
 import re
 
-router = APIRouter(prefix="/profile", tags=["Profile"])
+router = APIRouter()
 
 async def create_activity_log(db: Session, user_id: str, activity_type: ActivityType, description: str, metadata: dict = None):
     """Helper function to create activity logs in PostgreSQL"""

@@ -87,7 +87,7 @@ def calculate_distance(lat1, lon1, lat2, lon2):
     distance = earth_radius * c
     return distance
 
-router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
+router = APIRouter()
 
 @router.get("")
 @router.get("/")

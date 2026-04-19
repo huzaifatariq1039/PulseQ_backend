@@ -24,7 +24,7 @@ import math
 import httpx
 from time import time
 
-router = APIRouter(prefix="/hospitals", tags=["Hospitals"])
+router = APIRouter()
 
 # Lightweight text normalizer for robust matching across app/backend
 def _norm(text: Optional[str]) -> str:

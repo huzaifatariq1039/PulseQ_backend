@@ -15,7 +15,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/whatsapp", tags=["WhatsApp Webhook"])
+router = APIRouter()
 
 # PHASE 3: Test Sending Message (Temporary Dummy DB for testing)
 patients_db = {

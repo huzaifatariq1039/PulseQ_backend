@@ -7,7 +7,7 @@ from app.schemas.ml_schema import PredictionRequest
 router = APIRouter()
 
 
-@router.post("/predict", dependencies=[Depends(require_roles("admin", "doctor", "patient"))])
+@router.post("/predict", dependencies=[Depends(require_roles("admin", "doctor"))])
 async def predict(req: PredictionRequest) -> Dict[str, float]:
     """Predict consultation duration using the raw model. Role-protected (admin/doctor)."""
     # Ensure model is loaded

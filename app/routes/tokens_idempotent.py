@@ -7,7 +7,7 @@ from app.utils.idempotency import Idempotency
 from app.utils.responses import ok, fail
 from app.utils.audit import log_action, get_user_role
 
-router = APIRouter(tags=["SmartTokens (Idempotent)"])
+router = APIRouter()
 
 
 class HeaderTokenCreate(BaseModel):

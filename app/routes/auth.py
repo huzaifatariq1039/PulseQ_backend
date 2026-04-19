@@ -18,7 +18,7 @@ from datetime import datetime
 import uuid
 from app.db_models import User as UserDB
 
-router = APIRouter(prefix="/auth", tags=["Authentication"])
+router = APIRouter()
 
 class PharmacyLoginRequest(BaseModel):
     email: str = Field(..., description="Pharmacy user email")

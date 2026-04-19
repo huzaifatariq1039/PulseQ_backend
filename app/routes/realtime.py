@@ -3,7 +3,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends
 from fastapi import HTTPException, status
 from app.security import require_roles
 
-router = APIRouter(prefix="/realtime", tags=["Realtime"])
+router = APIRouter()
 
 
 class ConnectionManager:

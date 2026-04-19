@@ -18,7 +18,7 @@ from app.schemas.pos_schema import (
     OrderPaymentRequest, InvoiceInsuranceRequest, WebhookPayload
 )
 
-router = APIRouter(prefix="/pos", tags=["POS Integration"])
+router = APIRouter()
 
 # --- Authentication & User Sync ---
 
