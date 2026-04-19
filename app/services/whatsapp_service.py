@@ -5,9 +5,9 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-def send_queue_message(phone: str, name: str, position: int, wait_time: int):
+def send_queue_message(phone: str, name: str, position: int, wait_time: int, doctor_name: str = "N/A", hospital_name: str = "PulseQ Clinic", room_number: str = "Room 1"):
     """
-    Sends a WhatsApp message to the patient using Twilio.
+    Sends a WhatsApp message to the patient using the approved PulseQ template.
     """
     if not TWILIO_ACCOUNT_SID or not TWILIO_AUTH_TOKEN:
         logger.warning("Twilio credentials not configured. Skipping WhatsApp message.")
@@ -21,28 +21,38 @@ def send_queue_message(phone: str, name: str, position: int, wait_time: int):
         client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
         
         # Ensure phone is in the correct format for WhatsApp
-        # Twilio requires the format 'whatsapp:+[country_code][number]'
         formatted_phone = str(phone)
         if not formatted_phone.startswith("whatsapp:"):
             if not formatted_phone.startswith("+"):
                 formatted_phone = f"+{formatted_phone}"
             formatted_phone = f"whatsapp:{formatted_phone}"
 
+        # Construct the message body to EXACTLY match the approved template in the image
         message_body = f"""
-Hello {name},
-Your queue position: {position}
-Estimated wait: {wait_time} minutes
+Apki appointment book ho chuki h!
 
-Reply YES to confirm
-Reply NO to cancel
+Doctor: {doctor_name}
+Patient: {name}
+Hospital: {hospital_name}
+Room Number: {room_number}
+Estimated Time: {wait_time}
+
+Reply YES to receive live updates.
+
+PulseQ
 """
         
+        # Ensure FROM number is in correct WhatsApp format
+        from_number = TWILIO_WHATSAPP_NUMBER
+        if from_number and not from_number.startswith("whatsapp:"):
+            from_number = f"whatsapp:{from_number}"
+
         message = client.messages.create(
-            from_=TWILIO_WHATSAPP_NUMBER,
+            from_=from_number,
             to=formatted_phone,
             body=message_body.strip()
         )
-        logger.info(f"WhatsApp message sent to {formatted_phone}: SID {message.sid}")
+        logger.info(f"WhatsApp template message sent to {formatted_phone}: SID {message.sid}")
         return message.sid
     except Exception as e:
         logger.error(f"Failed to send WhatsApp message to {phone}: {e}")
@@ -67,12 +77,17 @@ async def send_template_message(phone: str, template_name: str, params: list):
                 formatted_phone = f"+{formatted_phone}"
             formatted_phone = f"whatsapp:{formatted_phone}"
 
+        # Ensure FROM number is in correct WhatsApp format
+        from_number = TWILIO_WHATSAPP_NUMBER
+        if from_number and not from_number.startswith("whatsapp:"):
+            from_number = f"whatsapp:{from_number}"
+
         # In a real production environment, you would use Twilio's Content SID.
         # Here we construct the body based on the template name and params.
         body = f"Template: {template_name} | Params: {', '.join(map(str, params))}"
         
         message = client.messages.create(
-            from_=TWILIO_WHATSAPP_NUMBER,
+            from_=from_number,
             to=formatted_phone,
             body=body
         )

@@ -660,7 +660,10 @@ async def generate_smart_token(
             phone=new_token.patient_phone,
             name=new_token.patient_name or "Patient",
             position=position,
-            wait_time=estimated_wait_time
+            wait_time=estimated_wait_time,
+            doctor_name=new_token.doctor_name or "Doctor",
+            hospital_name=new_token.hospital_name or "Hospital",
+            room_number="Room 1" # Defaulting as it's not in the token model yet
         )
     except Exception as e:
         print(f"[ERROR] Failed to trigger WhatsApp notification: {e}")
