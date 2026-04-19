@@ -36,27 +36,31 @@ function buildPlan({ timeDiffMinutes }) {
     messages.push({ type: "reminder_90", offsetMinutes: 90 });
     messages.push({ type: "reminder_60", offsetMinutes: 60 });
     messages.push({ type: "reminder_45", offsetMinutes: 45 });
-    messages.push({ type: "reminder_30", offsetMinutes: 30 });
+    messages.push({ type: "final_call", offsetMinutes: 30 });
     messages.push({ type: "reminder_20", offsetMinutes: 20 });
     messages.push({ type: "reminder_15", offsetMinutes: 15 });
+    messages.push({ type: "turn_approaching", offsetMinutes: 1 });
     // Dynamic events (queue + doctor ready + final)
     messages.push({ type: "queue_alert", dynamic: true, sendAt: "on_queue_alert" });
     messages.push({ type: "doctor_ready", dynamic: true, sendAt: "on_doctor_ready" });
-    messages.push({ type: "final_call", dynamic: true, sendAt: "on_called" });
+    messages.push({ type: "final_call_dynamic", dynamic: true, sendAt: "on_called" });
   } else if (eff >= 30) {
     // CASE 2: MEDIUM (30–90 mins)
     messages.push({ type: "confirmation", sendAt: "now" });
-    messages.push({ type: "reminder_30", offsetMinutes: 30 });
+    messages.push({ type: "final_call", offsetMinutes: 30 });
     messages.push({ type: "reminder_20", offsetMinutes: 20 });
     messages.push({ type: "reminder_15", offsetMinutes: 15 });
+    messages.push({ type: "turn_approaching", offsetMinutes: 1 });
     messages.push({ type: "queue_alert", dynamic: true, sendAt: "on_queue_alert" });
-    messages.push({ type: "final_call", dynamic: true, sendAt: "on_called" });
+    messages.push({ type: "final_call_dynamic", dynamic: true, sendAt: "on_called" });
   } else {
     // CASE 3: SHORT (< 30 mins)
     messages.push({ type: "confirmation", sendAt: "now" });
+    messages.push({ type: "final_call", offsetMinutes: 25 }); // If short, send soon
+    messages.push({ type: "turn_approaching", offsetMinutes: 1 });
     messages.push({ type: "queue_alert", dynamic: true, sendAt: "on_queue_alert" });
     messages.push({ type: "doctor_ready", dynamic: true, sendAt: "on_doctor_ready" });
-    messages.push({ type: "final_call", dynamic: true, sendAt: "on_called" });
+    messages.push({ type: "final_call_dynamic", dynamic: true, sendAt: "on_called" });
   }
 
   // Enforce hard cap on total planned messages
@@ -142,10 +146,10 @@ async function getTokenStatus({ tokenId, tokenRef }) {
   let snap = null;
   if (tokenRef) snap = await tokenRef.get();
   else if (tokenId) snap = await db.collection("tokens").doc(tokenId).get();
-  if (!snap?.exists) return { exists: false, status: null };
+  if (!snap?.exists) return { exists: false, status: null, data: {} };
   const t = snap.data() || {};
   const status = String(t.status || "").toLowerCase();
-  return { exists: true, status };
+  return { exists: true, status, data: t };
 }
 
 async function cancelPendingForToken(tokenId, reason) {
@@ -201,10 +205,41 @@ async function sendOneNotification(docSnap) {
       templateName: process.env.WHATSAPP_TEMPLATE_NAME || "appointment_reminder",
       languageCode: process.env.WHATSAPP_TEMPLATE_LANGUAGE || "en",
     });
+  } else if (type === "turn_approaching") {
+    const { data: tokenData } = await getTokenStatus({ tokenId, tokenRef });
+    const patientName = tokenData.patient_name || tokenData.patientName || "Patient";
+    await sendWhatsAppTemplate({
+      to: phone,
+      templateName: "patient_call_alert",
+      languageCode: "en", // or appropriate language
+      components: [
+        {
+          type: "body",
+          parameters: [{ type: "text", text: String(patientName) }],
+        },
+      ],
+    });
   } else if (type === "queue_alert") {
     await sendWhatsAppText({ to: phone, text: "Your turn is near. Please reach hospital." });
-  } else if (type === "final_call") {
-    await sendWhatsAppText({ to: phone, text: "Please proceed to doctor now." });
+  } else if (type === "final_call" || type === "final_call_dynamic") {
+    const { data: tokenData } = await getTokenStatus({ tokenId, tokenRef });
+    const patientName = tokenData.patient_name || tokenData.patientName || "Patient";
+    const tokenNumber = tokenData.token_number || tokenData.tokenNumber || tokenData.formatted_token || "";
+    
+    await sendWhatsAppTemplate({
+      to: phone,
+      templateName: "final_alert",
+      languageCode: "en", // or appropriate language
+      components: [
+        {
+          type: "body",
+          parameters: [
+            { type: "text", text: String(patientName) },
+            { type: "text", text: String(tokenNumber) }
+          ],
+        },
+      ],
+    });
   } else {
     await sendWhatsAppText({ to: phone, text: "Appointment update." });
   }
@@ -326,7 +361,24 @@ export async function sendFinalCallNow({ tokenId, patientId, phone }) {
     }
   }
 
-  await sendWhatsAppText({ to: phone, text: "Please proceed to doctor now." });
+  const { data: tokenData } = await getTokenStatus({ tokenId, tokenRef: null });
+  const patientName = tokenData.patient_name || tokenData.patientName || "Patient";
+  const tokenNumber = tokenData.token_number || tokenData.tokenNumber || tokenData.formatted_token || "";
+
+  await sendWhatsAppTemplate({
+    to: phone,
+    templateName: "final_alert",
+    languageCode: "en",
+    components: [
+      {
+        type: "body",
+        parameters: [
+          { type: "text", text: String(patientName) },
+          { type: "text", text: String(tokenNumber) }
+        ],
+      },
+    ],
+  });
 
   await db.collection(NOTIFICATIONS_COLLECTION).add({
     token_id: tokenId || null,

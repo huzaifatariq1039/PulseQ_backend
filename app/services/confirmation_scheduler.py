@@ -29,16 +29,16 @@ async def _reminder_job(token_id: str) -> None:
     patient_name = str(token.get("patient_name") or "Patient")
     token_number = str(token.get("formatted_token") or token.get("token_number") or "")
 
-    reminder_tpl = str(TEMPLATES.get("APPOINTMENT_REMINDER") or "").strip()
+    reminder_tpl = "reminder_for_confirmation"
     if phone and reminder_tpl:
         try:
             await send_template_message(
-                to=phone,
+                phone=phone,
                 template_name=reminder_tpl,
-                parameters=[patient_name, token_number],
+                params=[patient_name],
             )
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[ERROR] Failed to send reminder_for_confirmation: {e}")
 
     try:
         tref.set(
@@ -84,7 +84,7 @@ async def _final_job(token_id: str) -> None:
         pass
 
 
-def schedule_confirmation_checks(token_id: str, first_delay_minutes: int = 5, second_delay_minutes: int = 5) -> None:
+def schedule_confirmation_checks(token_id: str, first_delay_minutes: int = 15, second_delay_minutes: int = 15) -> None:
     """Schedule APScheduler jobs for confirmation reminder and final check."""
     token_id = str(token_id or "").strip()
     if not token_id:

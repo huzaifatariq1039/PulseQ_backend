@@ -139,43 +139,43 @@ async def schedule_messages(token: Dict[str, Any]) -> None:
         )
         await schedule_at(
             appt - timedelta(minutes=30),
-            TEMPLATES.get("QUEUE_UPDATE"),
+            TEMPLATES.get("FINAL_CALL"),
             ctx,
             [str(ctx.get("patient_name") or "Patient"), str(ctx.get("token_number") or "")],
         )
         await schedule_at(
-            appt - timedelta(minutes=15),
-            TEMPLATES.get("FINAL_CALL"),
+            appt - timedelta(minutes=1),
+            TEMPLATES.get("TURN_NOW"),
             ctx,
-            [str(ctx.get("patient_name") or "Patient"), str(ctx.get("token_number") or "")],
+            [str(ctx.get("patient_name") or "Patient")],
         )
 
     # CASE 2: MEDIUM
     elif 30 < diff_minutes <= 60:
         await schedule_at(
             appt - timedelta(minutes=30),
-            TEMPLATES.get("QUEUE_UPDATE"),
+            TEMPLATES.get("FINAL_CALL"),
             ctx,
             [str(ctx.get("patient_name") or "Patient"), str(ctx.get("token_number") or "")],
         )
         await schedule_at(
-            appt - timedelta(minutes=15),
-            TEMPLATES.get("FINAL_CALL"),
+            appt - timedelta(minutes=1),
+            TEMPLATES.get("TURN_NOW"),
             ctx,
-            [str(ctx.get("patient_name") or "Patient"), str(ctx.get("token_number") or "")],
+            [str(ctx.get("patient_name") or "Patient")],
         )
 
     # CASE 3: SHORT
     else:
         await schedule_at(
-            now + timedelta(minutes=5),
-            TEMPLATES.get("QUEUE_UPDATE"),
+            now + timedelta(minutes=1),
+            TEMPLATES.get("FINAL_CALL"),
             ctx,
             [str(ctx.get("patient_name") or "Patient"), str(ctx.get("token_number") or "")],
         )
         await schedule_at(
-            appt,
-            TEMPLATES.get("FINAL_CALL"),
+            appt - timedelta(minutes=1),
+            TEMPLATES.get("TURN_NOW"),
             ctx,
-            [str(ctx.get("patient_name") or "Patient"), str(ctx.get("token_number") or "")],
+            [str(ctx.get("patient_name") or "Patient")],
         )

@@ -408,7 +408,7 @@ class QueueManagementService:
         token_number = str(token.get("formatted_token") or token.get("token_number") or "")
 
         try:
-            await send_template_message(phone, tpl, [patient_name, token_number])
+            await send_template_message(phone, tpl, [patient_name])
         except Exception:
             pass
 
@@ -638,8 +638,8 @@ class QueueManagementService:
 
                 if phone:
                     await send_template_message(phone, tpl, [])
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"[ERROR] Failed to send thankyou message in queue service: {e}")
 
         await QueueManagementService.recalculate_for_doctor(doctor_id=doctor_id, hospital_id=hospital_id, reason="completed")
         # Auto-call next

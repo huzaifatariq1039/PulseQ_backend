@@ -378,6 +378,20 @@ async def cancel_token_logic(
     token.updated_at = datetime.utcnow()
     db.commit()
 
+    # Send WhatsApp Cancelled Notification
+    try:
+        from app.services.whatsapp_service import send_template_message
+        if token.patient_phone:
+            # We use asyncio.create_task to not block the response
+            import asyncio
+            asyncio.create_task(send_template_message(
+                token.patient_phone, 
+                "cancelled", 
+                [token.patient_name or "Patient"]
+            ))
+    except Exception as e:
+        print(f"[ERROR] Failed to send cancel notification: {e}")
+
     # Problem 1 & 2 Fix: Recalculate wait times for everyone else after a cancellation
     try:
         doctor = db.query(Doctor).filter(Doctor.id == token.doctor_id).first()
@@ -665,8 +679,11 @@ async def generate_smart_token(
             hospital_name=new_token.hospital_name or "Hospital",
             room_number="Room 1" # Defaulting as it's not in the token model yet
         )
+        
+        # Schedule confirmation check after 15 mins
+        schedule_confirmation_checks(token_id)
     except Exception as e:
-        print(f"[ERROR] Failed to trigger WhatsApp notification: {e}")
+        print(f"[ERROR] Failed to trigger WhatsApp notification or schedule reminder: {e}")
 
     return response_obj
 
@@ -805,8 +822,53 @@ async def update_token_status(
         if token.started_at:
             duration = (token.completed_at - token.started_at).total_seconds() / 60.0
             token.duration_minutes = round(duration, 2)
+        
+        # Send WhatsApp Thankyou Notification
+        try:
+            from app.services.whatsapp_service import send_template_message
+            from app.templates import TEMPLATES
+            if token.patient_phone:
+                import asyncio
+                tpl = TEMPLATES.get("THANKYOU")
+                if tpl:
+                    asyncio.create_task(send_template_message(
+                        token.patient_phone, 
+                        tpl, 
+                        []
+                    ))
+        except Exception as e:
+            print(f"[ERROR] Failed to send thankyou notification: {e}")
     elif new_status == "cancelled" and old_status != "cancelled":
         token.cancelled_at = datetime.utcnow()
+        # Send WhatsApp Cancelled Notification
+        try:
+            from app.services.whatsapp_service import send_template_message
+            if token.patient_phone:
+                import asyncio
+                asyncio.create_task(send_template_message(
+                    token.patient_phone, 
+                    "cancelled", 
+                    [token.patient_name or "Patient"]
+                ))
+        except Exception as e:
+            print(f"[ERROR] Failed to send cancel notification: {e}")
+    elif new_status == "skipped" and old_status != "skipped":
+        token.skipped_at = datetime.utcnow()
+        # Send WhatsApp Skipped Notification
+        try:
+            from app.services.whatsapp_service import send_template_message
+            from app.templates import TEMPLATES
+            if token.patient_phone:
+                import asyncio
+                tpl = TEMPLATES.get("RESCHEDULED")
+                if tpl:
+                    asyncio.create_task(send_template_message(
+                        token.patient_phone, 
+                        tpl, 
+                        [token.patient_name or "Patient", token.token_number]
+                    ))
+        except Exception as e:
+            print(f"[ERROR] Failed to send skipped notification: {e}")
     
     # If status is moving to completed or cancelled, trigger recalculation for remaining tokens
     # Also if someone is "called", the wait times for others might change
@@ -883,6 +945,12 @@ async def create_token(
     db.add(new_token)
     db.commit()
     db.refresh(new_token)
+
+    # Schedule confirmation check after 15 mins
+    try:
+        schedule_confirmation_checks(token_doc["id"])
+    except Exception as e:
+        print(f"[ERROR] Failed to schedule confirmation check: {e}")
 
     q = _queue_object_for(db, spec.doctor_id, spec.hospital_id, day, token_number)
     token_resp = _to_smart_token_response(new_token)

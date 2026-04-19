@@ -82,6 +82,14 @@ QUEUE_AUTOSKIP_INTERVAL_SECONDS = int(os.getenv("QUEUE_AUTOSKIP_INTERVAL_SECONDS
 TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
 TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
 TWILIO_WHATSAPP_NUMBER = os.getenv("TWILIO_WHATSAPP_NUMBER", "whatsapp:+14155238886")
+TWILIO_TEMPLATE_SID = os.getenv("TWILIO_TEMPLATE_SID") # New: For WhatsApp buttons
+TWILIO_CALL_ALERT_SID = os.getenv("TWILIO_CALL_ALERT_SID") # New: For "patient_call_alert"
+TWILIO_FINAL_ALERT_SID = os.getenv("TWILIO_FINAL_ALERT_SID") # New: For "final_alert"
+TWILIO_DOCTOR_CHANGE_SID = os.getenv("TWILIO_DOCTOR_CHANGE_SID") # New: For "appointment_doctor_change"
+TWILIO_CANCELLED_SID = os.getenv("TWILIO_CANCELLED_SID") # New: For "cancelled" template
+TWILIO_THANKYOU_SID = os.getenv("TWILIO_THANKYOU_SID") # New: For "template" (thankyou) template
+TWILIO_SKIPPED_SID = os.getenv("TWILIO_SKIPPED_SID") # New: For "skipped" template
+TWILIO_REMINDER_CONFIRM_SID = os.getenv("TWILIO_REMINDER_CONFIRM_SID") # New: For "reminder_for_confirmation" template
 
 # POS System Integration
 POS_SYSTEM_BASE_URL = os.getenv("POS_SYSTEM_BASE_URL", "http://localhost:5000")

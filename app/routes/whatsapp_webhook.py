@@ -134,7 +134,23 @@ async def twilio_whatsapp_webhook(
         token.confirmed_at = now
         token.updated_at = now
         db.commit()
-        twiml_response.message("You are confirmed in queue. We’ll notify you soon.")
+        
+        # Professional detailed response after clicking YES (Matching the image template)
+        # Using Urdu/Roman Urdu as in the template image provided
+        detailed_message = f"""
+Dear {token.patient_name or 'User'},
+
+Aapki turn qareeb aa rahi hai. 
+Aap se pehle {token.queue_position or 'kuch'} patients hain. 
+Taqreeban wait {token.estimated_wait_time or 'thoda'} hai. 
+Please {token.hospital_name or 'Clinic'} ki taraf chle jayein.
+Token: {token.token_number}
+
+Kindly tayar rhein.
+
+PulseQ
+"""
+        twiml_response.message(detailed_message.strip())
 
     elif message in ["no", "n", "cancel"]:
         token.status = "cancelled"
@@ -149,7 +165,17 @@ async def twilio_whatsapp_webhook(
         except Exception as e:
             logger.error(f"Error recalculating queue positions: {e}")
 
-        twiml_response.message("Your appointment has been cancelled. Thank you.")
+        # Send professional Cancelled template
+        try:
+            from app.services.whatsapp_service import send_template_message
+            phone = user_number.replace("whatsapp:", "")
+            await send_template_message(phone, "cancelled", [token.patient_name or "Patient"])
+        except Exception as e:
+            logger.error(f"Failed to send cancelled template: {e}")
+            twiml_response.message("Your appointment has been cancelled. Thank you.")
+            return Response(content=str(twiml_response), media_type="application/xml")
+
+        return Response(content=str(MessagingResponse()), media_type="application/xml")
 
     else:
         twiml_response.message("Please reply YES to confirm or NO to cancel.")
