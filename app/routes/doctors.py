@@ -362,7 +362,7 @@ def _normalize_time_to_hhmm(s: Optional[str]) -> Optional[str]:
     except Exception:
         return None
 
-@router.post("/", response_model=DoctorResponse, dependencies=[Depends(require_roles("admin", "patient"))])
+@router.post("", response_model=DoctorResponse, dependencies=[Depends(require_roles("admin"))])
 async def create_doctor(
     doctor: DoctorCreate,
     db: Session = Depends(get_db)

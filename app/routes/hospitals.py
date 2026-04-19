@@ -181,7 +181,7 @@ async def get_nearby_hospitals_overpass(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching from Overpass: {str(e)}")
 
-@router.get("/")
+@router.get("")
 async def list_hospitals(
     limit: int = Query(20, ge=1, le=100),
     page: int = Query(1, ge=1),
