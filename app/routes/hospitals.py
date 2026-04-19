@@ -102,9 +102,14 @@ async def create_hospital(hospital: HospitalCreate, db: Session = Depends(get_db
     
     # Map DB model to response dict, then to Pydantic for validation, then to dict for JSON serialization
     out_dict = {k: v for k, v in h.__dict__.items() if not k.startswith('_')}
+    
+    # Fix: Ensure is_open is set based on status
+    out_dict["is_open"] = h.status == HospitalStatus.OPEN
+    
     response_obj = HospitalResponse(**out_dict)
     
-    return ok(data=response_obj.model_dump(), message="Hospital created successfully")
+    # Return the individual created object, not a list
+    return response_obj
 
 # ===============================
 # NEW: Live Nearby via OpenStreetMap (Overpass API)
