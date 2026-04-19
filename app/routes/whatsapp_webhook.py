@@ -10,6 +10,10 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, or_
 from app.db_models import User, Doctor, Hospital, Token
 from app.services.whatsapp_service import send_queue_message
+from app.utils.twilio_security import validate_twilio_request
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/whatsapp", tags=["WhatsApp Webhook"])
 
@@ -26,13 +30,35 @@ patients_db = {
 
 @router.post("/twilio/webhook")
 async def twilio_whatsapp_webhook(
-    From: str = Form(...),
-    Body: str = Form(...),
+    request: Request,
     db: Session = Depends(get_db)
 ):
     """
     Twilio WhatsApp Webhook to handle YES/NO confirmations.
+    Includes production security validation.
     """
+    # 1. Security Validation (Twilio Signature)
+    signature = request.headers.get("X-Twilio-Signature")
+    url = str(request.url)
+    
+    # We need the raw body for signature validation
+    body = await request.body()
+    
+    # Validate if in production or if signature is provided
+    is_prod = os.getenv("ENVIRONMENT") == "production"
+    if is_prod or signature:
+        if not signature:
+            logger.warning("Missing X-Twilio-Signature in production request")
+            raise HTTPException(status_code=403, detail="Missing X-Twilio-Signature")
+        validate_twilio_request(request, body, signature, url)
+
+    # 2. Parse Form Data
+    from urllib.parse import parse_qs
+    form_data = {k: v[0] for k, v in parse_qs(body.decode("utf-8")).items()}
+    
+    From = form_data.get("From", "")
+    Body = form_data.get("Body", "")
+
     user_number = From.replace("whatsapp:", "").strip()
     message = Body.strip().lower()
 
@@ -47,8 +73,8 @@ async def twilio_whatsapp_webhook(
     if not full_norm.startswith("+"):
         full_norm = "+" + digits
 
-    print(f"Incoming Twilio WhatsApp: {user_number} → {message}")
-    print(f"[DEBUG] Search Criteria: local_suffix={local_suffix}, digits={digits}, full_norm={full_norm}")
+    logger.info(f"Incoming Twilio WhatsApp: {user_number} → {message}")
+    logger.debug(f"Search Criteria: local_suffix={local_suffix}, digits={digits}, full_norm={full_norm}")
 
     twiml_response = MessagingResponse()
 
@@ -65,7 +91,6 @@ async def twilio_whatsapp_webhook(
         ~Token.status.in_(["cancelled", "completed"])
     ).order_by(Token.created_at.desc())
     
-    print(f"[DEBUG] SQL Query generated")
     token = query.first()
 
     if not token:
@@ -80,9 +105,9 @@ async def twilio_whatsapp_webhook(
         ).first()
         
         if any_token:
-            print(f"[DEBUG] Token found but excluded. ID: {any_token.id}, Status: {any_token.status}")
+            logger.info(f"Token found but excluded. ID: {any_token.id}, Status: {any_token.status}")
         else:
-            print(f"[DEBUG] No tokens found at all for this phone search.")
+            logger.info(f"No tokens found at all for this phone search: {local_suffix}")
             # Let's check if the user even exists
             user_exists = db.query(User).filter(
                 or_(
@@ -91,14 +116,14 @@ async def twilio_whatsapp_webhook(
                 )
             ).first()
             if user_exists:
-                print(f"[DEBUG] User exists with ID {user_exists.id} but has no tokens.")
+                logger.info(f"User exists with ID {user_exists.id} but has no tokens.")
             else:
-                print(f"[DEBUG] No user found with phone matching {local_suffix} or {digits}.")
+                logger.info(f"No user found with phone matching {local_suffix} or {digits}.")
             
         twiml_response.message("You are not registered in any active queue.")
         return Response(content=str(twiml_response), media_type="application/xml")
 
-    print(f"[DEBUG] Found active token: {token.id}, Status: {token.status}, Patient: {token.patient_name or 'N/A'}")
+    logger.info(f"Found active token: {token.id}, Status: {token.status}, Patient: {token.patient_name or 'N/A'}")
 
     now = datetime.utcnow()
 
@@ -119,14 +144,12 @@ async def twilio_whatsapp_webhook(
         
         # Trigger recalculation for the rest of the queue
         try:
-            from app.routes.tokens import _recalculate_token_wait_times
-            appt_dt = token.appointment_date
-            day_local = appt_dt.date() if appt_dt else now.date()
-            _recalculate_token_wait_times(db, token.doctor_id, token.hospital_id, day_local)
-        except Exception:
-            pass
+            from app.services.queue_management_service import QueueManagementService
+            await QueueManagementService.recalculate_positions(token.doctor_id, token.hospital_id, token.appointment_date)
+        except Exception as e:
+            logger.error(f"Error recalculating queue positions: {e}")
 
-        twiml_response.message(" Your token has been cancelled.")
+        twiml_response.message("Your appointment has been cancelled. Thank you.")
 
     else:
         twiml_response.message("Please reply YES to confirm or NO to cancel.")
