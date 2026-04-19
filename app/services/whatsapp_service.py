@@ -14,11 +14,15 @@ def send_queue_message(phone: str, name: str, position: int, wait_time: int):
         return
 
     try:
+        if not phone:
+            logger.warning("No phone number provided. Skipping WhatsApp message.")
+            return None
+
         client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
         
         # Ensure phone is in the correct format for WhatsApp
         # Twilio requires the format 'whatsapp:+[country_code][number]'
-        formatted_phone = phone
+        formatted_phone = str(phone)
         if not formatted_phone.startswith("whatsapp:"):
             if not formatted_phone.startswith("+"):
                 formatted_phone = f"+{formatted_phone}"

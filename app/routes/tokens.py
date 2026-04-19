@@ -606,6 +606,9 @@ async def generate_smart_token(
         estimated_wait_time = int(calc_ahead_fallback * fallback_val)
         print(f"  - Result: Fallback used ({fallback_val}m/patient): {estimated_wait_time}m")
 
+    # Fetch full user details from DB to get name and phone
+    patient_user = db.query(User).filter(User.id == current_user.user_id).first()
+    
     token_doc = {
         "id": token_id,
         "token_number": token_number,
@@ -619,8 +622,8 @@ async def generate_smart_token(
         "payment_status": PaymentStatus.PENDING,
         "doctor_name": doctor_data.get("name"),
         "hospital_name": hospital_data.get("name"),
-        "patient_name": getattr(current_user, "name", None),
-        "patient_phone": getattr(current_user, "phone", None),
+        "patient_name": patient_user.name if patient_user else "Patient",
+        "patient_phone": patient_user.phone if patient_user else None,
         "consultation_fee": pricing.get("consultation_fee"),
         "session_fee": pricing.get("session_fee"),
         "total_fee": pricing.get("total_amount"),
