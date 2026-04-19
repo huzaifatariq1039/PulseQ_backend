@@ -22,10 +22,10 @@ TOKEN_FEE = float(os.getenv("TOKEN_FEE", "50"))
 TESTING_MODE = os.getenv("TESTING_MODE", "False").lower() == "true"
 
 # Database Configuration
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql://postgres:postgres@localhost:5432/pulseq"
-)
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    # Default fallback for development
+    DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/pulseq"
 
 # Firebase Configuration (deprecated - keeping for migration)
 FIREBASE_SERVICE_ACCOUNT_KEY = os.getenv(

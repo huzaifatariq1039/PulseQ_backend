@@ -6,28 +6,20 @@ from app.config import DATABASE_URL
 # Create base class for models
 Base = declarative_base()
 
-# Engine and session will be initialized lazily
-_engine = None
-_SessionLocal = None
-
+# SQLAlchemy engine creation logic
 def get_engine():
-    """Get or create SQLAlchemy engine"""
-    global _engine
-    if _engine is None:
-        _engine = create_engine(DATABASE_URL, pool_pre_ping=True)
-    return _engine
+    """Get or create SQLAlchemy engine using DATABASE_URL"""
+    return create_engine(DATABASE_URL, pool_pre_ping=True)
 
-def get_session_local():
-    """Get or create sessionmaker"""
-    global _SessionLocal
-    if _SessionLocal is None:
-        _SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=get_engine())
-    return _SessionLocal
+# Shared engine instance
+engine = get_engine()
+
+# Sessionmaker configuration
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 # Dependency to get DB session
 def get_db() -> Session:
-    """Get database session"""
-    SessionLocal = get_session_local()
+    """Get database session using SessionLocal"""
     db = SessionLocal()
     try:
         yield db
@@ -36,16 +28,14 @@ def get_db() -> Session:
 
 # For direct DB access (non-generator)
 def get_db_session() -> Session:
-    """Get database session directly (for non-async contexts)"""
-    SessionLocal = get_session_local()
+    """Get database session directly using SessionLocal"""
     return SessionLocal()
 
 # Initialize database tables
 def init_db():
-    """Create all tables"""
+    """Create all tables using the global engine"""
     try:
-        from app import db_models  # Import all models
-        engine = get_engine()
+        from app import db_models  # Import all models to register with Base
         Base.metadata.create_all(bind=engine)
         print("Database tables created successfully!")
     except Exception as e:
