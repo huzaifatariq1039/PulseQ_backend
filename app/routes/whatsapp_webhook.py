@@ -36,10 +36,6 @@ async def twilio_whatsapp_webhook(
     user_number = From.replace("whatsapp:", "").strip()
     message = Body.strip().lower()
 
-    print(f"Incoming Twilio WhatsApp: {user_number} → {message}")
-
-    twiml_response = MessagingResponse()
-
     # Normalize phone number to find the token
     digits = "".join([c for c in user_number if c.isdigit()])
     if digits.startswith("92"):
@@ -47,19 +43,41 @@ async def twilio_whatsapp_webhook(
     else:
         local_suffix = digits[-10:]
 
+    print(f"Incoming Twilio WhatsApp: {user_number} → {message}")
+    print(f"[DEBUG] Search Criteria: local_suffix={local_suffix}, full_digits={digits}")
+
+    twiml_response = MessagingResponse()
+
     # Find the latest active token for this user
-    token = db.query(Token).filter(
+    query = db.query(Token).filter(
         or_(
             Token.patient_phone.like(f"%{local_suffix}"),
             Token.patient_phone.like(f"%{digits}")
         )
     ).filter(
         ~Token.status.in_(["cancelled", "completed"])
-    ).order_by(Token.created_at.desc()).first()
+    ).order_by(Token.created_at.desc())
+    
+    print(f"[DEBUG] SQL Query: {query}")
+    token = query.first()
 
     if not token:
+        # Let's see what tokens DO exist for this number regardless of status
+        any_token = db.query(Token).filter(
+            or_(
+                Token.patient_phone.like(f"%{local_suffix}"),
+                Token.patient_phone.like(f"%{digits}")
+            )
+        ).first()
+        if any_token:
+            print(f"[DEBUG] Token found but excluded. Status: {any_token.status}")
+        else:
+            print(f"[DEBUG] No tokens found at all for this phone search.")
+            
         twiml_response.message("You are not registered in any active queue.")
         return Response(content=str(twiml_response), media_type="application/xml")
+
+    print(f"[DEBUG] Found active token: {token.id}, Status: {token.status}")
 
     now = datetime.utcnow()
 
