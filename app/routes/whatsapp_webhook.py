@@ -38,46 +38,67 @@ async def twilio_whatsapp_webhook(
 
     # Normalize phone number to find the token
     digits = "".join([c for c in user_number if c.isdigit()])
-    if digits.startswith("92"):
-        local_suffix = digits[2:] 
-    else:
-        local_suffix = digits[-10:]
+    
+    # Standard Pakistan local suffix is the last 10 digits (e.g., 3314044494)
+    local_suffix = digits[-10:] if len(digits) >= 10 else digits
+    
+    # Also try to match with +92 prefix if not present
+    full_norm = f"+92{local_suffix}" if not user_number.startswith("+") else user_number
+    if not full_norm.startswith("+"):
+        full_norm = "+" + digits
 
     print(f"Incoming Twilio WhatsApp: {user_number} → {message}")
-    print(f"[DEBUG] Search Criteria: local_suffix={local_suffix}, full_digits={digits}")
+    print(f"[DEBUG] Search Criteria: local_suffix={local_suffix}, digits={digits}, full_norm={full_norm}")
 
     twiml_response = MessagingResponse()
 
     # Find the latest active token for this user
-    query = db.query(Token).filter(
+    # We search by patient_phone in Token table OR by User.phone via relationship
+    query = db.query(Token).outerjoin(User, Token.patient_id == User.id).filter(
         or_(
             Token.patient_phone.like(f"%{local_suffix}"),
-            Token.patient_phone.like(f"%{digits}")
+            Token.patient_phone.like(f"%{digits}"),
+            User.phone.like(f"%{local_suffix}"),
+            User.phone.like(f"%{digits}")
         )
     ).filter(
         ~Token.status.in_(["cancelled", "completed"])
     ).order_by(Token.created_at.desc())
     
-    print(f"[DEBUG] SQL Query: {query}")
+    print(f"[DEBUG] SQL Query generated")
     token = query.first()
 
     if not token:
         # Let's see what tokens DO exist for this number regardless of status
-        any_token = db.query(Token).filter(
+        any_token = db.query(Token).outerjoin(User, Token.patient_id == User.id).filter(
             or_(
                 Token.patient_phone.like(f"%{local_suffix}"),
-                Token.patient_phone.like(f"%{digits}")
+                Token.patient_phone.like(f"%{digits}"),
+                User.phone.like(f"%{local_suffix}"),
+                User.phone.like(f"%{digits}")
             )
         ).first()
+        
         if any_token:
-            print(f"[DEBUG] Token found but excluded. Status: {any_token.status}")
+            print(f"[DEBUG] Token found but excluded. ID: {any_token.id}, Status: {any_token.status}")
         else:
             print(f"[DEBUG] No tokens found at all for this phone search.")
+            # Let's check if the user even exists
+            user_exists = db.query(User).filter(
+                or_(
+                    User.phone.like(f"%{local_suffix}"),
+                    User.phone.like(f"%{digits}")
+                )
+            ).first()
+            if user_exists:
+                print(f"[DEBUG] User exists with ID {user_exists.id} but has no tokens.")
+            else:
+                print(f"[DEBUG] No user found with phone matching {local_suffix} or {digits}.")
             
         twiml_response.message("You are not registered in any active queue.")
         return Response(content=str(twiml_response), media_type="application/xml")
 
-    print(f"[DEBUG] Found active token: {token.id}, Status: {token.status}")
+    print(f"[DEBUG] Found active token: {token.id}, Status: {token.status}, Patient: {token.patient_name or 'N/A'}")
 
     now = datetime.utcnow()
 
