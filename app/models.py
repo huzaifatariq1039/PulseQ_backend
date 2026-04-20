@@ -251,7 +251,6 @@ class DoctorBase(BaseModel):
     subcategory: Optional[str] = None  # e.g., "Pediatric Cardiology"
     hospital_id: str
     email: Optional[str] = None
-    experience_years: int = Field(..., ge=0)
     rating: Optional[float] = Field(None, ge=0, le=5)
     review_count: int = 0
     consultation_fee: float = Field(..., gt=0)
