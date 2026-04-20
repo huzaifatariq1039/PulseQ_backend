@@ -402,7 +402,7 @@ async def create_doctor(
         id=user_id,
         name=doctor.name,
         email=doctor.email.lower(),
-        phone=doctor.phone,
+        phone=None,  # Phone no longer required for doctors during creation
         password_hash=get_password_hash(doctor.password),
         role="doctor",
         created_at=datetime.utcnow(),

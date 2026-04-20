@@ -250,7 +250,6 @@ class DoctorBase(BaseModel):
     specialization: str = Field(..., alias="department")
     subcategory: Optional[str] = None  # e.g., "Pediatric Cardiology"
     hospital_id: str
-    phone: str
     email: Optional[str] = None
     experience_years: int = Field(..., ge=0)
     rating: Optional[float] = Field(None, ge=0, le=5)

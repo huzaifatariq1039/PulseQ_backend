@@ -107,7 +107,6 @@ class Doctor(Base):
     specialization = Column(String(100), nullable=False)
     subcategory = Column(String(100), nullable=True)
     hospital_id = Column(String, ForeignKey("hospitals.id"), nullable=False)
-    phone = Column(String(20), nullable=False)
     email = Column(String(255), nullable=True)
     experience_years = Column(Integer, default=0)
     rating = Column(Float, nullable=True)
