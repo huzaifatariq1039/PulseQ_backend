@@ -3,6 +3,7 @@ from datetime import timedelta
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, func
+from sqlalchemy.exc import IntegrityError
 from app.models import UserCreate, UserResponse, Token, TokenData, LoginRequest, LocationUpdate, AuthMethod, ActivityType, UserRole
 from app.security import (
     get_password_hash,
@@ -119,22 +120,19 @@ async def register_user(user: UserCreate):
             )
         
         # Check if user already exists
-        if user.auth_method == AuthMethod.EMAIL and user.email:
-            existing = db.query(UserDB).filter(
+        # 1. Check Email
+        if user.email:
+            existing_email = db.query(UserDB).filter(
                 func.lower(UserDB.email) == user.email.lower()
             ).first()
-            if existing:
+            if existing_email:
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
                     detail=f"Email {user.email} is already registered"
                 )
-        else:  # PHONE
-            if not user.phone:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Phone number is required"
-                )
-            
+        
+        # 2. Check Phone
+        if user.phone:
             phone_norm = _normalize_phone(user.phone)
             if not phone_norm:
                 raise HTTPException(
@@ -142,14 +140,13 @@ async def register_user(user: UserCreate):
                     detail="Invalid phone number format"
                 )
             
-            # Check for existing phone
-            existing = db.query(UserDB).filter(
+            existing_phone = db.query(UserDB).filter(
                 or_(UserDB.phone == user.phone, UserDB.phone == phone_norm)
             ).first()
-            if existing:
+            if existing_phone:
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
-                    detail="This phone number is already registered"
+                    detail=f"Phone number {user.phone} is already registered"
                 )
         
         # Create new user
@@ -216,6 +213,27 @@ async def register_user(user: UserCreate):
     except HTTPException:
         db.rollback()
         raise
+    except IntegrityError as e:
+        db.rollback()
+        error_msg = str(e.orig)
+        print(f"[ERROR] Registration IntegrityError: {error_msg}")
+        
+        # Handle common unique constraint violations
+        if "users_phone_key" in error_msg:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="This phone number is already registered"
+            )
+        elif "users_email_key" in error_msg:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="This email address is already registered"
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="A user with this information already exists"
+            )
     except Exception as e:
         db.rollback()
         print(f"[ERROR] Registration failed: {str(e)}")
