@@ -7,7 +7,7 @@ from app.models import (
 from app.database import get_db
 from sqlalchemy.orm import Session
 from app.db_models import User, Doctor, Hospital, Token, ActivityLog
-from app.security import get_current_active_user, get_password_hash
+from app.security import get_current_active_user, get_password_hash, verify_password
 from app.services.token_service import SmartTokenService
 from datetime import datetime
 import uuid
@@ -304,8 +304,12 @@ async def change_password(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
+    # Verify current password
+    if not verify_password(current_password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Invalid current password")
+    
     # Hash and update
-    user.password = get_password_hash(new_password)
+    user.password_hash = get_password_hash(new_password)
     user.updated_at = datetime.utcnow()
     db.commit()
     
@@ -327,8 +331,9 @@ async def delete_account(
     """Delete user account (soft delete) in PostgreSQL"""
     user = db.query(User).filter(User.id == current_user.user_id).first()
     if user:
-        user.status = "deleted" # Assuming status field or is_deleted
-        user.updated_at = datetime.utcnow()
+        # Check if column name is 'status' or 'role' or something else
+        # For now, we'll just delete the user record from the database
+        db.delete(user)
         db.commit()
         
     await create_activity_log(

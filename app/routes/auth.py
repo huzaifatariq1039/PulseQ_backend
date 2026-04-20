@@ -57,6 +57,70 @@ def _normalize_phone(phone: str) -> str:
     # For any other case, return the cleaned digits
     return digits
 
+# ---------------- Login helpers ----------------
+async def _authenticate_user(login_data: LoginRequest, db: Session):
+    """Internal helper to authenticate user and return user object"""
+    print(f"[DEBUG] Authentication attempt: {login_data.identifier}")
+    
+    # Find user by email or phone
+    user = None
+    if login_data.auth_method == AuthMethod.EMAIL:
+        user = db.query(UserDB).filter(
+            func.lower(UserDB.email) == login_data.identifier.lower()
+        ).first()
+    else:  # PHONE
+        phone_norm = _normalize_phone(login_data.identifier)
+        user = db.query(UserDB).filter(
+            or_(
+                UserDB.phone == login_data.identifier,
+                UserDB.phone == phone_norm
+            )
+        ).first()
+    
+    if not user:
+        print(f"[ERROR] User not found: {login_data.identifier}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials"
+        )
+    
+    # Verify password
+    try:
+        password_valid = verify_password(login_data.password, user.password_hash)
+    except Exception as pwd_error:
+        print(f"[ERROR] Password verification error: {str(pwd_error)}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials"
+        )
+    
+    if not password_valid:
+        print(f"[ERROR] Invalid password for user: {user.id}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials"
+        )
+    
+    return user
+
+def _create_token_response(user: UserDB):
+    """Internal helper to create token response for a user"""
+    # Convert role to string if it's an Enum
+    user_role = user.role.value if hasattr(user.role, 'value') else str(user.role)
+    
+    # Create tokens
+    access_token = create_access_token(
+        data={"sub": str(user.id), "role": user_role},
+        expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    )
+    refresh_token = create_refresh_token(data={"sub": str(user.id)})
+    
+    return Token(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        token_type="bearer"
+    )
+
 def create_activity_log_sync(user_id: str, activity_type: str, description: str, meta_data: dict = None):
     """Helper function to create activity logs (synchronous version)"""
     try:
@@ -247,159 +311,109 @@ async def register_user(user: UserCreate):
         db.close()
 
 @router.post("/login", response_model=Token)
+@router.post("/patient/login", response_model=Token)
 async def login(login_data: LoginRequest):
-    """Login with phone/email and password"""
+    """Login for patients only"""
     db = get_db_session()
     try:
-        print(f"[DEBUG] Login attempt: {login_data.identifier}")
-        
-        # Find user by email or phone
-        user = None
-        if login_data.auth_method == AuthMethod.EMAIL:
-            user = db.query(UserDB).filter(
-                func.lower(UserDB.email) == login_data.identifier.lower()
-            ).first()
-        else:  # PHONE
-            phone_norm = _normalize_phone(login_data.identifier)
-            user = db.query(UserDB).filter(
-                or_(
-                    UserDB.phone == login_data.identifier,
-                    UserDB.phone == phone_norm
-                )
-            ).first()
-        
-        if not user:
-            print(f"[ERROR] User not found: {login_data.identifier}")
+        user = await _authenticate_user(login_data, db)
+        user_role = str(user.role.value if hasattr(user.role, 'value') else user.role).lower()
+        if user_role != "patient":
             raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid credentials"
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied: This login is only for patients"
             )
-        
-        print(f"[DEBUG] User found: {user.id}, verifying password...")
-        
-        # Verify password using SHA-256 + bcrypt (handles unlimited length)
-        try:
-            password_valid = verify_password(login_data.password, user.password_hash)
-        except Exception as pwd_error:
-            print(f"[ERROR] Password verification error: {str(pwd_error)}")
-            # This might happen with old password hashes from the previous hashing method
-            print(f"[ERROR] This could be due to old password hash format. User needs to re-register.")
+        return _create_token_response(user)
+    finally:
+        db.close()
+
+@router.post("/doctor/login", response_model=Token)
+async def doctor_login(login_data: LoginRequest):
+    """Login specifically for doctors"""
+    db = get_db_session()
+    try:
+        user = await _authenticate_user(login_data, db)
+        user_role = str(user.role.value if hasattr(user.role, 'value') else user.role).lower()
+        if user_role != "doctor":
             raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid credentials"
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied: This login is only for doctors"
             )
-        
-        if not password_valid:
-            print(f"[ERROR] Invalid password for user: {user.id}")
+        return _create_token_response(user)
+    finally:
+        db.close()
+
+@router.post("/receptionist/login", response_model=Token)
+async def receptionist_login(login_data: LoginRequest):
+    """Login specifically for receptionists"""
+    db = get_db_session()
+    try:
+        user = await _authenticate_user(login_data, db)
+        user_role = str(user.role.value if hasattr(user.role, 'value') else user.role).lower()
+        if user_role != "receptionist":
             raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid credentials"
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied: This login is only for receptionists"
             )
-        
-        print(f"[DEBUG] Password verified successfully for user: {user.id}")
-        
-        # Convert role to string if it's an Enum
-        user_role = user.role.value if hasattr(user.role, 'value') else str(user.role)
-        
-        # Create tokens
-        access_token = create_access_token(
-            data={"sub": str(user.id), "role": user_role},
-            expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-        )
-        refresh_token = create_refresh_token(data={"sub": str(user.id)})
-        
-        print(f"[DEBUG] Login successful: {user.id}")
-        
-        return Token(
-            access_token=access_token,
-            refresh_token=refresh_token,
-            token_type="bearer"
-        )
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"[ERROR] Login failed: {str(e)}")
-        import traceback
-        print(traceback.format_exc())
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Login failed: {str(e)}"
-        )
+        return _create_token_response(user)
+    finally:
+        db.close()
+
+@router.post("/admin/login", response_model=Token)
+async def admin_login(login_data: LoginRequest):
+    """Login specifically for admins"""
+    db = get_db_session()
+    try:
+        user = await _authenticate_user(login_data, db)
+        user_role = str(user.role.value if hasattr(user.role, 'value') else user.role).lower()
+        if user_role != "admin":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied: This login is only for admins"
+            )
+        return _create_token_response(user)
     finally:
         db.close()
 
 @router.post("/pharmacy/login", response_model=Token)
 async def pharmacy_login(login_data: PharmacyLoginRequest):
-    """Login specifically for pharmacy users with email and password"""
+    """Login specifically for pharmacy users"""
     db = get_db_session()
     try:
-        print(f"[DEBUG] Pharmacy login attempt: {login_data.email}")
-        
-        # Find user by email and ensure role is pharmacy or admin
+        # For pharmacy, we only use email
         user = db.query(UserDB).filter(
             func.lower(UserDB.email) == login_data.email.lower()
         ).first()
         
         if not user:
-            print(f"[ERROR] Pharmacy user not found: {login_data.email}")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid credentials"
             )
 
-        # TESTING BYPASS: Temporarily allow any role to login via pharmacy for testing
-        # In production, this should check for UserRole.PHARMACY or UserRole.ADMIN
-        user_role_val = str(user.role.value if hasattr(user.role, 'value') else user.role).lower()
-        print(f"[DEBUG] User found with role: {user_role_val}")
+        user_role = str(user.role.value if hasattr(user.role, 'value') else user.role).lower()
+        if user_role != "pharmacy" and user_role != "admin":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied: This login is only for pharmacy staff"
+            )
         
-        # Verify password using SHA-256 + bcrypt
+        # Verify password
         try:
             password_valid = verify_password(login_data.password, user.password_hash)
-        except Exception as pwd_error:
-            print(f"[ERROR] Password verification error: {str(pwd_error)}")
+        except Exception:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid credentials"
             )
         
         if not password_valid:
-            print(f"[ERROR] Invalid password for pharmacy user: {user.id}")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid credentials"
             )
         
-        print(f"[DEBUG] Pharmacy password verified successfully for user: {user.id}")
-        
-        # Convert role to string
-        user_role = user.role.value if hasattr(user.role, 'value') else str(user.role)
-        
-        # Create tokens
-        access_token = create_access_token(
-            data={"sub": str(user.id), "role": user_role},
-            expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-        )
-        refresh_token = create_refresh_token(data={"sub": str(user.id)})
-        
-        print(f"[DEBUG] Pharmacy login successful: {user.id}")
-        
-        return Token(
-            access_token=access_token,
-            refresh_token=refresh_token,
-            token_type="bearer"
-        )
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"[ERROR] Pharmacy login failed: {str(e)}")
-        import traceback
-        print(traceback.format_exc())
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Pharmacy login failed: {str(e)}"
-        )
+        return _create_token_response(user)
     finally:
         db.close()
 
