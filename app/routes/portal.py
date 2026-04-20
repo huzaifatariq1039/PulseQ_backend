@@ -114,7 +114,11 @@ async def get_doctor_tokens(
     page: Optional[int] = Query(1, ge=1),
     page_size: Optional[int] = Query(20, ge=1, le=100),
 ) -> Dict[str, Any]:
-    query = db.query(Token).filter(Token.doctor_id == current.user_id)
+    # Find clinical doctor profile
+    doctor = db.query(Doctor).filter(Doctor.user_id == current.user_id).first()
+    target_doctor_id = doctor.id if doctor else current.user_id
+    
+    query = db.query(Token).filter(Token.doctor_id == target_doctor_id)
     if status_filter:
         query = query.filter(Token.status == status_filter)
     
@@ -135,15 +139,19 @@ async def doctor_dashboard(
     upcoming_limit: int = Query(5, ge=0, le=50),
     skipped_limit: int = Query(5, ge=0, le=50),
 ) -> Dict[str, Any]:
-    doctor = db.query(Doctor).filter(Doctor.id == current.user_id).first()
+    # Try finding doctor by user_id first (newly created doctors)
+    doctor = db.query(Doctor).filter(Doctor.user_id == current.user_id).first()
     if not doctor:
-        # Try fallback user_id if needed
-        # doctor = db.query(Doctor).filter(Doctor.user_id == current.user_id).first()
-        pass
+        # Fallback to legacy check (where Doctor.id was used as user_id)
+        doctor = db.query(Doctor).filter(Doctor.id == current.user_id).first()
+    
+    # Get user object for fallback name
+    user = db.query(User).filter(User.id == current.user_id).first()
+    user_name = user.name if user else "Doctor"
         
     doctor_header = {
         "id": doctor.id if doctor else current.user_id,
-        "name": doctor.name if doctor else current.name,
+        "name": doctor.name if doctor else user_name,
         "department": doctor.specialization if doctor else None,
         "room": getattr(doctor, "room", None) if doctor else None,
         "status": doctor.status.value if doctor and hasattr(doctor.status, 'value') else str(getattr(doctor, 'status', '')).lower(),
@@ -153,8 +161,12 @@ async def doctor_dashboard(
     today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
     today_end = today_start + timedelta(days=1)
     
+    # Query tokens where this doctor is assigned
+    # If we found a clinical doctor profile, use doctor.id
+    target_doctor_id = doctor.id if doctor else current.user_id
+    
     todays = db.query(Token).filter(
-        Token.doctor_id == current.user_id,
+        Token.doctor_id == target_doctor_id,
         Token.appointment_date >= today_start,
         Token.appointment_date < today_end
     ).all()
