@@ -88,6 +88,7 @@ class UserBase(BaseModel):
     email: Optional[str] = None
     phone: Optional[str] = None
     role: UserRole = UserRole.PATIENT
+    hospital_id: Optional[str] = None # For receptionists/staff
     location_access: bool = False
 
 class UserCreate(UserBase):
@@ -305,12 +306,36 @@ class DoctorBase(BaseModel):
         return self
 
 class DoctorCreate(DoctorBase):
+    email: str = Field(..., description="Doctor email for login")
+    password: str = Field(..., min_length=6, description="Doctor password for login")
     pass
 
 class DoctorResponse(DoctorBase):
     id: str
+    user_id: Optional[str] = None
     created_at: datetime
     updated_at: datetime
+
+
+# Receptionist Models
+class ReceptionistCreate(BaseModel):
+    name: str = Field(..., min_length=2, max_length=100)
+    email: str = Field(..., description="Receptionist email for login")
+    password: str = Field(..., min_length=6, description="Receptionist password for login")
+    phone: str
+    hospital_id: str
+    pass
+
+class ReceptionistResponse(BaseModel):
+    id: str
+    name: str
+    email: str
+    phone: str
+    hospital_id: str
+    role: str = "receptionist"
+    created_at: datetime
+    updated_at: datetime
+    pass
 
 
 # Queue Models

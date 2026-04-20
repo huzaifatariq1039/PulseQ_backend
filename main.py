@@ -116,7 +116,7 @@ app = FastAPI(
 # Read comma-separated origins from env ALLOWED_ORIGINS, default to "*"
 _origins_env = os.getenv("ALLOWED_ORIGINS", "")
 _allowed_origins = [o.strip() for o in _origins_env.split(",") if o.strip()]
-_default_origins = [o for o in [WEB_BASE_URL, MOBILE_BASE_URL] if o]
+_default_origins = [o for o in [WEB_BASE_URL, MOBILE_BASE_URL, "http://localhost:4200"] if o]
 _extra = EXTRA_CORS_ORIGINS or []
 if not (_allowed_origins or _default_origins or _extra):
     _allowed_origins = ["*"]

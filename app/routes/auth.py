@@ -171,6 +171,7 @@ async def register_user(user: UserCreate):
             phone=_normalize_phone(user.phone) if user.phone else None,
             password_hash=password_hash,
             role=user.role.value if hasattr(user.role, 'value') else str(user.role),
+            hospital_id=user.hospital_id, # Added support for hospital_id
             location_access=user.location_access,
             date_of_birth=date_of_birth,
             address=address,
@@ -202,6 +203,7 @@ async def register_user(user: UserCreate):
             email=new_user.email,
             phone=new_user.phone,
             role=role_val,
+            hospital_id=new_user.hospital_id, # Return hospital_id
             location_access=new_user.location_access,
             date_of_birth=new_user.date_of_birth,
             address=new_user.address,
@@ -406,6 +408,7 @@ async def get_current_user_info(current_user: TokenData = Depends(get_current_ac
             email=user.email,
             phone=user.phone,
             role=role_val,
+            hospital_id=user.hospital_id, # Added hospital_id
             location_access=user.location_access or False,
             date_of_birth=user.date_of_birth,
             address=user.address,

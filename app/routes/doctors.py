@@ -2,9 +2,10 @@ from fastapi import APIRouter, HTTPException, status, Query, Depends
 from typing import List, Optional, Dict, Any
 from app.models import DoctorCreate, DoctorResponse, DoctorSearchResponse, DoctorWithQueue, QueueStatus
 from app.database import get_db
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from app.db_models import Doctor, Hospital, User
-from app.security import get_current_active_user, require_roles
+from app.security import get_current_active_user, require_roles, get_password_hash
 from datetime import datetime
 import random
 
@@ -367,8 +368,19 @@ async def create_doctor(
     doctor: DoctorCreate,
     db: Session = Depends(get_db)
 ):
-    """Create a new doctor (Admin only)"""
-    # Check if doctor with same name and hospital already exists
+    """Create a new doctor (Admin only).
+    
+    This also creates a corresponding User record for doctor portal login.
+    """
+    # 1. Check if user with this email already exists
+    existing_user = db.query(User).filter(func.lower(User.email) == doctor.email.lower()).first()
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"User with email {doctor.email} already exists"
+        )
+
+    # 2. Check if doctor with same name and hospital already exists
     existing_doctor = db.query(Doctor).filter(
         Doctor.name == doctor.name,
         Doctor.hospital_id == doctor.hospital_id
@@ -381,8 +393,22 @@ async def create_doctor(
         )
 
     import uuid
+    user_id = str(uuid.uuid4())
     doctor_id = str(uuid.uuid4())
     doctor_data = doctor.dict()
+    
+    # 3. Create User record for credentials
+    new_user = User(
+        id=user_id,
+        name=doctor.name,
+        email=doctor.email.lower(),
+        phone=doctor.phone,
+        password_hash=get_password_hash(doctor.password),
+        role="doctor",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow()
+    )
+    db.add(new_user)
 
     # Normalize schedule times to 24-hour HH:MM if provided (support AM/PM input from frontend)
     norm_start = _normalize_time_to_hhmm(doctor_data.get("start_time"))
@@ -391,7 +417,9 @@ async def create_doctor(
         doctor_data["start_time"] = norm_start
     if norm_end:
         doctor_data["end_time"] = norm_end
+    
     doctor_data["id"] = doctor_id
+    doctor_data["user_id"] = user_id
     doctor_data["created_at"] = datetime.utcnow()
     doctor_data["updated_at"] = datetime.utcnow()
 
@@ -448,7 +476,7 @@ async def create_doctor(
     response_obj = DoctorResponse(**out_dict)
     
     from app.utils.responses import ok
-    return ok(data=response_obj.model_dump(), message="Doctor created successfully")
+    return ok(data=response_obj.model_dump(), message="Doctor created successfully with login credentials")
 
 
 @router.get("/{doctor_id}/available-slots")

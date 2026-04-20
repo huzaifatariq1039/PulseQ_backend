@@ -5,16 +5,75 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from app.db_models import User, Doctor, Hospital, Token, ActivityLog, Queue as DBQueue
-
-from app.security import get_current_active_user
+from app.models import TokenData, ReceptionistCreate, ReceptionistResponse
+from app.security import get_current_active_user, require_roles, get_password_hash
 from app.database import get_db
-from app.models import TokenData
-from app.security import require_roles
 from app.services.token_service import SmartTokenService
 from app.utils.responses import ok
+import uuid
+import logging
 
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+@router.post("/receptionists", response_model=ReceptionistResponse, dependencies=[Depends(require_roles("admin"))])
+async def create_receptionist(
+    receptionist: ReceptionistCreate,
+    db: Session = Depends(get_db)
+):
+    """Create a new receptionist user (Admin only).
+    
+    This creates a User record with the 'receptionist' role.
+    """
+    # 1. Check if user with this email already exists
+    existing_user = db.query(User).filter(func.lower(User.email) == receptionist.email.lower()).first()
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"User with email {receptionist.email} already exists"
+        )
+    
+    # 2. Check if hospital exists
+    hospital = db.query(Hospital).filter(Hospital.id == receptionist.hospital_id).first()
+    if not hospital:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Hospital not found"
+        )
+
+    # 3. Create User record for credentials
+    user_id = str(uuid.uuid4())
+    now = datetime.utcnow()
+    
+    new_user = User(
+        id=user_id,
+        name=receptionist.name,
+        email=receptionist.email.lower(),
+        phone=receptionist.phone,
+        password_hash=get_password_hash(receptionist.password),
+        role="receptionist",
+        hospital_id=receptionist.hospital_id,
+        created_at=now,
+        updated_at=now
+    )
+    
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    
+    # Map to response
+    return ReceptionistResponse(
+        id=new_user.id,
+        name=new_user.name,
+        email=new_user.email,
+        phone=new_user.phone,
+        hospital_id=new_user.hospital_id,
+        role=new_user.role,
+        created_at=new_user.created_at,
+        updated_at=new_user.updated_at
+    )
 
 
 def _to_dt(v: Any) -> Optional[datetime]:

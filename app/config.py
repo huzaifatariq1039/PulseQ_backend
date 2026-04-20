@@ -87,7 +87,7 @@ TWILIO_CALL_ALERT_SID = os.getenv("TWILIO_CALL_ALERT_SID") # New: For "patient_c
 TWILIO_FINAL_ALERT_SID = os.getenv("TWILIO_FINAL_ALERT_SID") # New: For "final_alert"
 TWILIO_DOCTOR_CHANGE_SID = os.getenv("TWILIO_DOCTOR_CHANGE_SID") # New: For "appointment_doctor_change"
 TWILIO_CANCELLED_SID = os.getenv("TWILIO_CANCELLED_SID") # New: For "cancelled" template
-TWILIO_THANKYOU_SID = os.getenv("TWILIO_THANKYOU_SID") # New: For "template" (thankyou) template
+TWILIO_THANKYOU_SID = os.getenv("TWILIO_THANKYOU_SID", "HX07f9a8376cbb2c26e39703037696df36") # New: For "template" (thankyou) template
 TWILIO_SKIPPED_SID = os.getenv("TWILIO_SKIPPED_SID") # New: For "skipped" template
 TWILIO_REMINDER_CONFIRM_SID = os.getenv("TWILIO_REMINDER_CONFIRM_SID") # New: For "reminder_for_confirmation" template
 

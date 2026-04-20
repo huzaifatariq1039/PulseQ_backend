@@ -60,6 +60,7 @@ class User(Base):
     phone = Column(String(20), unique=True, nullable=True)
     password_hash = Column(String(255), nullable=False)
     role = Column(String(20), default="patient") # Using string for DB compatibility, validated by UserRole enum
+    hospital_id = Column(String, ForeignKey("hospitals.id"), nullable=True) # For receptionists/staff
     location_access = Column(Boolean, default=False)
     date_of_birth = Column(String(20), nullable=True)
     address = Column(String(500), nullable=True)
@@ -101,6 +102,7 @@ class Doctor(Base):
     __tablename__ = "doctors"
 
     id = Column(String, primary_key=True, index=True)
+    user_id = Column(String, ForeignKey("users.id"), nullable=True) # Link to auth user
     name = Column(String(100), nullable=False)
     specialization = Column(String(100), nullable=False)
     subcategory = Column(String(100), nullable=True)

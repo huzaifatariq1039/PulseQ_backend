@@ -46,7 +46,6 @@ def send_queue_message(phone: str, name: str, position: int, wait_time: int, doc
         if from_number and not from_number.startswith("whatsapp:"):
             from_number = f"whatsapp:{from_number}"
 
-        # If we have a Template SID, use the Content API to show buttons
         if TWILIO_TEMPLATE_SID:
             message = client.messages.create(
                 from_=from_number,
@@ -126,8 +125,7 @@ def send_call_alert(phone: str, name: str):
 async def send_template_message(phone: str, template_name: str, params: list):
     """
     Sends a WhatsApp template message using Twilio.
-    Note: Twilio handles templates via their Content API or pre-approved messages.
-    For simplicity, this function simulates sending a template by constructing a body.
+    
     """
     if not TWILIO_ACCOUNT_SID or not TWILIO_AUTH_TOKEN:
         logger.warning("Twilio credentials not configured. Skipping template message.")
@@ -287,9 +285,12 @@ PulseQ
             else:
                 # Fallback text as per user requirement image
                 body = """
-Thank for visiting PulseQ.
+Thankyou for visiting PulseQ.
+Did you like our service?
 
-Please share your feedback: https://forms.gle/u1TTULK298ZM6VZ5A
+(Reply with one of the options below)
+1. Yes, It was Great
+2. No, I didn't like it
 """.strip()
                 message = client.messages.create(
                     from_=from_number,
