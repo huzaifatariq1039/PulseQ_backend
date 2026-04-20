@@ -397,86 +397,98 @@ async def create_doctor(
     doctor_id = str(uuid.uuid4())
     doctor_data = doctor.dict()
     
-    # 3. Create User record for credentials
-    new_user = User(
-        id=user_id,
-        name=doctor.name,
-        email=doctor.email.lower(),
-        phone=None,  # Phone no longer required for doctors during creation
-        password_hash=get_password_hash(doctor.password),
-        role="doctor",
-        created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow()
-    )
-    db.add(new_user)
-
-    # Normalize schedule times to 24-hour HH:MM if provided (support AM/PM input from frontend)
-    norm_start = _normalize_time_to_hhmm(doctor_data.get("start_time"))
-    norm_end = _normalize_time_to_hhmm(doctor_data.get("end_time"))
-    if norm_start:
-        doctor_data["start_time"] = norm_start
-    if norm_end:
-        doctor_data["end_time"] = norm_end
+    try:
+        # 3. Create User record for credentials
+        new_user = User(
+            id=user_id,
+            name=doctor.name,
+            email=doctor.email.lower(),
+            phone=None,  # Phone no longer required for doctors during creation
+            password_hash=get_password_hash(doctor.password),
+            role="doctor",
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow()
+        )
+        db.add(new_user)
+        db.flush()  # Ensure User is persisted before creating Doctor (avoids FK violation)
     
-    doctor_data["id"] = doctor_id
-    doctor_data["user_id"] = user_id
-    doctor_data["created_at"] = datetime.utcnow()
-    doctor_data["updated_at"] = datetime.utcnow()
+        # Normalize schedule times to 24-hour HH:MM if provided (support AM/PM input from frontend)
+        norm_start = _normalize_time_to_hhmm(doctor_data.get("start_time"))
+        norm_end = _normalize_time_to_hhmm(doctor_data.get("end_time"))
+        if norm_start:
+            doctor_data["start_time"] = norm_start
+        if norm_end:
+            doctor_data["end_time"] = norm_end
+        
+        doctor_data["id"] = doctor_id
+        doctor_data["user_id"] = user_id
+        doctor_data["created_at"] = datetime.utcnow()
+        doctor_data["updated_at"] = datetime.utcnow()
 
-    # Keep Firestore documents compatible with both field names.
-    # Your DB uses `department`, but much of the code historically uses `specialization`.
-    doctor_data["department"] = doctor_data.get("specialization")
+        # Keep Firestore documents compatible with both field names.
+        # Your DB uses `department`, but much of the code historically uses `specialization`.
+        doctor_data["department"] = doctor_data.get("specialization")
 
-    # ---------------- Session-based pricing rules (doctor creation validation) ----------------
-    dept_text = (
-        f"{doctor_data.get('specialization') or ''} "
-        f"{doctor_data.get('subcategory') or ''} "
-        f"{doctor_data.get('department') or ''}"
-    ).lower().strip()
-    inferred_has_session = any(
-        kw in dept_text for kw in ("psychology", "psychiatry", "physiotherapist", "physiotherapy", "physio")
-    )
-    if inferred_has_session:
-        try:
-            session_fee_val = float(doctor_data.get("session_fee") or 0)
-        except Exception:
-            session_fee_val = 0
-        if session_fee_val <= 0:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="session_fee is required and must be > 0 for Psychology/Psychiatry/Physiotherapy departments",
-            )
-        doctor_data["has_session"] = True
-        doctor_data["pricing_type"] = "session_based"
-        doctor_data["session_fee"] = session_fee_val
-    else:
-        doctor_data["has_session"] = False
-        doctor_data["pricing_type"] = "standard"
-        doctor_data["session_fee"] = None
-    
-    # Generate avatar initials from name
-    if not doctor_data.get("avatar_initials"):
-        name_parts = doctor.name.split()
-        if len(name_parts) >= 2:
-            doctor_data["avatar_initials"] = f"{name_parts[0][0]}{name_parts[1][0]}".upper()
+        # ---------------- Session-based pricing rules (doctor creation validation) ----------------
+        dept_text = (
+            f"{doctor_data.get('specialization') or ''} "
+            f"{doctor_data.get('subcategory') or ''} "
+            f"{doctor_data.get('department') or ''}"
+        ).lower().strip()
+        inferred_has_session = any(
+            kw in dept_text for kw in ("psychology", "psychiatry", "physiotherapist", "physiotherapy", "physio")
+        )
+        if inferred_has_session:
+            try:
+                session_fee_val = float(doctor_data.get("session_fee") or 0)
+            except Exception:
+                session_fee_val = 0
+            if session_fee_val <= 0:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="session_fee is required and must be > 0 for Psychology/Psychiatry/Physiotherapy departments",
+                )
+            doctor_data["has_session"] = True
+            doctor_data["pricing_type"] = "session_based"
+            doctor_data["session_fee"] = session_fee_val
         else:
-            doctor_data["avatar_initials"] = doctor.name[:2].upper()
+            doctor_data["has_session"] = False
+            doctor_data["pricing_type"] = "standard"
+            doctor_data["session_fee"] = None
+        
+        # Generate avatar initials from name
+        if not doctor_data.get("avatar_initials"):
+            name_parts = doctor.name.split()
+            if len(name_parts) >= 2:
+                doctor_data["avatar_initials"] = f"{name_parts[0][0]}{name_parts[1][0]}".upper()
+            else:
+                doctor_data["avatar_initials"] = doctor.name[:2].upper()
 
-    # Create doctor in PostgreSQL
-    valid_fields = {c.name for c in Doctor.__table__.columns}
-    filtered_doctor_data = {k: v for k, v in doctor_data.items() if k in valid_fields}
-    
-    new_doctor = Doctor(**filtered_doctor_data)
-    db.add(new_doctor)
-    db.commit()
-    db.refresh(new_doctor)
-    
-    # Map DB model to response dict, then to Pydantic for validation, then to dict for JSON serialization
-    out_dict = {k: v for k, v in new_doctor.__dict__.items() if not k.startswith('_')}
-    response_obj = DoctorResponse(**out_dict)
-    
-    from app.utils.responses import ok
-    return ok(data=response_obj.model_dump(), message="Doctor created successfully with login credentials")
+        # Create doctor in PostgreSQL
+        valid_fields = {c.name for c in Doctor.__table__.columns}
+        filtered_doctor_data = {k: v for k, v in doctor_data.items() if k in valid_fields}
+        
+        new_doctor = Doctor(**filtered_doctor_data)
+        db.add(new_doctor)
+        db.commit()
+        db.refresh(new_doctor)
+        
+        # Map DB model to response dict, then to Pydantic for validation, then to dict for JSON serialization
+        out_dict = {k: v for k, v in new_doctor.__dict__.items() if not k.startswith('_')}
+        response_obj = DoctorResponse(**out_dict)
+        
+        from app.utils.responses import ok
+        return ok(data=response_obj.model_dump(), message="Doctor created successfully with login credentials")
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        print(f"[ERROR] Doctor creation failed: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create doctor: {str(e)}"
+        )
 
 
 @router.get("/{doctor_id}/available-slots")
