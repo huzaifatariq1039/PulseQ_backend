@@ -11,7 +11,8 @@ from app.config import (
     TWILIO_CANCELLED_SID,
     TWILIO_THANKYOU_SID,
     TWILIO_SKIPPED_SID,
-    TWILIO_REMINDER_CONFIRM_SID
+    TWILIO_REMINDER_CONFIRM_SID,
+    TWILIO_QUEUE_UPDATE_SID
 )
 import logging
 import json
@@ -358,6 +359,47 @@ Reply YES karein updates confirm karne ke liye aur NO karein cancel karne ke liy
                     body=body
                 )
                 logger.info(f"WhatsApp Reminder Confirm text sent (fallback) to {formatted_phone}: SID {message.sid}")
+                return message.sid
+
+        if template_name == "queue_update":
+            if TWILIO_QUEUE_UPDATE_SID:
+                message = client.messages.create(
+                    from_=from_number,
+                    to=formatted_phone,
+                    content_sid=TWILIO_QUEUE_UPDATE_SID,
+                    content_variables=json.dumps({
+                        "1": str(params[0]) if params else "Patient",
+                        "2": str(params[1]) if len(params) > 1 else "0",
+                        "3": str(params[2]) if len(params) > 2 else "0",
+                        "4": str(params[3]) if len(params) > 3 else "Clinic",
+                        "5": str(params[4]) if len(params) > 4 else "Token"
+                    })
+                )
+                logger.info(f"WhatsApp Queue Update template (SID) sent to {formatted_phone}: SID {message.sid}")
+                return message.sid
+            else:
+                # Fallback text as per user requirement image
+                name = str(params[0]) if params else "Patient"
+                patients_ahead = str(params[1]) if len(params) > 1 else "0"
+                wait_time = str(params[2]) if len(params) > 2 else "0"
+                location = str(params[3]) if len(params) > 3 else "Clinic"
+                token = str(params[4]) if len(params) > 4 else "Token"
+                body = f"""
+Dear {name},
+
+Aapki turn qareeb aa rahi hai. Aap se pehle {patients_ahead} patients hain. Taqreeban wait {wait_time} hai. Please {location} ki taraf chle jayein.
+Token: {token}
+
+Kindly tayar rhein.
+
+PulseQ
+""".strip()
+                message = client.messages.create(
+                    from_=from_number,
+                    to=formatted_phone,
+                    body=body
+                )
+                logger.info(f"WhatsApp Queue Update text sent (fallback) to {formatted_phone}: SID {message.sid}")
                 return message.sid
 
         # Here we construct the body based on the template name and params.

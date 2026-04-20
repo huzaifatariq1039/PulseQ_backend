@@ -135,22 +135,37 @@ async def twilio_whatsapp_webhook(
         token.updated_at = now
         db.commit()
         
-        # Professional detailed response after clicking YES (Matching the image template)
-        # Using Urdu/Roman Urdu as in the template image provided
-        detailed_message = f"""
-Dear {token.patient_name or 'User'},
+        # Send professional Queue Update template after YES
+        try:
+            from app.services.whatsapp_service import send_template_message
+            phone = user_number.replace("whatsapp:", "")
+            
+            # Parameters for queue_update: name, patients_ahead, wait_time, location, token
+            # Calculate patients ahead: tokens with lower position and status 'waiting'/'confirmed'
+            patients_ahead = db.query(Token).filter(
+                Token.doctor_id == token.doctor_id,
+                Token.hospital_id == token.hospital_id,
+                Token.appointment_date == token.appointment_date,
+                Token.queue_position < token.queue_position,
+                Token.status.in_(["waiting", "confirmed"])
+            ).count()
 
-Aapki turn qareeb aa rahi hai. 
-Aap se pehle {token.queue_position or 'kuch'} patients hain. 
-Taqreeban wait {token.estimated_wait_time or 'thoda'} hai. 
-Please {token.hospital_name or 'Clinic'} ki taraf chle jayein.
-Token: {token.token_number}
-
-Kindly tayar rhein.
-
-PulseQ
-"""
-        twiml_response.message(detailed_message.strip())
+            await send_template_message(
+                phone, 
+                "queue_update", 
+                [
+                    token.patient_name or "Patient", 
+                    str(patients_ahead), 
+                    f"{token.estimated_wait_time or 0} mins", 
+                    token.hospital_name or "Clinic", 
+                    token.token_number
+                ]
+            )
+            return Response(content=str(MessagingResponse()), media_type="application/xml")
+        except Exception as e:
+            logger.error(f"Failed to send queue_update template: {e}")
+            twiml_response.message("Your appointment is confirmed. We will keep you updated.")
+            return Response(content=str(twiml_response), media_type="application/xml")
 
     elif message in ["no", "n", "cancel"]:
         token.status = "cancelled"

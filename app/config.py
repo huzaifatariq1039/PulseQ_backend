@@ -90,6 +90,7 @@ TWILIO_CANCELLED_SID = os.getenv("TWILIO_CANCELLED_SID") # New: For "cancelled" 
 TWILIO_THANKYOU_SID = os.getenv("TWILIO_THANKYOU_SID", "HX07f9a8376cbb2c26e39703037696df36") # New: For "template" (thankyou) template
 TWILIO_SKIPPED_SID = os.getenv("TWILIO_SKIPPED_SID") # New: For "skipped" template
 TWILIO_REMINDER_CONFIRM_SID = os.getenv("TWILIO_REMINDER_CONFIRM_SID") # New: For "reminder_for_confirmation" template
+TWILIO_QUEUE_UPDATE_SID = os.getenv("TWILIO_QUEUE_UPDATE_SID") # New: For "queue_update" template after YES
 
 # POS System Integration
 POS_SYSTEM_BASE_URL = os.getenv("POS_SYSTEM_BASE_URL", "http://localhost:5000")
