@@ -70,7 +70,7 @@ Doctor: {doctor_name}
 Patient: {name}
 Hospital: {hospital_name}
 Room Number: {room_number}
-Estimated Time: {wait_time}
+Estimated Time: {wait_time} minutes
 
 Reply YES to receive live updates.
 
