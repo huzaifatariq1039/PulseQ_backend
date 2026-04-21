@@ -552,6 +552,7 @@ async def list_items(
     q: Optional[str] = Query(None),
     search_param: Optional[str] = Query(None, alias="search"),
     is_deleted: Optional[bool] = Query(False),
+    status: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(100, ge=1, le=500),
 ) -> Any:
@@ -564,11 +565,11 @@ async def list_items(
         PharmacyMedicine.quantity, PharmacyMedicine.expiration_date,
         PharmacyMedicine.category, PharmacyMedicine.sub_category,
         PharmacyMedicine.hospital_id, PharmacyMedicine.created_at,
-        PharmacyMedicine.updated_at,
+        PharmacyMedicine.updated_at, PharmacyMedicine.is_deleted,
     )
     
     base = db.query(*cols)
-    if is_deleted:
+    if is_deleted or status == 'deleted' or status == 'trash':
         base = base.filter(PharmacyMedicine.is_deleted == True)
     else:
         base = base.filter(PharmacyMedicine.is_deleted.isnot(True))
@@ -607,6 +608,7 @@ async def list_items(
             "expiration_date": r.expiration_date.isoformat() if r.expiration_date else None,
             "category": r.category, "sub_category": r.sub_category,
             "hospital_id": r.hospital_id,
+            "is_deleted": bool(r.is_deleted),
             "created_at": r.created_at.isoformat() if r.created_at else None,
             "updated_at": r.updated_at.isoformat() if r.updated_at else None,
         }
