@@ -340,13 +340,24 @@ async def get_all_medicines(
     results = []
     for m in medicines:
         results.append({
+            "id": m.id,
             "product_id": m.product_id,
+            "batch_no": m.batch_no,
             "name": m.name,
             "generic_name": m.generic_name,
+            "type": m.type,
+            "distributor": m.distributor,
+            "purchase_price": float(m.purchase_price or 0),
             "selling_price": float(m.selling_price or 0),
+            "stock_unit": m.stock_unit,
             "quantity": int(m.quantity or 0),
             "low_stock": bool((m.quantity or 0) < 5),
-            "hospital_id": m.hospital_id
+            "expiration_date": m.expiration_date.isoformat() if m.expiration_date else None,
+            "category": m.category,
+            "sub_category": m.sub_category,
+            "hospital_id": m.hospital_id,
+            "created_at": m.created_at.isoformat() if m.created_at else None,
+            "updated_at": m.updated_at.isoformat() if m.updated_at else None
         })
 
     return ok(

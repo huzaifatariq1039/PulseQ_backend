@@ -313,32 +313,88 @@ async def register_user(user: UserCreate):
 @router.post("/login", response_model=Token)
 @router.post("/patient/login", response_model=Token)
 async def login(login_data: LoginRequest):
-    """Login for patients only"""
+    """Login for patients only - OPTIMIZED"""
     db = get_db_session()
     try:
-        user = await _authenticate_user(login_data, db)
+        # OPTIMIZED: Use direct queries instead of helper function
+        if login_data.auth_method == AuthMethod.EMAIL:
+            user = db.query(UserDB).filter(
+                UserDB.email == login_data.identifier.lower()
+            ).first()
+        else:  # PHONE
+            phone_norm = _normalize_phone(login_data.identifier)
+            user = db.query(UserDB).filter(
+                or_(
+                    UserDB.phone == login_data.identifier,
+                    UserDB.phone == phone_norm
+                )
+            ).first()
+        
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid credentials"
+            )
+        
         user_role = str(user.role.value if hasattr(user.role, 'value') else user.role).lower()
         if user_role != "patient":
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Access denied: This login is only for patients"
             )
+        
+        # Verify password
+        password_valid = verify_password(login_data.password, user.password_hash)
+        if not password_valid:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid credentials"
+            )
+        
         return _create_token_response(user)
     finally:
         db.close()
 
 @router.post("/doctor/login", response_model=Token)
 async def doctor_login(login_data: LoginRequest):
-    """Login specifically for doctors"""
+    """Login specifically for doctors - OPTIMIZED"""
     db = get_db_session()
     try:
-        user = await _authenticate_user(login_data, db)
+        # OPTIMIZED: Use direct queries
+        if login_data.auth_method == AuthMethod.EMAIL:
+            user = db.query(UserDB).filter(
+                UserDB.email == login_data.identifier.lower()
+            ).first()
+        else:  # PHONE
+            phone_norm = _normalize_phone(login_data.identifier)
+            user = db.query(UserDB).filter(
+                or_(
+                    UserDB.phone == login_data.identifier,
+                    UserDB.phone == phone_norm
+                )
+            ).first()
+        
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid credentials"
+            )
+        
         user_role = str(user.role.value if hasattr(user.role, 'value') else user.role).lower()
         if user_role != "doctor":
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Access denied: This login is only for doctors"
             )
+        
+        # Verify password
+        password_valid = verify_password(login_data.password, user.password_hash)
+        if not password_valid:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid credentials"
+            )
+        
         return _create_token_response(user)
     finally:
         db.close()
@@ -377,12 +433,12 @@ async def admin_login(login_data: LoginRequest):
 
 @router.post("/pharmacy/login", response_model=Token)
 async def pharmacy_login(login_data: PharmacyLoginRequest):
-    """Login specifically for pharmacy users"""
+    """Login specifically for pharmacy users - OPTIMIZED"""
     db = get_db_session()
     try:
-        # For pharmacy, we only use email
+        # OPTIMIZED: Direct query without func.lower() - use case-insensitive collation
         user = db.query(UserDB).filter(
-            func.lower(UserDB.email) == login_data.email.lower()
+            UserDB.email == login_data.email.lower()
         ).first()
         
         if not user:
