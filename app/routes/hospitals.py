@@ -1138,26 +1138,68 @@ async def get_hospital_doctors_by_subcategory(
 @router.get("/{hospital_id}/categories")
 async def get_hospital_categories(hospital_id: str, db: Session = Depends(get_db)):
     """Return enabled categories and subcategories for a hospital based on its doctors.
-
-    Response example:
-    {
-      "categories": {
-        "General Medical": ["General Medicine", "Family Medicine"],
-        "Specialist": ["Cardiology"],
-        "Surgeon": ["General Surgery", "Ortho Surgeon"]
-      },
-      "counts": {"General Medical": 2, "Specialist": 1, "Surgeon": 2},
-      "subcategories_counts": {"General Medicine": 3, "Cardiology": 5, ...}
-    }
+    Includes count of total doctors and currently available doctors.
     """
-    # Fetch all specializations for this hospital
+    hospital = db.query(Hospital).filter(Hospital.id == hospital_id).first()
+    if not hospital:
+        raise HTTPException(status_code=404, detail="Hospital not found")
+
+    # Fetch all doctors for this hospital
     docs = db.query(Doctor).filter(Doctor.hospital_id == hospital_id).all()
+    
+    # Calculate current local time for availability check
+    # Default to UTC+5 (300 mins) if not specified
+    tz_offset = 300 
+    now_utc = datetime.utcnow().replace(tzinfo=timezone.utc)
+    local_now = now_utc.astimezone(timezone(timedelta(minutes=tz_offset)))
+    current_day = local_now.strftime("%A").lower()
+    current_time_str = local_now.strftime("%H:%M")
+
+    def is_doctor_available(d: Doctor) -> bool:
+        status_val = str(getattr(d, "status", "") or "").lower()
+        if status_val not in ("available", "active"):
+            return False
+            
+        start = str(getattr(d, "start_time", "") or "").strip()
+        end = str(getattr(d, "end_time", "") or "").strip()
+        if not start or not end:
+            return False
+            
+        # Check days
+        days = [str(x).strip().lower() for x in (getattr(d, "available_days", []) or [])]
+        if days and current_day not in days:
+            return False
+            
+        # Check time window (simple string comparison for HH:MM)
+        # Handle cases like "09:00" vs "9:00"
+        def pad_time(t: str) -> str:
+            t = t.strip()
+            if ":" not in t: return t
+            h, m = t.split(":")
+            return f"{int(h):02d}:{int(m):02d}"
+
+        try:
+            curr = pad_time(current_time_str)
+            s = pad_time(start)
+            e = pad_time(end)
+            return s <= curr <= e
+        except Exception:
+            return False
+
     present_specs: dict[str, int] = {}
+    available_specs: dict[str, int] = {}
+    
     for d in docs:
-        spec = getattr(d, "specialization", None)
+        spec = str(getattr(d, "specialization", "") or "").strip()
         if not spec:
             continue
-        present_specs[str(spec)] = present_specs.get(str(spec), 0) + 1
+            
+        present_specs[spec] = present_specs.get(spec, 0) + 1
+        if is_doctor_available(d):
+            available_specs[spec] = available_specs.get(spec, 0) + 1
+        else:
+            if spec not in available_specs:
+                available_specs[spec] = 0
 
     # Category mappings (kept in sync with app/routes/doctors.py)
     category_mappings = {
@@ -1204,50 +1246,43 @@ async def get_hospital_categories(hospital_id: str, db: Session = Depends(get_db
         ],
     }
 
-    # If no doctor specializations are present for this hospital, fall back to predefined mappings
-    # so the UI can still show subcategories for selection. Counts remain zero in this case.
-    if not present_specs:
-        fallback_categories = {k: sorted(v, key=lambda x: x.lower()) for k, v in category_mappings.items()}
-        fallback_counts = {k: 0 for k in category_mappings.keys()}
-        return {
-            "categories": fallback_categories,
-            "counts": fallback_counts,
-            "subcategories_counts": {},
-            "hospital_id": hospital_id,
-        }
-
-    # Group present specializations into main categories
+    # Grouping logic
     categories: dict[str, list[str]] = {k: [] for k in category_mappings.keys()}
     counts: dict[str, int] = {k: 0 for k in category_mappings.keys()}
+    available_counts: dict[str, int] = {k: 0 for k in category_mappings.keys()}
 
-    def match_category(spec: str) -> Optional[str]:
+    def match_category(spec: str) -> str:
         s = spec.lower()
         for main, subs in category_mappings.items():
-            for sc in subs:
-                if s == sc.lower() or s in sc.lower() or sc.lower() in s:
+            if s == main.lower() or s in [sub.lower() for sub in subs]:
+                return main
+            # Fuzzy match
+            for sub in subs:
+                if s in sub.lower() or sub.lower() in s:
                     return main
-        return None
+        return "Specialist"
 
-    for spec, c in present_specs.items():
+    for spec, total_c in present_specs.items():
         main_cat = match_category(spec)
-        if not main_cat:
-            # If unmapped, treat as Specialist by default
-            main_cat = "Specialist"
-            if spec not in category_mappings[main_cat]:
-                category_mappings[main_cat].append(spec)
+        avail_c = available_specs.get(spec, 0)
+        
         if spec not in categories[main_cat]:
             categories[main_cat].append(spec)
-        counts[main_cat] += c
+        
+        counts[main_cat] += total_c
+        available_counts[main_cat] += avail_c
 
-    # Sort subcategories alphabetically for stable UI
+    # Sort subcategories
     for k in categories:
         categories[k].sort(key=lambda x: x.lower())
 
     return {
-        "categories": categories,
-        "counts": counts,
-        "subcategories_counts": present_specs,
         "hospital_id": hospital_id,
+        "categories": categories,
+        "counts": counts, # Total doctors per main category
+        "available_counts": available_counts, # Available doctors per main category
+        "subcategories_counts": present_specs, # Total doctors per specialization
+        "subcategories_available_counts": available_specs, # Available doctors per specialization
     }
 
 
