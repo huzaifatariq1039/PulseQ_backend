@@ -346,10 +346,13 @@ class ReceptionistResponse(BaseModel):
 class QueueStatus(BaseModel):
     doctor_id: str
     current_token: Optional[int] = None
-    waiting_patients: int
-    estimated_wait_time_minutes: Optional[int] = None
+    pending_patients: int = 0
+    in_progress_patients: int = 0
+    completed_patients: int = 0
+    estimated_wait_time: Optional[int] = None # in minutes
     people_ahead: int = 0
     total_queue: int = 0
+    total_patients: int = 0 # alias for total_queue
 
 class QueueResponse(BaseModel):
     doctor_id: str

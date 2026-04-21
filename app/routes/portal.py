@@ -138,7 +138,7 @@ async def get_completed_consultations(
     current: TokenData = Depends(get_current_active_user),
     page: Optional[int] = Query(1, ge=1),
     page_size: Optional[int] = Query(20, ge=1, le=100),
-) -> Dict[str, Any]:
+):
     """Get completed tokens for the current doctor/admin."""
     # Find clinical doctor profile if applicable
     doctor = db.query(Doctor).filter(Doctor.user_id == current.user_id).first()
@@ -246,7 +246,7 @@ async def admin_dashboard(
     current: TokenData = Depends(get_current_active_user),
     hospital_id: Optional[str] = Query(None),
     logs_limit: int = Query(10, ge=1, le=50),
-) -> Dict[str, Any]:
+):
     # Basic stats
     doc_query = db.query(Doctor)
     if hospital_id:

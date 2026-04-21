@@ -3,6 +3,7 @@ from fastapi.responses import JSONResponse
 from fastapi import status
 from datetime import date, datetime
 import re
+from pydantic import BaseModel
 
 
 _ISO_DATE_PREFIX = re.compile(r"^\d{4}-\d{2}-\d{2}")
@@ -26,6 +27,12 @@ def _normalize_dates(obj: Any) -> Any:
 
     if isinstance(obj, date):
         return _to_dd_mm_yyyy(obj)
+
+    if isinstance(obj, BaseModel):
+        # Support both Pydantic v1 and v2
+        if hasattr(obj, "model_dump"):
+            return _normalize_dates(obj.model_dump())
+        return _normalize_dates(obj.dict())
 
     if isinstance(obj, dict):
         return {k: _normalize_dates(v) for k, v in obj.items()}

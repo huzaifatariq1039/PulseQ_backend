@@ -18,7 +18,7 @@ async def update_doctor_status(
     payload: Dict[str, Any],
     db: Session = Depends(get_db),
     current_user=Depends(get_current_active_user),
-) -> Dict[str, Any]:
+):
     doctor_id = str((payload or {}).get("doctor_id") or "").strip()
     new_status = str((payload or {}).get("status") or "").strip().lower()
     if not doctor_id:
@@ -63,7 +63,7 @@ async def receptionist_manage_doctors(
     search: Optional[str] = Query(None, description="Search by doctor name"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-) -> Dict[str, Any]:
+):
     # Query doctors from PostgreSQL
     query = db.query(Doctor)
     if hospital_id:
@@ -180,7 +180,7 @@ async def receptionist_manage_doctors(
 async def list_departments(
     db: Session = Depends(get_db),
     hospital_id: Optional[str] = Query(None, description="Optional hospital scope"),
-) -> Dict[str, Any]:
+):
     # Departments table may not exist in PostgreSQL, fallback to extracting from doctors
     out: List[str] = []
     
@@ -192,7 +192,8 @@ async def list_departments(
     doctors = query.all()
     names = []
     for doctor in doctors:
-        dept = str(doctor.department or doctor.specialization or "").strip()
+        # Use getattr safely as Doctor model uses 'specialization' but some code expects 'department'
+        dept = str(getattr(doctor, 'department', getattr(doctor, 'specialization', "")) or "").strip()
         if dept:
             names.append(dept)
     
@@ -201,7 +202,7 @@ async def list_departments(
     return ok(data=out)
 
 
-@router.get("/{doctor_id}/details", response_model=DoctorResponse)
+@router.get("/{doctor_id}/details")
 async def get_doctor_details_alias(
     doctor_id: str,
     db: Session = Depends(get_db)
@@ -210,13 +211,13 @@ async def get_doctor_details_alias(
     return await get_doctor(doctor_id, db)
 
 
-@router.put("/{doctor_id}", dependencies=[Depends(require_roles("receptionist", "admin"))])
+@router.patch("/{doctor_id}", dependencies=[Depends(require_roles("admin"))])
 async def receptionist_update_doctor(
     doctor_id: str,
     payload: Dict[str, Any],
     db: Session = Depends(get_db),
     current_user=Depends(get_current_active_user),
-) -> Dict[str, Any]:
+):
     doctor = db.query(Doctor).filter(Doctor.id == doctor_id).first()
     if not doctor:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Doctor not found")
@@ -378,7 +379,7 @@ def _normalize_time_to_hhmm(s: Optional[str]) -> Optional[str]:
     except Exception:
         return None
 
-@router.post("", response_model=DoctorResponse, dependencies=[Depends(require_roles("admin"))])
+@router.post("", dependencies=[Depends(require_roles("admin"))])
 async def create_doctor(
     doctor: DoctorCreate,
     db: Session = Depends(get_db)
@@ -512,7 +513,7 @@ async def get_available_slots(
     day: str = Query(..., description="DD-MM-YYYY"),
     slot_minutes: int = Query(15, ge=5, le=60),
     db: Session = Depends(get_db)
-) -> Dict[str, Any]:
+):
     """Generate available slots for a doctor from their availability."""
     doctor = db.query(Doctor).filter(Doctor.id == doctor_id).first()
     if not doctor:
@@ -601,7 +602,7 @@ async def list_doctors(
         }
     }
 
-@router.get("/hospital/{hospital_id}", response_model=DoctorSearchResponse)
+@router.get("/hospital/{hospital_id}")
 async def get_doctors_by_hospital(
     hospital_id: str,
     category: Optional[str] = Query(None, description="Filter by main category or specialization (General Medical, Specialist, Surgeon, or specific)"),
@@ -751,7 +752,7 @@ async def get_doctors_by_hospital(
         "subcategories": cleaned_subcats
     }
 
-@router.get("/search", response_model=DoctorSearchResponse)
+@router.get("/search")
 async def search_doctors(
     query: str = Query(..., min_length=0, description="Search query for doctor name or specialization"),
     hospital_id: Optional[str] = Query(None, description="Filter by hospital ID"),
@@ -941,7 +942,7 @@ async def get_hospital_category_subcategories(
     main_category: str,
     hospital_id: str,
     db: Session = Depends(get_db),
-) -> Dict[str, Any]:
+):
     """Get unique subcategories for a given category within a specific hospital."""
     try:
         # Normalize category
@@ -951,10 +952,7 @@ async def get_hospital_category_subcategories(
         from sqlalchemy import or_
         doctors = db.query(Doctor).filter(
             Doctor.hospital_id == hospital_id,
-            or_(
-                func.lower(Doctor.specialization) == norm_cat,
-                func.lower(Doctor.department) == norm_cat
-            )
+            func.lower(Doctor.specialization) == norm_cat
         ).all()
         
         subs = []
@@ -1051,7 +1049,7 @@ async def get_doctors_by_main_category(
         "subcategories": cleaned_subcats
     })
 
-@router.get("/{doctor_id}", response_model=DoctorResponse)
+@router.get("/{doctor_id}")
 async def get_doctor(doctor_id: str, db: Session = Depends(get_db)):
     """Get doctor by ID"""
     doctor = db.query(Doctor).filter(Doctor.id == doctor_id).first()
@@ -1124,7 +1122,7 @@ async def get_doctor_availability_today(doctor_id: str, db: Session = Depends(ge
     })
 
 
-@router.get("/{doctor_id}/queue", response_model=QueueStatus)
+@router.get("/{doctor_id}/queue")
 async def get_doctor_queue_status(
     doctor_id: str,
     db: Session = Depends(get_db),
@@ -1139,26 +1137,54 @@ async def get_doctor_queue(doctor_id: str, db: Session = None) -> QueueStatus:
     if db is None:
         db = next(get_db())
 
-    # TODO: Replace mock queue info with PostgreSQL-backed aggregate when queue tables/models are finalized.
-    # For now, we attempt to find a queue record if it exists in db_models.Queue
-    from app.db_models import Queue as DBQueue
-    q = db.query(DBQueue).filter(DBQueue.doctor_id == doctor_id).first()
+    from app.db_models import Token, Doctor
+    from datetime import datetime, date
+    from app.config import AVG_CONSULTATION_TIME_MINUTES
 
-    if q:
-        return QueueStatus(
-            doctor_id=doctor_id,
-            current_token=int(q.current_token or 0),
-            waiting_patients=int(q.waiting_patients or 0),
-            estimated_wait_time_minutes=int(q.estimated_wait_time_minutes or 0)
-        )
+    # Get doctor's timezone/current date
+    now = datetime.utcnow()
+    today = now.date()
 
-    # Fallback mock for missing queue records
-    waiting_patients = random.randint(5, 25)
-    estimated_wait_time = waiting_patients * 3
+    # Query active tokens for this doctor today
+    active_tokens = db.query(Token).filter(
+        Token.doctor_id == doctor_id,
+        func.date(Token.appointment_date) == today,
+        Token.status.in_(["pending", "confirmed", "waiting", "called", "in_consultation"])
+    ).all()
+
+    # Query completed tokens for this doctor today
+    completed_count = db.query(Token).filter(
+        Token.doctor_id == doctor_id,
+        func.date(Token.appointment_date) == today,
+        Token.status == "completed"
+    ).count()
+
+    waiting_patients = [t for t in active_tokens if t.status in ("pending", "confirmed", "waiting")]
+    in_consultation = [t for t in active_tokens if t.status in ("called", "in_consultation")]
+
+    # Sort waiting patients by token number
+    waiting_patients.sort(key=lambda x: x.token_number)
+    
+    # Get currently serving token number
+    current_token_num = None
+    if in_consultation:
+        # If multiple, the one with the highest token number is likely the latest called
+        in_consultation.sort(key=lambda x: x.token_number, reverse=True)
+        current_token_num = in_consultation[0].token_number
+
+    # Calculate estimated wait time
+    # Formula: waiting_patients * AVG_CONSULTATION_TIME
+    # If no one is waiting, wait time is 0
+    avg_time = int(AVG_CONSULTATION_TIME_MINUTES or 5)
+    estimated_wait = len(waiting_patients) * avg_time
 
     return QueueStatus(
         doctor_id=doctor_id,
-        current_token=random.randint(1, 10),
-        waiting_patients=waiting_patients,
-        estimated_wait_time_minutes=estimated_wait_time
+        current_token=current_token_num,
+        pending_patients=len(waiting_patients),
+        in_progress_patients=len(in_consultation),
+        completed_patients=completed_count,
+        estimated_wait_time=estimated_wait,
+        total_queue=len(active_tokens),
+        total_patients=len(active_tokens)
     )
