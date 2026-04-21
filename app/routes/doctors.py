@@ -726,7 +726,8 @@ async def get_doctors_by_hospital(
         # If category provided but not a main category, treat it as a specialization filter
         if category and main_selected is None:
             cat_target = category.strip().lower()
-            if doctor_spec == cat_target or doctor_sub == cat_target:
+            # Check for partial match in specialization or subcategory
+            if cat_target in doctor_spec or cat_target in doctor_sub:
                 results.append(data)
             continue
 

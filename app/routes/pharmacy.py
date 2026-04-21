@@ -97,18 +97,16 @@ async def search_medicine(
     return {"results": results}
 
 @router.post("/sync-from-legacy", dependencies=[Depends(require_roles("pharmacy", "admin"))])
-async def sync_medicines_from_legacy(
-    db: Session = Depends(get_db),
-    current: TokenData = Depends(get_current_active_user)
-) -> Any:
-    """Migrate medicines from Firebase to PostgreSQL if they don't exist yet."""
+async def _sync_medicines_internal(db: Session, hospital_id: Optional[str] = None) -> Dict[str, int]:
+    """Internal function to migrate medicines from Firebase to PostgreSQL."""
     from app.services.pharmacy_inventory_service import list_medicines as list_legacy
     from app.db_models import PharmacyMedicine
     
     # 1. Fetch all legacy items
+    # If hospital_id is provided, we could filter by it, but list_legacy doesn't support it yet
     legacy_items = list_legacy(limit=1000)
     if not legacy_items:
-        return ok(data={"synced": 0, "skipped": 0, "total_legacy": 0}, message="No legacy data found")
+        return {"synced": 0, "skipped": 0, "total_legacy": 0}
 
     # 2. Pre-fetch existing product IDs from PostgreSQL to avoid N+1 queries
     existing_ids = {row[0] for row in db.query(PharmacyMedicine.product_id).all()}
@@ -143,7 +141,7 @@ async def sync_medicines_from_legacy(
             expiration_date=item.get("expiration_date"),
             category=item.get("category"),
             sub_category=item.get("sub_category"),
-            hospital_id=item.get("hospital_id"),
+            hospital_id=item.get("hospital_id") or hospital_id,
             created_at=item.get("created_at") or datetime.utcnow()
         )
         db.add(new_med)
@@ -152,16 +150,26 @@ async def sync_medicines_from_legacy(
     if synced_count > 0:
         db.commit()
         
-    return ok(data={
+    return {
         "synced": synced_count,
         "skipped": skipped_count,
         "total_legacy": len(legacy_items)
-    }, message=f"Successfully imported {synced_count} medicines from legacy storage")
+    }
+
+@router.post("/sync-from-legacy", dependencies=[Depends(require_roles("pharmacy", "admin"))])
+async def sync_medicines_from_legacy(
+    db: Session = Depends(get_db),
+    current: TokenData = Depends(get_current_active_user)
+) -> Any:
+    """Migrate medicines from Firebase to PostgreSQL if they don't exist yet."""
+    result = await _sync_medicines_internal(db)
+    return ok(data=result, message=f"Successfully imported {result['synced']} medicines from legacy storage")
 
 
 @public_router.get("/medicines")
 async def get_all_medicines(
     db: Session = Depends(get_db),
+    hospital_id: Optional[str] = Query(None, description="Filter by hospital ID"),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=500),
     auto_sync: bool = Query(True, description="Automatically import legacy data if PostgreSQL is empty")
@@ -169,14 +177,20 @@ async def get_all_medicines(
     """Get a paginated list of all medicines in the inventory"""
     from app.db_models import PharmacyMedicine
     
-    total = db.query(PharmacyMedicine).count()
+    # Query building
+    query = db.query(PharmacyMedicine)
+    if hospital_id:
+        query = query.filter(PharmacyMedicine.hospital_id == hospital_id)
+        
+    total = query.count()
     
     # Auto-sync logic: if PG is empty and auto_sync is on, try to import from Firebase
     if total == 0 and auto_sync:
-        await sync_medicines_from_legacy(db)
-        total = db.query(PharmacyMedicine).count()
+        sync_result = await _sync_medicines_internal(db, hospital_id=hospital_id)
+        # Re-count after sync
+        total = query.count()
 
-    medicines = db.query(PharmacyMedicine).offset((page-1)*page_size).limit(page_size).all()
+    medicines = query.offset((page-1)*page_size).limit(page_size).all()
     
     results = []
     for m in medicines:
@@ -191,7 +205,8 @@ async def get_all_medicines(
             "expiration_date": m.expiration_date.isoformat() if m.expiration_date else None,
             "category": m.category,
             "sub_category": m.sub_category,
-            "low_stock": bool((m.quantity or 0) < 5)
+            "low_stock": bool((m.quantity or 0) < 5),
+            "hospital_id": m.hospital_id
         })
 
     return ok(
@@ -199,7 +214,8 @@ async def get_all_medicines(
         meta={
             "total": total,
             "page": page,
-            "page_size": page_size
+            "page_size": page_size,
+            "hospital_id": hospital_id
         }
     )
 
