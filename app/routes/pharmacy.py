@@ -476,16 +476,26 @@ async def list_items(
     total = query.count()
     items = query.order_by(PharmacyMedicine.updated_at.desc()).offset((page-1)*page_size).limit(page_size).all()
     
-    # Reduce payload size: Only return what the UI needs for the list view
     results = []
     for i in items:
         results.append({
             "id": i.id,
             "product_id": i.product_id,
-            "name": i.name,
-            "quantity": i.quantity,
-            "selling_price": i.selling_price,
             "batch_no": i.batch_no,
+            "name": i.name,
+            "generic_name": i.generic_name,
+            "type": i.type,
+            "distributor": i.distributor,
+            "purchase_price": float(i.purchase_price or 0),
+            "selling_price": float(i.selling_price or 0),
+            "stock_unit": i.stock_unit,
+            "quantity": int(i.quantity or 0),
+            "low_stock": bool((i.quantity or 0) < 5),
+            "expiration_date": i.expiration_date.isoformat() if i.expiration_date else None,
+            "category": i.category,
+            "sub_category": i.sub_category,
+            "hospital_id": i.hospital_id,
+            "created_at": i.created_at.isoformat() if i.created_at else None,
             "updated_at": i.updated_at.isoformat() if i.updated_at else None
         })
     
