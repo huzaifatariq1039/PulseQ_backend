@@ -73,6 +73,12 @@ async def receptionist_manage_doctors(
     items: List[Dict[str, Any]] = []
     for doctor in doctors:
         data = {k: v for k, v in doctor.__dict__.items() if not k.startswith('_')}
+        
+        # Add compatibility fields for frontend
+        data["department"] = data.get("specialization")
+        data["fee"] = data.get("consultation_fee")
+        data["per_session_fee"] = data.get("session_fee")
+        
         items.append(data)
 
     if department:
@@ -1011,6 +1017,12 @@ async def get_doctor(doctor_id: str, db: Session = Depends(get_db)):
             detail="Doctor not found"
         )
     doctor_data = {k: v for k, v in doctor.__dict__.items() if not k.startswith('_')}
+    
+    # Add compatibility fields for frontend
+    doctor_data["department"] = doctor_data.get("specialization")
+    doctor_data["fee"] = doctor_data.get("consultation_fee")
+    doctor_data["per_session_fee"] = doctor_data.get("session_fee")
+    
     return DoctorResponse(**doctor_data)
 
 @router.get("/{doctor_id}/availability")

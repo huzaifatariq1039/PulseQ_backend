@@ -247,15 +247,21 @@ class DoctorBase(BaseModel):
     # Firestore field in your DB is `department`. We keep internal field name
     # `specialization` for backward compatibility with existing code.
     # This alias lets the app accept `department` when reading/writing doctors.
+    # Aliases and backward compatibility fields
     specialization: str = Field(..., alias="department")
+    department: Optional[str] = None # Duplicate for frontend compatibility
+    
     subcategory: Optional[str] = None  # e.g., "Pediatric Cardiology"
     hospital_id: str
     email: Optional[str] = None
     rating: Optional[float] = Field(None, ge=0, le=5)
     review_count: int = 0
     consultation_fee: float = Field(..., gt=0)
+    fee: Optional[float] = None # Duplicate for frontend compatibility
+    
     # Dynamic pricing for session-based departments (Psychology/Psychiatry/Physiotherapy, etc.)
     session_fee: Optional[float] = Field(None, gt=0)
+    per_session_fee: Optional[float] = None # Duplicate for frontend compatibility
     has_session: bool = False
     pricing_type: Literal["standard", "session_based"] = "standard"
     status: DoctorStatus = DoctorStatus.AVAILABLE
