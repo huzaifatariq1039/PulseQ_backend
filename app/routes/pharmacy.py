@@ -40,6 +40,7 @@ class AddMedicineRequest(BaseModel):
     expiration_date: str
     category: str
     sub_category: str
+    hospital_id: Optional[str] = None
 
 class DispenseMedicineItem(BaseModel):
     product_id: int = Field(..., ge=0)
@@ -95,16 +96,86 @@ async def search_medicine(
 
     return {"results": results}
 
+@router.post("/sync-from-legacy", dependencies=[Depends(require_roles("pharmacy", "admin"))])
+async def sync_medicines_from_legacy(
+    db: Session = Depends(get_db),
+    current: TokenData = Depends(get_current_active_user)
+) -> Any:
+    """Migrate medicines from Firebase to PostgreSQL if they don't exist yet."""
+    from app.services.pharmacy_inventory_service import list_medicines as list_legacy
+    from app.db_models import PharmacyMedicine
+    
+    # 1. Fetch all legacy items
+    legacy_items = list_legacy(limit=1000)
+    if not legacy_items:
+        return ok(data={"synced": 0, "skipped": 0, "total_legacy": 0}, message="No legacy data found")
+
+    # 2. Pre-fetch existing product IDs from PostgreSQL to avoid N+1 queries
+    existing_ids = {row[0] for row in db.query(PharmacyMedicine.product_id).all()}
+    
+    synced_count = 0
+    skipped_count = 0
+    
+    # 3. Batch process items
+    for item in legacy_items:
+        prod_id = item.get("product_id")
+        if prod_id is None:
+            continue
+            
+        prod_id_int = int(prod_id)
+        if prod_id_int in existing_ids:
+            skipped_count += 1
+            continue
+            
+        # Create new PG record
+        new_med = PharmacyMedicine(
+            id=str(item.get("id") or uuid.uuid4()),
+            product_id=prod_id_int,
+            batch_no=str(item.get("batch_no") or "LEGACY"),
+            name=str(item.get("name") or "Unnamed"),
+            generic_name=item.get("generic_name"),
+            type=item.get("type"),
+            distributor=item.get("distributor"),
+            purchase_price=float(item.get("purchase_price") or 0),
+            selling_price=float(item.get("selling_price") or 0),
+            stock_unit=item.get("stock_unit"),
+            quantity=int(item.get("quantity") or 0),
+            expiration_date=item.get("expiration_date"),
+            category=item.get("category"),
+            sub_category=item.get("sub_category"),
+            hospital_id=item.get("hospital_id"),
+            created_at=item.get("created_at") or datetime.utcnow()
+        )
+        db.add(new_med)
+        synced_count += 1
+        
+    if synced_count > 0:
+        db.commit()
+        
+    return ok(data={
+        "synced": synced_count,
+        "skipped": skipped_count,
+        "total_legacy": len(legacy_items)
+    }, message=f"Successfully imported {synced_count} medicines from legacy storage")
+
+
 @public_router.get("/medicines")
 async def get_all_medicines(
     db: Session = Depends(get_db),
     page: int = Query(1, ge=1),
-    page_size: int = Query(50, ge=1, le=100)
+    page_size: int = Query(50, ge=1, le=500),
+    auto_sync: bool = Query(True, description="Automatically import legacy data if PostgreSQL is empty")
 ) -> Dict[str, Any]:
     """Get a paginated list of all medicines in the inventory"""
     from app.db_models import PharmacyMedicine
     
     total = db.query(PharmacyMedicine).count()
+    
+    # Auto-sync logic: if PG is empty and auto_sync is on, try to import from Firebase
+    if total == 0 and auto_sync:
+        await sync_medicines_from_legacy(db)
+        total = db.query(PharmacyMedicine).count()
+
     medicines = db.query(PharmacyMedicine).offset((page-1)*page_size).limit(page_size).all()
     
     results = []
@@ -123,15 +194,14 @@ async def get_all_medicines(
             "low_stock": bool((m.quantity or 0) < 5)
         })
 
-    return {
-        "success": True,
-        "data": results,
-        "meta": {
+    return ok(
+        data=results,
+        meta={
             "total": total,
             "page": page,
             "page_size": page_size
         }
-    }
+    )
 
 @public_router.post("/dispense-medicine", dependencies=[Depends(require_roles("pharmacy", "admin"))])
 async def dispense_medicine(
@@ -168,7 +238,7 @@ async def dispense_medicine(
             db.add(sale)
         
         db.commit()
-        return {"success": True, "message": "Medicines dispensed successfully"}
+        return ok(message="Medicines dispensed successfully")
     except Exception as e:
         db.rollback()
         if isinstance(e, HTTPException): raise e
@@ -204,11 +274,12 @@ async def add_medicine(
         expiration_date=exp_dt,
         category=payload.category,
         sub_category=payload.sub_category,
+        hospital_id=payload.hospital_id,
         created_at=datetime.utcnow()
     )
     db.add(new_med)
     db.commit()
-    return {"success": True, "message": "Medicine added successfully"}
+    return ok(message="Medicine added successfully")
 
 @router.get("/items", dependencies=[Depends(require_roles("pharmacy", "admin"))])
 async def list_items(
@@ -216,18 +287,31 @@ async def list_items(
     hospital_id: Optional[str] = Query(None),
     q: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
+    page_size: int = Query(20, ge=1, le=500),
+    auto_sync: bool = Query(True, description="Automatically import legacy data if PostgreSQL is empty")
 ) -> Any:
+    """List pharmacy inventory items with filtering and pagination."""
     from app.db_models import PharmacyMedicine
+    
     query = db.query(PharmacyMedicine)
+    
+    # Auto-sync check
+    if query.count() == 0 and auto_sync:
+        await sync_medicines_from_legacy(db)
+        query = db.query(PharmacyMedicine)
+    
     if hospital_id:
         query = query.filter(PharmacyMedicine.hospital_id == hospital_id)
     if q:
-        qn = f"%{q.strip().lower()}%"
-        query = query.filter(or_(
-            func.lower(PharmacyMedicine.name).like(qn),
-            func.lower(PharmacyMedicine.batch_no).like(qn)
-        ))
+        search = f"%{q}%"
+        query = query.filter(
+            or_(
+                PharmacyMedicine.name.ilike(search),
+                PharmacyMedicine.generic_name.ilike(search),
+                PharmacyMedicine.batch_no.ilike(search),
+                PharmacyMedicine.distributor.ilike(search)
+            )
+        )
     
     total = query.count()
     items = query.offset((page-1)*page_size).limit(page_size).all()

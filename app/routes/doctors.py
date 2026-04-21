@@ -62,7 +62,7 @@ async def receptionist_manage_doctors(
     department: Optional[str] = Query(None, description="Filter by department"),
     search: Optional[str] = Query(None, description="Search by doctor name"),
     page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
+    page_size: int = Query(20, ge=1, le=500),
 ):
     # Query doctors from PostgreSQL
     query = db.query(Doctor)

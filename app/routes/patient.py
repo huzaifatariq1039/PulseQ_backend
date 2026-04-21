@@ -55,7 +55,7 @@ async def patient_visit_history(
     from_date: Optional[str] = Query(None, description="YYYY-MM-DD"),
     to_date: Optional[str] = Query(None, description="YYYY-MM-DD"),
     page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
+    page_size: int = Query(20, ge=1, le=500),
 ) -> Dict[str, Any]:
     """Patient Visit History from PostgreSQL"""
     query = db.query(Token).filter(Token.patient_id == current.user_id, Token.status == "completed")

@@ -252,10 +252,10 @@ class PharmacyMedicine(Base):
     __tablename__ = "pharmacy_medicines"
 
     id = Column(String, primary_key=True, index=True)
-    product_id = Column(Integer, nullable=False)
-    batch_no = Column(String(50), nullable=False)
-    name = Column(String(200), nullable=False)
-    generic_name = Column(String(200), nullable=True)
+    product_id = Column(Integer, nullable=False, index=True)
+    batch_no = Column(String(50), nullable=False, index=True)
+    name = Column(String(200), nullable=False, index=True)
+    generic_name = Column(String(200), nullable=True, index=True)
     type = Column(String(100), nullable=True)
     distributor = Column(String(200), nullable=True)
     purchase_price = Column(Float, nullable=False)
@@ -265,7 +265,9 @@ class PharmacyMedicine(Base):
     expiration_date = Column(DateTime(timezone=True), nullable=True)
     category = Column(String(100), nullable=True)
     sub_category = Column(String(100), nullable=True)
+    hospital_id = Column(String, ForeignKey("hospitals.id"), nullable=True, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
 
 # Department Model

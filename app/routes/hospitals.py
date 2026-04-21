@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 from app.db_models import Hospital, Doctor, Queue, HospitalStatus
 from app.security import get_current_active_user, require_roles
 from app.utils.responses import ok
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 import math
 import httpx
 from time import time
@@ -1150,7 +1150,7 @@ async def get_hospital_categories(hospital_id: str, db: Session = Depends(get_db
     # Calculate current local time for availability check
     # Default to UTC+5 (300 mins) if not specified
     tz_offset = 300 
-    now_utc = datetime.utcnow().replace(tzinfo=timezone.utc)
+    now_utc = datetime.now(timezone.utc)
     local_now = now_utc.astimezone(timezone(timedelta(minutes=tz_offset)))
     current_day = local_now.strftime("%A").lower()
     current_time_str = local_now.strftime("%H:%M")
