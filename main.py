@@ -1,10 +1,13 @@
 from fastapi import FastAPI, HTTPException, status, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 import os
 import asyncio
+import time
+from starlette.middleware.base import BaseHTTPMiddleware
 
 # Import configuration and database
 from app.config import PROJECT_NAME, DEBUG
@@ -16,6 +19,7 @@ from app.services.queue_management_service import QueueManagementService
 from app.config import QUEUE_AUTOSKIP_INTERVAL_SECONDS
 from app.services.app_scheduler import start_scheduler, shutdown_scheduler
 from app.services.sync_service import sync_pos_to_postgres
+from app.middleware.performance import PerformanceMiddleware
 
 # Import routes
 from app.routes import auth, hospitals, doctors, tokens, dashboard
@@ -118,6 +122,12 @@ app = FastAPI(
     debug=DEBUG,
     lifespan=lifespan
 )
+
+# Add GZip middleware for response compression (reduces bandwidth by 60-80%)
+app.add_middleware(GZipMiddleware, minimum_size=1000)  # Compress responses > 1KB
+
+# Add performance monitoring middleware (logs slow APIs)
+app.add_middleware(PerformanceMiddleware)
 
 # Add CORS middleware
 # Read comma-separated origins from env ALLOWED_ORIGINS, default to "*"

@@ -18,6 +18,7 @@ from app.models import TokenData
 from app.security import require_roles
 from app.utils.responses import ok
 from app.services.go_pos_service import go_pos_service
+from app.services.cache_service import CacheService, cached
 
 router = APIRouter()
 public_router = APIRouter()
@@ -73,38 +74,47 @@ async def get_pharmacy_dashboard_stats(
     db: Session = Depends(get_db),
     hospital_id: Optional[str] = Query(None),
 ):
-    """Get summary statistics for the pharmacy dashboard."""
-    query = db.query(PharmacyMedicine)
+    """Get summary statistics for the pharmacy dashboard - OPTIMIZED with SQL aggregation"""
+    # OPTIMIZED: Use SQL aggregation instead of fetching all records
+    query = db.query(
+        func.count(PharmacyMedicine.id).label('total'),
+        func.sum(func.case((PharmacyMedicine.quantity > 0, 1), else_=0)).label('in_stock'),
+        func.sum(func.case((PharmacyMedicine.quantity < 10, 1), else_=0)).label('low_stock'),
+        func.coalesce(func.sum(PharmacyMedicine.quantity * PharmacyMedicine.selling_price), 0).label('inventory_value')
+    )
+    
     if hospital_id:
         query = query.filter(PharmacyMedicine.hospital_id == hospital_id)
     
-    all_medicines = query.all()
+    stats = query.first()
     
-    # Calculate stats
-    total_medicines = len(all_medicines)
-    
-    # Active: in stock and not expired
+    # Calculate expired items separately (needs date comparison)
     now = datetime.utcnow()
-    active_medicines = len([
-        m for m in all_medicines 
-        if (m.quantity or 0) > 0 and (not m.expiration_date or m.expiration_date > now)
-    ])
+    expired_count = db.query(func.count(PharmacyMedicine.id)).filter(
+        PharmacyMedicine.expiration_date <= now
+    )
+    if hospital_id:
+        expired_count = expired_count.filter(PharmacyMedicine.hospital_id == hospital_id)
+    expired_items = expired_count.scalar() or 0
     
-    # Low Stock: quantity < 10
-    low_stock_items = len([m for m in all_medicines if (m.quantity or 0) < 10])
+    # Active = in stock AND not expired
+    active_count = db.query(func.count(PharmacyMedicine.id)).filter(
+        PharmacyMedicine.quantity > 0,
+        or_(
+            PharmacyMedicine.expiration_date.is_(None),
+            PharmacyMedicine.expiration_date > now
+        )
+    )
+    if hospital_id:
+        active_count = active_count.filter(PharmacyMedicine.hospital_id == hospital_id)
+    active_medicines = active_count.scalar() or 0
     
-    # Expired: expiration_date in the past
-    expired_items = len([m for m in all_medicines if m.expiration_date and m.expiration_date <= now])
-    
-    # Inventory Value: total selling price * quantity
-    inventory_value = sum([(m.quantity or 0) * (m.selling_price or 0) for m in all_medicines])
-
     return ok(data={
-        "total_medicines": total_medicines,
+        "total_medicines": stats.total or 0,
         "active_medicines": active_medicines,
-        "low_stock_items": low_stock_items,
+        "low_stock_items": stats.low_stock or 0,
         "expired_items": expired_items,
-        "inventory_value": round(inventory_value, 2)
+        "inventory_value": round(float(stats.inventory_value or 0), 2)
     })
 
 @router.get("/reports/sales-summary", dependencies=[Depends(require_roles("pharmacy", "admin"))])
@@ -112,26 +122,35 @@ async def get_pharmacy_sales_summary(
     db: Session = Depends(get_db),
     hospital_id: Optional[str] = Query(None),
 ):
-    """Get summary of sales and revenue."""
-    query = db.query(PharmacySale)
+    """Get summary of sales and revenue - OPTIMIZED with SQL aggregation"""
+    # OPTIMIZED: Use SQL aggregation
+    query = db.query(
+        func.coalesce(func.sum(PharmacySale.total_price), 0).label('total_revenue'),
+        func.count(PharmacySale.id).label('total_count')
+    )
+    
     if hospital_id:
         query = query.filter(PharmacySale.hospital_id == hospital_id)
     
-    sales = query.all()
-    
-    total_revenue = sum([s.total_price or 0 for s in sales])
-    total_sales_count = len(sales)
+    totals = query.first()
     
     # Daily revenue
     today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
-    daily_sales = [s for s in sales if s.sold_at >= today_start]
-    daily_revenue = sum([s.total_price or 0 for s in daily_sales])
+    daily_query = db.query(
+        func.coalesce(func.sum(PharmacySale.total_price), 0).label('daily_revenue'),
+        func.count(PharmacySale.id).label('daily_count')
+    ).filter(PharmacySale.sold_at >= today_start)
+    
+    if hospital_id:
+        daily_query = daily_query.filter(PharmacySale.hospital_id == hospital_id)
+    
+    daily_totals = daily_query.first()
     
     return ok(data={
-        "total_revenue": round(total_revenue, 2),
-        "total_sales_count": total_sales_count,
-        "daily_revenue": round(daily_revenue, 2),
-        "daily_sales_count": len(daily_sales)
+        "total_revenue": round(float(totals.total_revenue or 0), 2),
+        "total_sales_count": totals.total_count or 0,
+        "daily_revenue": round(float(daily_totals.daily_revenue or 0), 2),
+        "daily_sales_count": daily_totals.daily_count or 0
     })
 
 @router.get("/reports/revenue-chart", dependencies=[Depends(require_roles("pharmacy", "admin"))])
@@ -140,44 +159,56 @@ async def get_revenue_chart_data(
     hospital_id: Optional[str] = Query(None),
     days: int = Query(7, ge=1, le=30)
 ):
-    """Get revenue data for chart (last N days)."""
+    """Get revenue data for chart (last N days) - OPTIMIZED"""
     now = datetime.utcnow()
     start_date = (now - timedelta(days=days-1)).replace(hour=0, minute=0, second=0, microsecond=0)
     
-    query = db.query(PharmacySale).filter(PharmacySale.sold_at >= start_date)
+    # Fetch only needed data with aggregation
+    query = db.query(
+        func.date(PharmacySale.sold_at).label('sale_date'),
+        func.coalesce(func.sum(PharmacySale.total_price), 0).label('day_revenue'),
+        func.count(PharmacySale.id).label('sales_count')
+    ).filter(PharmacySale.sold_at >= start_date)
+    
     if hospital_id:
         query = query.filter(PharmacySale.hospital_id == hospital_id)
     
-    sales = query.all()
+    # Group by date
+    query = query.group_by(func.date(PharmacySale.sold_at))
+    aggregated_sales = query.all()
     
+    # Build date map
+    sales_map = {row.sale_date: {'revenue': float(row.day_revenue), 'count': row.sales_count} for row in aggregated_sales}
+    
+    # Fill in all days (even with no sales)
     chart_data = []
     for i in range(days):
         day = start_date + timedelta(days=i)
-        day_end = day + timedelta(days=1)
-        
-        day_sales = [s for s in sales if day <= s.sold_at < day_end]
-        day_revenue = sum([s.total_price or 0 for s in day_sales])
+        day_date = day.date()
+        day_stats = sales_map.get(day_date, {'revenue': 0.0, 'count': 0})
         
         chart_data.append({
             "date": day.strftime("%Y-%m-%d"),
-            "revenue": round(day_revenue, 2),
-            "sales_count": len(day_sales)
+            "revenue": round(day_stats['revenue'], 2),
+            "sales_count": day_stats['count']
         })
-        
+    
     return ok(data=chart_data)
 
 @router.get("/sales/history", dependencies=[Depends(require_roles("pharmacy", "admin"))])
 async def get_sales_history(
     db: Session = Depends(get_db),
-    hospital_id: Optional[str] = Query(None)
+    hospital_id: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
 ):
-    """Get list of all sales transactions."""
+    """Get list of all sales transactions - OPTIMIZED with pagination"""
     query = db.query(PharmacySale)
     if hospital_id:
         query = query.filter(PharmacySale.hospital_id == hospital_id)
     
     total = query.count()
-    sales = query.order_by(PharmacySale.sold_at.desc()).all()
+    sales = query.order_by(PharmacySale.sold_at.desc()).offset((page-1)*page_size).limit(page_size).all()
     
     results = []
     for s in sales:
@@ -191,7 +222,7 @@ async def get_sales_history(
             "payment_status": s.payment_status
         })
         
-    return ok(data=results, meta={"total": total})
+    return ok(data=results, meta={"total": total, "page": page, "page_size": page_size})
 
 @public_router.get("/search-medicine")
 async def search_medicine(
@@ -291,13 +322,14 @@ async def sync_medicines_from_legacy(
 
 
 @public_router.get("/medicines")
+@cached(ttl=CacheService.TTL_LONG)  # Cache for 30 minutes
 async def get_all_medicines(
     db: Session = Depends(get_db),
     hospital_id: Optional[str] = Query(None, description="Filter by hospital ID"),
     page: int = Query(1, ge=1),
-    page_size: int = Query(50, ge=1, le=100),
+    page_size: int = Query(100, ge=1, le=500),  # Increased default to 100, max to 500
 ) -> Dict[str, Any]:
-    """Get a optimized list of all medicines in the inventory"""
+    """Get a optimized list of all medicines in the inventory - CACHED"""
     query = db.query(PharmacyMedicine)
     if hospital_id:
         query = query.filter(PharmacyMedicine.hospital_id == hospital_id)
@@ -324,7 +356,10 @@ async def get_all_medicines(
             "total": total,
             "page": page,
             "page_size": page_size,
-            "hospital_id": hospital_id
+            "hospital_id": hospital_id,
+            "total_pages": (total + page_size - 1) // page_size,
+            "has_next": page * page_size < total,
+            "has_prev": page > 1
         }
     )
 
@@ -410,7 +445,7 @@ async def list_items(
     hospital_id: Optional[str] = Query(None),
     q: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
-    page_size: int = Query(50, ge=1, le=100),
+    page_size: int = Query(100, ge=1, le=500),  # Increased default to 100, max to 500
 ) -> Any:
     """List pharmacy inventory items with optimized filtering and pagination."""
     query = db.query(PharmacyMedicine)
@@ -444,7 +479,14 @@ async def list_items(
             "updated_at": i.updated_at.isoformat() if i.updated_at else None
         })
     
-    return ok(data=results, meta={"page": page, "page_size": page_size, "total": total})
+    return ok(data=results, meta={
+        "page": page, 
+        "page_size": page_size, 
+        "total": total,
+        "total_pages": (total + page_size - 1) // page_size,
+        "has_next": page * page_size < total,
+        "has_prev": page > 1
+    })
 
 # Rest of the functions follow similar pattern: db.query(Model).filter(...)...
 # I'll implement the most critical ones to ensure Firebase patterns are gone.

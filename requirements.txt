@@ -44,4 +44,9 @@ python-dotenv==1.0.0
 python-dateutil>=2.8.2
 pytz>=2023.3
 
+# Performance & Caching
+redis>=5.0.0
+tenacity>=8.2.3
+asyncpg>=0.29.0
+
 

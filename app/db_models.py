@@ -59,13 +59,13 @@ class User(Base):
     email = Column(String(255), unique=True, nullable=True)
     phone = Column(String(20), unique=True, nullable=True)
     password_hash = Column(String(255), nullable=False)
-    role = Column(String(20), default="patient") # Using string for DB compatibility, validated by UserRole enum
-    hospital_id = Column(String, ForeignKey("hospitals.id"), nullable=True) # For receptionists/staff
+    role = Column(String(20), default="patient", index=True) # Added index for role-based filtering
+    hospital_id = Column(String, ForeignKey("hospitals.id"), nullable=True, index=True) # Added index for hospital staff lookup
     location_access = Column(Boolean, default=False)
     date_of_birth = Column(String(20), nullable=True)
     address = Column(String(500), nullable=True)
     mrn_by_hospital = Column(JSON, default=dict) # Added for MRN tracking
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True) # Added index for user reporting
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     # Relationships
@@ -86,11 +86,11 @@ class Hospital(Base):
     email = Column(String(255), nullable=True)
     rating = Column(Float, nullable=True)
     review_count = Column(Integer, default=0)
-    status = Column(String(20), default="open") # Using string for DB compatibility, validated by HospitalStatus enum
+    status = Column(String(20), default="open", index=True) # Added index for open/closed filtering
     specializations = Column(JSON, default=list)
     latitude = Column(Float, nullable=True)
     longitude = Column(Float, nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True) # Added index for hospital listing
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     # Relationships
@@ -102,11 +102,11 @@ class Doctor(Base):
     __tablename__ = "doctors"
 
     id = Column(String, primary_key=True, index=True)
-    user_id = Column(String, ForeignKey("users.id"), nullable=True) # Link to auth user
-    name = Column(String(100), nullable=False)
-    specialization = Column(String(100), nullable=False)
-    subcategory = Column(String(100), nullable=True)
-    hospital_id = Column(String, ForeignKey("hospitals.id"), nullable=False)
+    user_id = Column(String, ForeignKey("users.id"), nullable=True, index=True) # Added index for doctor profile lookup
+    name = Column(String(100), nullable=False, index=True) # Added index for name search
+    specialization = Column(String(100), nullable=False, index=True) # Added index for specialization filtering
+    subcategory = Column(String(100), nullable=True, index=True) # Added index for detailed filtering
+    hospital_id = Column(String, ForeignKey("hospitals.id"), nullable=False, index=True)
     email = Column(String(255), nullable=True)
     rating = Column(Float, nullable=True)
     review_count = Column(Integer, default=0)
@@ -114,13 +114,13 @@ class Doctor(Base):
     session_fee = Column(Float, nullable=True)
     has_session = Column(Boolean, default=False)
     pricing_type = Column(String(20), default="standard")
-    status = Column(String(20), default="available") # Using string for DB compatibility, validated by DoctorStatus enum
+    status = Column(String(20), default="available", index=True) # Added index for availability filtering
     available_days = Column(JSON, default=list)
     start_time = Column(String(10), nullable=False)
     end_time = Column(String(10), nullable=False)
     avatar_initials = Column(String(10), nullable=True)
     patients_per_day = Column(Integer, default=10)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True) # Added index for doctor listing
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     # Relationships
@@ -133,16 +133,16 @@ class Token(Base):
     __tablename__ = "tokens"
 
     id = Column(String, primary_key=True, index=True)
-    patient_id = Column(String, ForeignKey("users.id"), nullable=False)
-    doctor_id = Column(String, ForeignKey("doctors.id"), nullable=False)
-    hospital_id = Column(String, ForeignKey("hospitals.id"), nullable=False)
-    mrn = Column(String(50), nullable=True)
+    patient_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
+    doctor_id = Column(String, ForeignKey("doctors.id"), nullable=False, index=True)
+    hospital_id = Column(String, ForeignKey("hospitals.id"), nullable=False, index=True)
+    mrn = Column(String(50), nullable=True, index=True) # Added index for MRN lookup
     token_number = Column(Integer, nullable=False)
-    hex_code = Column(String(20), nullable=False)
+    hex_code = Column(String(20), nullable=False, index=True) # Added index for unique code lookup
     display_code = Column(String(20), nullable=True)
-    appointment_date = Column(DateTime(timezone=True), nullable=False)
-    status = Column(String(20), default="pending") # Using string for DB compatibility, validated by TokenStatus enum
-    payment_status = Column(String(20), default="pending") # Using string for DB compatibility, validated by PaymentStatus enum
+    appointment_date = Column(DateTime(timezone=True), nullable=False, index=True) # Added index for date filtering
+    status = Column(String(20), default="pending", index=True) # Added index for status filtering
+    payment_status = Column(String(20), default="pending", index=True) # Added index for payment status
     payment_method = Column(String(20), nullable=True) # Using string for DB compatibility, validated by PaymentMethod enum
     queue_position = Column(Integer, nullable=True)
     total_queue = Column(Integer, nullable=True)
@@ -150,9 +150,9 @@ class Token(Base):
     consultation_fee = Column(Float, nullable=True)
     session_fee = Column(Float, nullable=True)
     total_fee = Column(Float, nullable=True)
-    department = Column(String(100), nullable=True)  # Doctor department/specialization
-    idempotency_key = Column(String(255), nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    department = Column(String(100), nullable=True, index=True)  # Added index for department filtering
+    idempotency_key = Column(String(255), nullable=True, index=True) # Added index for idempotency check
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True) # Added index for token history
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     # Embedded snapshots
@@ -276,9 +276,9 @@ class Department(Base):
     __tablename__ = "departments"
 
     id = Column(String, primary_key=True, index=True)
-    name = Column(String(100), nullable=False)
-    hospital_id = Column(String, ForeignKey("hospitals.id"), nullable=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    name = Column(String(100), nullable=False, index=True) # Added index for name search
+    hospital_id = Column(String, ForeignKey("hospitals.id"), nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True) # Added index for listing
 
 
 # Quick Action Model

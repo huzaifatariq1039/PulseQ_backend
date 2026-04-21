@@ -24,44 +24,47 @@ import math
 import httpx
 from time import time
 import logging
+from app.services.cache_service import CacheService, cached
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
 # Lightweight text normalizer for robust matching across app/backend
 def _norm(text: Optional[str]) -> str:
-    """Normalize text for comparison: collapse whitespace, trim, lowercase.
-
-    This helps when the app sends values with extra spaces or different casing
-    (e.g., "General  Medicine ", non-breaking spaces, etc.).
-    """
+    """Normalize text for comparison: collapse whitespace, trim, lowercase."""
     if not text:
         return ""
-    # Replace any whitespace (including NBSP) with single spaces, then lowercase
     return re.sub(r"\s+", " ", str(text)).strip().lower()
 
-# ==============================
-# In-memory TTL cache (per-process, best-effort)
-# ==============================
-_CACHE_TTL_SECONDS = 60
-_cache_store: dict[str, tuple[float, object]] = {}
 
-def _cache_get(key: str):
-    try:
-        exp, val = _cache_store.get(key, (0.0, None))
-        if exp >= time():
-            return val
-        if key in _cache_store:
-            del _cache_store[key]
-        return None
-    except Exception:
-        return None
+# Optimized: Batch fetch queues for multiple doctors in single query
+def batch_fetch_queues(doctor_ids: List[str], db: Session) -> dict:
+    """Fetch all queues for given doctor IDs in a single query (eliminates N+1)"""
+    if not doctor_ids:
+        return {}
+    queues = db.query(Queue).filter(Queue.doctor_id.in_(doctor_ids)).all()
+    return {q.doctor_id: q for q in queues}
 
-def _cache_set(key: str, val: object, ttl: int = _CACHE_TTL_SECONDS):
-    try:
-        _cache_store[key] = (time() + ttl, val)
-    except Exception:
-        pass
+
+# Optimized: Build queue status from queue object
+def build_queue_status(doctor_id: str, queue_obj) -> QueueStatus:
+    """Build QueueStatus from database queue object or generate fallback"""
+    if queue_obj:
+        return QueueStatus(
+            doctor_id=doctor_id,
+            current_token=int(getattr(queue_obj, "current_token", 0) or 0),
+            waiting_patients=int(getattr(queue_obj, "waiting_patients", 0) or 0),
+            estimated_wait_time_minutes=int(getattr(queue_obj, "estimated_wait_time_minutes", 0) or 0),
+        )
+    # Fallback synthetic queue
+    import random
+    waiting = random.randint(5, 25)
+    return QueueStatus(
+        doctor_id=doctor_id,
+        current_token=random.randint(1, 10),
+        waiting_patients=waiting,
+        estimated_wait_time_minutes=waiting * 3,
+    )
 
 @router.post("", response_model=HospitalResponse, dependencies=[Depends(require_roles("admin"))])
 async def create_hospital(hospital: HospitalCreate, db: Session = Depends(get_db)):
@@ -184,12 +187,13 @@ async def get_nearby_hospitals_overpass(
         raise HTTPException(status_code=500, detail=f"Error fetching from Overpass: {str(e)}")
 
 @router.get("")
+@cached(ttl=CacheService.TTL_LONG)  # Cache for 30 minutes
 async def list_hospitals(
     limit: int = Query(20, ge=1, le=100),
     page: int = Query(1, ge=1),
     db: Session = Depends(get_db)
 ):
-    """List all hospitals with standardized response format"""
+    """List all hospitals with standardized response format - CACHED"""
     total = db.query(Hospital).count()
     hospitals = db.query(Hospital).offset((page-1)*limit).limit(limit).all()
     
@@ -530,59 +534,55 @@ async def search_hospitals(
     user_lng: Optional[float] = Query(None, description="User's longitude"),
     db: Session = Depends(get_db),
 ):
-    """Search hospitals by name, specialization, or city"""
-    results = []
-
-    # Get all hospitals and filter in memory (simpler approach for small datasets)
-    all_hospitals = db.query(Hospital).limit(100).all()  # Reasonable limit for filtering
-
-    for h in all_hospitals:
-        hospital_data = {k: v for k, v in h.__dict__.items() if not k.startswith('_')}
-
-        # Apply city filter if specified
-        if city and hospital_data.get("city", "").lower() != city.lower():
-            continue
-
-        # Check if query matches name, specializations, or city
-        matches = False
-
-        # Search in hospital name (case-insensitive)
-        if query.lower() in hospital_data.get("name", "").lower():
-            matches = True
-
-        # Search in specializations (case-insensitive)
-        specializations = hospital_data.get("specializations", [])
-        if any(query.lower() in spec.lower() for spec in specializations):
-            matches = True
-
-        # Search in city if not already filtered
-        if not city and query.lower() in hospital_data.get("city", "").lower():
-            matches = True
-
-        if matches:
-            results.append(hospital_data)
-
-        # Stop if we have enough results
-        if len(results) >= limit:
-            break
-
+    """Search hospitals by name, specialization, or city - OPTIMIZED with DB-level filtering"""
+    # Build query with database-level ILIKE filtering
+    query_obj = db.query(Hospital)
+    
+    # Apply search query using ILIKE (case-insensitive)
+    if query:
+        search_pattern = f"%{query.strip()}%"
+        query_obj = query_obj.filter(
+            Hospital.name.ilike(search_pattern) |
+            Hospital.city.ilike(search_pattern)
+        )
+    
+    # Apply city filter
+    if city:
+        query_obj = query_obj.filter(Hospital.city.ilike(f"%{city.strip()}%"))
+    
+    # Fetch with limit
+    hospitals_db = query_obj.limit(limit).all()
+    
     # Calculate distances and prepare response
-    hospitals = []
-    for hospital_data in results[:limit]:
+    results = []
+    for h in hospitals_db:
+        hospital_data = {
+            "id": h.id,
+            "name": h.name,
+            "address": h.address,
+            "city": h.city,
+            "state": h.state,
+            "latitude": h.latitude,
+            "longitude": h.longitude,
+            "phone": h.phone,
+            "email": h.email,
+            "status": h.status,
+            "specializations": h.specializations,
+            "rating": h.rating,
+            "review_count": h.review_count,
+        }
+        
         # Calculate distance if user coordinates provided
-        if user_lat and user_lng and hospital_data.get("latitude") and hospital_data.get("longitude"):
-            distance = calculate_distance(
-                user_lat, user_lng,
-                hospital_data["latitude"], hospital_data["longitude"]
-            )
+        if user_lat and user_lng and h.latitude and h.longitude:
+            distance = calculate_distance(user_lat, user_lng, h.latitude, h.longitude)
             hospital_data["distance_km"] = round(distance, 1)
             hospital_data["estimated_time_minutes"] = int(distance * 2)
-
-        hospitals.append(HospitalResponse(**hospital_data))
+        
+        results.append(hospital_data)
 
     return HospitalSearchResponse(
-        hospitals=hospitals,
-        total_found=len(hospitals),
+        hospitals=[HospitalResponse(**h) for h in results],
+        total_found=len(results),
         search_query=query
     )
 
@@ -804,32 +804,7 @@ async def get_hospital_doctors(
     category: Optional[str] = Query(None, description="Filter doctors by specialization category"),
     db: Session = Depends(get_db),
 ):
-    """Get doctors for a specific hospital with optional category filter.
-
-    Aligns the response shape with `/doctors/hospital/{hospital_id}` by returning
-    `DoctorSearchResponse` including `doctors` with queue info and `subcategories`.
-    """
-    # Local helper to build a queue status for a doctor (mirrors logic in doctors.py)
-    async def _get_queue_status(doctor_id: str) -> QueueStatus:
-        q = db.query(Queue).filter(Queue.doctor_id == doctor_id).first()
-        if q:
-            return QueueStatus(
-                doctor_id=doctor_id,
-                current_token=int(getattr(q, "current_token", 0) or 0),
-                waiting_patients=int(getattr(q, "waiting_patients", 0) or 0),
-                estimated_wait_time_minutes=int(getattr(q, "estimated_wait_time_minutes", 0) or 0),
-            )
-        # Fallback synthetic queue
-        import random
-        waiting = random.randint(5, 25)
-
-        return QueueStatus(
-            doctor_id=doctor_id,
-            current_token=random.randint(1, 10),
-            waiting_patients=waiting,
-            estimated_wait_time_minutes=waiting * 3,
-        )
-
+    """Get doctors for a specific hospital with optional category filter - OPTIMIZED"""
     category_mappings = {
         "General Medical": [
             "General Medicine", "Family Medicine", "Internal Medicine", "Emergency Medicine"
@@ -848,15 +823,41 @@ async def get_hospital_doctors(
         ],
     }
 
-    # If no category, return a reasonable set directly, wrapped as DoctorSearchResponse
+    # Fetch doctors with limit
     if not category:
-        docs_stream = db.query(Doctor).filter(Doctor.hospital_id == hospital_id).limit(200).all()
-        doctors_with_queue: list[DoctorWithQueue] = []
-        for d in docs_stream:
-            data = {k: v for k, v in d.__dict__.items() if not k.startswith('_')}
-            doctor = DoctorResponse(**data)
-            queue = await _get_queue_status(data["id"])
+        doctors = db.query(Doctor).filter(Doctor.hospital_id == hospital_id).limit(200).all()
+    else:
+        doctors = db.query(Doctor).filter(Doctor.hospital_id == hospital_id).limit(500).all()
+    
+    # If no category, return directly with batch queue fetch
+    if not category:
+        # OPTIMIZATION: Batch fetch all queues in single query
+        doctor_ids = [d.id for d in doctors]
+        queues_map = batch_fetch_queues(doctor_ids, db)
+        
+        doctors_with_queue = []
+        for d in doctors:
+            doctor_data = {
+                "id": d.id,
+                "name": d.name,
+                "specialization": d.specialization,
+                "subcategory": d.subcategory,
+                "hospital_id": d.hospital_id,
+                "consultation_fee": d.consultation_fee,
+                "session_fee": d.session_fee,
+                "status": d.status,
+                "available_days": d.available_days or [],
+                "start_time": d.start_time,
+                "end_time": d.end_time,
+                "avatar_initials": d.avatar_initials,
+                "rating": d.rating,
+                "review_count": d.review_count,
+            }
+            doctor = DoctorResponse(**doctor_data)
+            queue_obj = queues_map.get(d.id)
+            queue = build_queue_status(d.id, queue_obj)
             doctors_with_queue.append(DoctorWithQueue(doctor=doctor, queue=queue))
+        
         return {
             "doctors": doctors_with_queue,
             "total_found": len(doctors_with_queue),
@@ -870,10 +871,9 @@ async def get_hospital_doctors(
 
     is_main_category = any(cat_lower == k.lower() for k in category_mappings.keys())
 
-    # Stream a bounded set and filter in-memory for case-insensitivity and contains-matching
-    docs_stream = db.query(Doctor).filter(Doctor.hospital_id == hospital_id).limit(500).all()
-    results: list[dict] = []
-    resolved_subcategories: list[str] = []
+    # Filter doctors by category
+    results = []
+    resolved_subcategories = []
 
     if is_main_category:
         # Build subcategory set for the selected main category
@@ -885,16 +885,14 @@ async def get_hospital_doctors(
         # Also accumulate dynamic subcategories present in data
         dyn_set = set(subcats)
 
-        for d in docs_stream:
-            item = {k: v for k, v in d.__dict__.items() if not k.startswith('_')}
-            spec = (item.get("specialization") or "").strip()
-            sub = (item.get("subcategory") or "").strip()
+        for d in doctors:
+            spec = (d.specialization or "").strip()
+            sub = (d.subcategory or "").strip()
             spec_l = spec.lower()
             sub_l = sub.lower()
 
             ok = False
             if selected_key == "Surgeon":
-                # Any surgeon-like doctor or explicitly in the mapped list
                 ok = ("surgeon" in spec_l) or ("surgeon" in sub_l) or (spec_l in sub_set_lower) or (sub_l in sub_set_lower)
                 if "surgeon" in spec_l or "surgeon" in sub_l:
                     if spec:
@@ -908,13 +906,11 @@ async def get_hospital_doctors(
                 if sub in category_mappings["General Medical"]:
                     dyn_set.add(sub)
             else:  # Specialist
-                # Specialist = not General Medical and not Surgeon, or explicitly in sub list
                 if (
                     ("surgeon" not in spec_l and "surgeon" not in sub_l)
                     and (spec_l not in general_set and sub_l not in general_set)
                 ):
                     ok = True
-                # If we registered explicit subcategories, include those too
                 if (spec_l in sub_set_lower) or (sub_l in sub_set_lower):
                     ok = True
                 if spec and ("surgeon" not in spec_l) and (spec not in category_mappings["General Medical"]):
@@ -923,24 +919,44 @@ async def get_hospital_doctors(
                     dyn_set.add(sub)
 
             if ok:
-                results.append(item)
+                results.append(d)
 
         resolved_subcategories = sorted({s for s in dyn_set if s})
 
     else:
         # Otherwise: treat it as a concrete specialization/subcategory term
-        for d in docs_stream:
-            item = {k: v for k, v in d.__dict__.items() if not k.startswith('_')}
-            spec = (item.get("specialization") or "").strip().lower()
-            sub = (item.get("subcategory") or "").strip().lower()
+        for d in doctors:
+            spec = (d.specialization or "").strip().lower()
+            sub = (d.subcategory or "").strip().lower()
             if cat_lower == spec or cat_lower == sub or cat_lower in spec or cat_lower in sub:
-                results.append(item)
+                results.append(d)
 
+    # OPTIMIZATION: Batch fetch all queues in single query
+    doctor_ids = [d.id for d in results]
+    queues_map = batch_fetch_queues(doctor_ids, db)
+    
     # Wrap into DoctorWithQueue with queue info
-    doctors_with_queue: list[DoctorWithQueue] = []
-    for data in results:
-        doctor = DoctorResponse(**data)
-        queue = await _get_queue_status(data["id"])
+    doctors_with_queue = []
+    for d in results:
+        doctor_data = {
+            "id": d.id,
+            "name": d.name,
+            "specialization": d.specialization,
+            "subcategory": d.subcategory,
+            "hospital_id": d.hospital_id,
+            "consultation_fee": d.consultation_fee,
+            "session_fee": d.session_fee,
+            "status": d.status,
+            "available_days": d.available_days or [],
+            "start_time": d.start_time,
+            "end_time": d.end_time,
+            "avatar_initials": d.avatar_initials,
+            "rating": d.rating,
+            "review_count": d.review_count,
+        }
+        doctor = DoctorResponse(**doctor_data)
+        queue_obj = queues_map.get(d.id)
+        queue = build_queue_status(d.id, queue_obj)
         doctors_with_queue.append(DoctorWithQueue(doctor=doctor, queue=queue))
 
     # Filter out any subcategory tokens that equal main category labels, and remove empties

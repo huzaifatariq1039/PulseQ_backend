@@ -1,15 +1,47 @@
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, text, event
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from app.config import DATABASE_URL
+import logging
+import time
+
+logger = logging.getLogger("performance.db")
 
 # Create base class for models
 Base = declarative_base()
 
 # SQLAlchemy engine creation logic
 def get_engine():
-    """Get or create SQLAlchemy engine using DATABASE_URL"""
-    return create_engine(DATABASE_URL, pool_pre_ping=True)
+    """Get or create SQLAlchemy engine using DATABASE_URL with optimized connection pooling"""
+    engine = create_engine(
+        DATABASE_URL, 
+        pool_size=30,              # Increased from 20 for better concurrency
+        max_overflow=20,           # Increased from 10 for burst traffic
+        pool_timeout=30,           # Timeout after 30 seconds of waiting for a connection
+        pool_recycle=1800,         # Recycle connections every 30 minutes to avoid stale links
+        pool_pre_ping=True,        # Check connection health before using
+        pool_use_lifo=True,        # Use LIFO for better connection reuse
+        echo=False,                # Disable SQL logging in production (enable for debugging)
+    )
+    
+    # Add SQLAlchemy event listeners for query performance tracking
+    @event.listens_for(engine, "before_cursor_execute")
+    def before_cursor_execute(conn, cursor, statement, parameters, context, executemany):
+        conn.info.setdefault('query_start_time', []).append(time.time())
+    
+    @event.listens_for(engine, "after_cursor_execute")
+    def after_cursor_execute(conn, cursor, statement, parameters, context, executemany):
+        if conn.info.get('query_start_time'):
+            total = time.time() - conn.info['query_start_time'].pop(-1)
+            total_ms = total * 1000
+            
+            # Log slow queries (>100ms)
+            if total_ms > 100:
+                logger.warning(f"🐌 Slow query ({total_ms:.2f}ms): {statement[:150]}...")
+            elif total_ms > 50:
+                logger.info(f"⏱️ Query ({total_ms:.2f}ms): {statement[:150]}...")
+    
+    return engine
 
 # Shared engine instance
 engine = get_engine()
