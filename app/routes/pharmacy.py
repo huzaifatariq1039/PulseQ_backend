@@ -322,14 +322,13 @@ async def sync_medicines_from_legacy(
 
 
 @public_router.get("/medicines")
-@cached(ttl=CacheService.TTL_LONG)  # Cache for 30 minutes
 async def get_all_medicines(
     db: Session = Depends(get_db),
     hospital_id: Optional[str] = Query(None, description="Filter by hospital ID"),
     page: int = Query(1, ge=1),
-    page_size: int = Query(100, ge=1, le=500),  # Increased default to 100, max to 500
+    page_size: int = Query(100, ge=1, le=500),  
 ) -> Dict[str, Any]:
-    """Get a optimized list of all medicines in the inventory - CACHED"""
+    """Get a optimized list of all medicines in the inventory"""
     query = db.query(PharmacyMedicine)
     if hospital_id:
         query = query.filter(PharmacyMedicine.hospital_id == hospital_id)
