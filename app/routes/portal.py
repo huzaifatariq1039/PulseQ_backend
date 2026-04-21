@@ -347,26 +347,61 @@ async def receptionist_dashboard(
     
     waiting = [t for t in todays if t.status in ("pending", "confirmed")]
     completed = [t for t in todays if t.status == "completed"]
-    skipped = [t for t in todays if t.status == "skipped"]
+    skipped = [t for t in todays if t.status in ("skipped", "cancelled")]
     
-    active = [t for t in todays if t.status in ("in_consultation", "pending", "confirmed")]
+    active = [t for t in todays if t.status in ("in_consultation", "pending", "confirmed", "called")]
     active.sort(key=lambda x: x.token_number)
     
-    now_serving = next((t for t in active if t.status == "in_consultation"), active[0] if active else None)
+    now_serving = next((t for t in active if t.status in ("in_consultation", "called")), active[0] if active else None)
+
+    def _get_age_and_gender(patient_id):
+        if not patient_id: return "N/A", "Unknown"
+        user = db.query(User).filter(User.id == patient_id).first()
+        if not user: return "N/A", "Unknown"
+        age = "N/A"
+        if user.date_of_birth:
+            try:
+                dob = datetime.strptime(user.date_of_birth, "%Y-%m-%d")
+                age = f"{(datetime.utcnow() - dob).days // 365}y"
+            except Exception: pass
+        # Assume not available, default to Male to match dummy UI till DB adds it
+        return age, "Male"
 
     upcoming = []
     for t in active:
         if now_serving and t.id == now_serving.id:
             continue
+        age, gender = _get_age_and_gender(t.patient_id)
         upcoming.append({
             "token_id": t.id,
             "token_number": t.display_code or str(t.token_number),
             "patient_name": t.patient_name,
+            "patient_age": age,
+            "patient_gender": gender,
             "status": str(t.status).lower(),
             "doctor_name": t.doctor_name,
+            "waiting_time_minutes": getattr(t, 'estimated_wait_time', 0) or 0
         })
         if len(upcoming) >= upcoming_limit:
             break
+            
+    # Active Doctors for the hospital
+    doctors = db.query(Doctor).filter(Doctor.hospital_id == hospital_id).all()
+    active_doctors = []
+    for d in doctors:
+        status_val = str(getattr(d, 'status', 'available') or 'available').lower()
+        if status_val in ("available", "busy"):
+            active_doctors.append({
+                "doctor_id": d.id,
+                "doctor_name": d.name,
+                "department": getattr(d, 'specialization', None) or getattr(d, 'department', None) or "General",
+                "room_number": getattr(d, 'room_number', None) or getattr(d, 'room', None) or "101",
+                "status": status_val
+            })
+
+    now_serving_age, now_serving_gender = "N/A", "Unknown"
+    if now_serving:
+         now_serving_age, now_serving_gender = _get_age_and_gender(now_serving.patient_id)
 
     return ok(
         data={
@@ -374,14 +409,18 @@ async def receptionist_dashboard(
                 "token_id": now_serving.id,
                 "token_number": now_serving.display_code or str(now_serving.token_number),
                 "patient_name": now_serving.patient_name,
+                "patient_age": now_serving_age,
+                "patient_gender": now_serving_gender,
+                "reason": getattr(now_serving, 'department', None) or "General Consultation",
                 "doctor_name": now_serving.doctor_name,
             } if now_serving else None,
             "upcoming_queue": upcoming,
+            "active_doctors": active_doctors,
             "cards": {
                 "waiting": len(waiting),
                 "completed": len(completed),
                 "skipped": len(skipped),
-                "avg_wait_minutes": len(waiting) * 9,
+                "avg_wait_minutes": (len(waiting) * 9) if waiting else 0,
             }
         }
     )
@@ -396,13 +435,25 @@ async def receptionist_create_walkin_token(
     doctor_id = payload.get("doctor_id")
     patient_name = payload.get("patient_name")
     phone = payload.get("phone")
+    age = payload.get("age")
+    gender = payload.get("gender")
+    reason = payload.get("reason")
     
     if not all([hospital_id, doctor_id, patient_name, phone]):
-        raise HTTPException(status_code=400, detail="Missing required fields")
+        raise HTTPException(status_code=400, detail="Missing required fields: hospital, doctor, name, phone")
 
     doctor = db.query(Doctor).filter(Doctor.id == doctor_id).first()
     if not doctor:
         raise HTTPException(status_code=404, detail="Doctor not found")
+
+    # Calculate dob from age if provided
+    dob_str = None
+    if age:
+        try:
+            years = int(age)
+            dob_str = (datetime.utcnow() - timedelta(days=years*365)).strftime("%Y-%m-%d")
+        except Exception:
+            pass
 
     # Create or get patient user
     user = db.query(User).filter(User.phone == phone).first()
@@ -411,11 +462,19 @@ async def receptionist_create_walkin_token(
             id=str(uuid.uuid4()),
             name=patient_name,
             phone=phone,
-            role="patient"
+            role="patient",
+            date_of_birth=dob_str
         )
         db.add(user)
-        db.commit()
-        db.refresh(user)
+    else:
+        # Update details if provided
+        if dob_str and not user.date_of_birth:
+            user.date_of_birth = dob_str
+        if patient_name and user.name != patient_name:
+            user.name = patient_name
+
+    db.commit()
+    db.refresh(user)
 
     # Allocation logic (Simplified)
     # TODO: Proper sequential allocation with locking
@@ -439,6 +498,7 @@ async def receptionist_create_walkin_token(
         is_walk_in=True,
         patient_name=patient_name,
         doctor_name=doctor.name,
+        department=reason,
         hospital_name="Hospital" # TODO: Fetch hospital name
     )
     
