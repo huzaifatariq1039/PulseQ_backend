@@ -23,8 +23,10 @@ from datetime import datetime, timedelta, timezone
 import math
 import httpx
 from time import time
+import logging
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 # Lightweight text normalizer for robust matching across app/backend
 def _norm(text: Optional[str]) -> str:
@@ -1148,58 +1150,101 @@ async def get_hospital_categories(hospital_id: str, db: Session = Depends(get_db
     docs = db.query(Doctor).filter(Doctor.hospital_id == hospital_id).all()
     
     # Calculate current local time for availability check
-    # Default to UTC+5 (300 mins) if not specified
+    # Ensure we use Asia/Karachi (UTC+5)
     tz_offset = 300 
     now_utc = datetime.now(timezone.utc)
     local_now = now_utc.astimezone(timezone(timedelta(minutes=tz_offset)))
     current_day = local_now.strftime("%A").lower()
     current_time_str = local_now.strftime("%H:%M")
+    
+    logger.info(f"Checking doctor availability for hospital {hospital_id} at {local_now} (Day: {current_day}, Time: {current_time_str})")
 
     def is_doctor_available(d: Doctor) -> bool:
         status_val = str(getattr(d, "status", "") or "").lower()
-        if status_val not in ("available", "active"):
+        # Consider both 'available' and 'busy' as active on duty
+        if status_val not in ("available", "active", "busy"):
             return False
             
         start = str(getattr(d, "start_time", "") or "").strip()
         end = str(getattr(d, "end_time", "") or "").strip()
+        
         if not start or not end:
+            logger.debug(f"Doctor {d.id} ({d.name}) missing timings: start={start}, end={end}")
             return False
             
         # Check days
-        days = [str(x).strip().lower() for x in (getattr(d, "available_days", []) or [])]
+        # Some doctors might have available_days as a string or list
+        raw_days = getattr(d, "available_days", [])
+        if isinstance(raw_days, str):
+            import json
+            try:
+                days = [x.strip().lower() for x in json.loads(raw_days)]
+            except:
+                days = [x.strip().lower() for x in raw_days.split(",") if x.strip()]
+        else:
+            days = [str(x).strip().lower() for x in (raw_days or [])]
+            
         if days and current_day not in days:
             return False
             
         # Check time window (simple string comparison for HH:MM)
-        # Handle cases like "09:00" vs "9:00"
         def pad_time(t: str) -> str:
             t = t.strip()
-            if ":" not in t: return t
-            h, m = t.split(":")
-            return f"{int(h):02d}:{int(m):02d}"
+            if not t: return "00:00"
+            if ":" not in t:
+                # Handle cases like "9" -> "09:00"
+                try:
+                    return f"{int(t):02d}:00"
+                except:
+                    return "00:00"
+            parts = t.split(":")
+            h = parts[0]
+            m = parts[1] if len(parts) > 1 else "00"
+            try:
+                return f"{int(h):02d}:{int(m):02d}"
+            except:
+                return "00:00"
 
         try:
             curr = pad_time(current_time_str)
             s = pad_time(start)
             e = pad_time(end)
-            return s <= curr <= e
-        except Exception:
+            
+            # If end time is before start time (e.g. 22:00 to 02:00), handle overnight
+            if e < s:
+                available = curr >= s or curr <= e
+            else:
+                available = s <= curr <= e
+                
+            if not available:
+                logger.debug(f"Doctor {d.id} ({d.name}) outside time window: {s} - {e} (Current: {curr})")
+            return available
+        except Exception as e:
+            logger.error(f"Error checking time for doctor {d.id}: {e}")
             return False
 
     present_specs: dict[str, int] = {}
     available_specs: dict[str, int] = {}
     
+    matched_doctors_count = 0
     for d in docs:
         spec = str(getattr(d, "specialization", "") or "").strip()
         if not spec:
+            # Try 'department' as fallback
+            spec = str(getattr(d, "department", "") or "").strip()
+            
+        if not spec:
             continue
             
+        matched_doctors_count += 1
         present_specs[spec] = present_specs.get(spec, 0) + 1
         if is_doctor_available(d):
             available_specs[spec] = available_specs.get(spec, 0) + 1
         else:
             if spec not in available_specs:
                 available_specs[spec] = 0
+
+    logger.info(f"Matched {matched_doctors_count} doctors for hospital {hospital_id}. Found {len(present_specs)} unique specializations.")
 
     # Category mappings (kept in sync with app/routes/doctors.py)
     category_mappings = {
@@ -1276,14 +1321,31 @@ async def get_hospital_categories(hospital_id: str, db: Session = Depends(get_db
     for k in categories:
         categories[k].sort(key=lambda x: x.lower())
 
-    return {
+    # Task 8: Return a flat list of departments for the frontend
+    department_list = []
+    for spec, total_c in present_specs.items():
+        department_list.append({
+            "id": spec.lower().replace(" ", "_"),
+            "name": spec,
+            "totalDoctors": total_c,
+            "availableDoctors": available_specs.get(spec, 0)
+        })
+    department_list.sort(key=lambda x: x["name"])
+
+    response_data = {
         "hospital_id": hospital_id,
         "categories": categories,
         "counts": counts, # Total doctors per main category
         "available_counts": available_counts, # Available doctors per main category
         "subcategories_counts": present_specs, # Total doctors per specialization
         "subcategories_available_counts": available_specs, # Available doctors per specialization
+        "department_list": department_list, # Task 8 implementation
+        "server_time": local_now.isoformat(),
+        "current_day": current_day
     }
+    
+    logger.info(f"Returning categories for {hospital_id}. Available departments: {len(department_list)}")
+    return response_data
 
 
 @router.put("/{hospital_id}")

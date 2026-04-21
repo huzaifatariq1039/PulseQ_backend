@@ -140,6 +140,7 @@ class Token(BaseModel):
 class TokenData(BaseModel):
     user_id: Optional[str] = None
     role: Optional[str] = None
+    hospital_id: Optional[str] = None
 
 # Dashboard Models
 class UserStatistics(BaseModel):

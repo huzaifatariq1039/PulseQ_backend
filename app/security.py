@@ -97,6 +97,7 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
 
     user_id = str(payload.get("sub") or "").strip()
     role = str(payload.get("role") or "").strip().lower() or None
+    hospital_id = str(payload.get("hospital_id") or "").strip() or None
     
     if not user_id:
         raise HTTPException(
@@ -117,7 +118,11 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     if not role:
         role = str(user.role.value if hasattr(user.role, 'value') else user.role).strip().lower()
 
-    return TokenData(user_id=user_id, role=role)
+    return TokenData(
+        user_id=user_id,
+        role=role,
+        hospital_id=getattr(user, "hospital_id", None) or hospital_id
+    )
 
 
 def get_current_active_user(current_user: TokenData = Depends(get_current_user)) -> TokenData:

@@ -98,22 +98,29 @@ def _to_str(v: Any) -> Optional[str]:
         return None
 
 
-def load_excel(path: str, sheet: Optional[str] = None) -> pd.DataFrame:
-    # If sheet is None, default to the first sheet (0)
-    sheet_to_read = sheet if sheet is not None else 0
+def load_file(path: str, sheet: Optional[str] = None) -> pd.DataFrame:
+    # Check extension
+    is_csv = path.lower().endswith(".csv")
     
-    # Based on the screenshot, Row 1 contains 'Inventory Management > Products...'
-    # Row 2 contains the actual headers. We skip the first row (index 0).
-    df = pd.read_excel(path, sheet_name=sheet_to_read, skiprows=1)
+    if is_csv:
+        # For CSV, we try common delimiters
+        try:
+            df = pd.read_csv(path, skiprows=1)
+        except Exception:
+            df = pd.read_csv(path, skiprows=1, sep=";")
+    else:
+        # If sheet is None, default to the first sheet (0)
+        sheet_to_read = sheet if sheet is not None else 0
+        df = pd.read_excel(path, sheet_name=sheet_to_read, skiprows=1)
     
     # Normalize column names (trim spaces and handle case)
     df.columns = [str(c).strip() for c in df.columns]
 
-    # Map the columns from the Excel to the internal model
+    # Map the columns from the file to the internal model
     missing = [col for col in EXCEL_COLUMNS.values() if col not in df.columns]
     if missing:
-        print(f"DEBUG: Found columns in Excel: {list(df.columns)}")
-        raise ValueError(f"Missing required columns in Excel: {missing}")
+        print(f"DEBUG: Found columns in file: {list(df.columns)}")
+        raise ValueError(f"Missing required columns in file: {missing}")
 
     return df
 
@@ -123,7 +130,7 @@ def fetch_existing_product_ids(session) -> Set[int]:
     return {pid[0] for pid in existing if pid[0] is not None}
 
 
-def row_to_model(row: pd.Series) -> Optional[PharmacyMedicine]:
+def row_to_model(row: pd.Series, hospital_id: Optional[str] = None) -> Optional[PharmacyMedicine]:
     if _is_empty_row(row):
         return None
 
@@ -150,23 +157,24 @@ def row_to_model(row: pd.Series) -> Optional[PharmacyMedicine]:
         expiration_date=_to_dt(row.get(EXCEL_COLUMNS["expiration_date"])),
         category=_to_str(row.get(EXCEL_COLUMNS["category"])),
         sub_category=_to_str(row.get(EXCEL_COLUMNS["sub_category"])),
+        hospital_id=hospital_id,
         created_at=datetime.now(timezone.utc),
     )
 
 
-def import_medicines(excel_path: str, db_url: str, sheet: Optional[str] = None) -> int:
+def import_medicines(file_path: str, db_url: str, hospital_id: Optional[str] = None, sheet: Optional[str] = None) -> int:
     engine = create_engine(db_url)
     SessionLocal = sessionmaker(bind=engine)
     session = SessionLocal()
 
     try:
-        df = load_excel(excel_path, sheet=sheet)
+        df = load_file(file_path, sheet=sheet)
         existing = fetch_existing_product_ids(session)
         seen_in_file: Set[int] = set()
 
         imported = 0
         for _, row in df.iterrows():
-            med = row_to_model(row)
+            med = row_to_model(row, hospital_id=hospital_id)
             if not med:
                 continue
 
@@ -201,27 +209,20 @@ def import_medicines(excel_path: str, db_url: str, sheet: Optional[str] = None) 
         session.close()
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Import pharmacy medicines from Excel into PostgreSQL")
-    parser.add_argument("--excel", required=True, help="Path to Excel file")
-    parser.add_argument("--sheet", required=False, default=None, help="Optional sheet name")
-    parser.add_argument(
-        "--db-url",
-        required=False,
-        default=DATABASE_URL,
-        help="Database URL. Example: postgresql://postgres:pulseq123@localhost:5432/dbname",
-    )
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Import medicines from CSV/Excel into PostgreSQL")
+    parser.add_argument("file_path", help="Path to the CSV or Excel file")
+    parser.add_argument("--hospital_id", help="Assign medicines to this hospital ID", required=True)
+    parser.add_argument("--sheet", help="Excel sheet name (optional)")
+    parser.add_argument("--db_url", help="Database URL (defaults to config)", default=DATABASE_URL)
 
     args = parser.parse_args()
 
-    if not args.db_url:
-        print("Error: DATABASE_URL not found in environment or arguments.")
-        return
+    # Handle postgres:// vs postgresql://
+    db_url = args.db_url
+    if db_url.startswith("postgres://"):
+        db_url = db_url.replace("postgres://", "postgresql://", 1)
 
-    print(f"Starting import from {args.excel}...")
-    count = import_medicines(args.excel, args.db_url, sheet=args.sheet)
-    print(f"Successfully imported {count} medicines into pharmacy_medicines table.")
-
-
-if __name__ == "__main__":
-    main()
+    print(f"Starting import from {args.file_path}...")
+    count = import_medicines(args.file_path, db_url, hospital_id=args.hospital_id, sheet=args.sheet)
+    print(f"Successfully imported {count} medicines.")

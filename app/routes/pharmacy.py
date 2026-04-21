@@ -66,6 +66,133 @@ def _normalize_date_str(v: Optional[str]) -> Optional[str]:
     except Exception: pass
     return s
 
+@router.get("/dashboard/stats", dependencies=[Depends(require_roles("pharmacy", "admin"))])
+async def get_pharmacy_dashboard_stats(
+    db: Session = Depends(get_db),
+    hospital_id: Optional[str] = Query(None),
+):
+    """Get summary statistics for the pharmacy dashboard."""
+    query = db.query(PharmacyMedicine)
+    if hospital_id:
+        query = query.filter(PharmacyMedicine.hospital_id == hospital_id)
+    
+    all_medicines = query.all()
+    
+    # Calculate stats
+    total_medicines = len(all_medicines)
+    
+    # Active: in stock and not expired
+    now = datetime.utcnow()
+    active_medicines = len([
+        m for m in all_medicines 
+        if (m.quantity or 0) > 0 and (not m.expiration_date or m.expiration_date > now)
+    ])
+    
+    # Low Stock: quantity < 10
+    low_stock_items = len([m for m in all_medicines if (m.quantity or 0) < 10])
+    
+    # Expired: expiration_date in the past
+    expired_items = len([m for m in all_medicines if m.expiration_date and m.expiration_date <= now])
+    
+    # Inventory Value: total selling price * quantity
+    inventory_value = sum([(m.quantity or 0) * (m.selling_price or 0) for m in all_medicines])
+
+    return ok(data={
+        "total_medicines": total_medicines,
+        "active_medicines": active_medicines,
+        "low_stock_items": low_stock_items,
+        "expired_items": expired_items,
+        "inventory_value": round(inventory_value, 2)
+    })
+
+@router.get("/reports/sales-summary", dependencies=[Depends(require_roles("pharmacy", "admin"))])
+async def get_pharmacy_sales_summary(
+    db: Session = Depends(get_db),
+    hospital_id: Optional[str] = Query(None),
+):
+    """Get summary of sales and revenue."""
+    query = db.query(PharmacySale)
+    if hospital_id:
+        query = query.filter(PharmacySale.hospital_id == hospital_id)
+    
+    sales = query.all()
+    
+    total_revenue = sum([s.total_price or 0 for s in sales])
+    total_sales_count = len(sales)
+    
+    # Daily revenue
+    today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    daily_sales = [s for s in sales if s.sold_at >= today_start]
+    daily_revenue = sum([s.total_price or 0 for s in daily_sales])
+    
+    return ok(data={
+        "total_revenue": round(total_revenue, 2),
+        "total_sales_count": total_sales_count,
+        "daily_revenue": round(daily_revenue, 2),
+        "daily_sales_count": len(daily_sales)
+    })
+
+@router.get("/reports/revenue-chart", dependencies=[Depends(require_roles("pharmacy", "admin"))])
+async def get_revenue_chart_data(
+    db: Session = Depends(get_db),
+    hospital_id: Optional[str] = Query(None),
+    days: int = Query(7, ge=1, le=30)
+):
+    """Get revenue data for chart (last N days)."""
+    now = datetime.utcnow()
+    start_date = (now - timedelta(days=days-1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    
+    query = db.query(PharmacySale).filter(PharmacySale.sold_at >= start_date)
+    if hospital_id:
+        query = query.filter(PharmacySale.hospital_id == hospital_id)
+    
+    sales = query.all()
+    
+    chart_data = []
+    for i in range(days):
+        day = start_date + timedelta(days=i)
+        day_end = day + timedelta(days=1)
+        
+        day_sales = [s for s in sales if day <= s.sold_at < day_end]
+        day_revenue = sum([s.total_price or 0 for s in day_sales])
+        
+        chart_data.append({
+            "date": day.strftime("%Y-%m-%d"),
+            "revenue": round(day_revenue, 2),
+            "sales_count": len(day_sales)
+        })
+        
+    return ok(data=chart_data)
+
+@router.get("/sales/history", dependencies=[Depends(require_roles("pharmacy", "admin"))])
+async def get_sales_history(
+    db: Session = Depends(get_db),
+    hospital_id: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100)
+):
+    """Get list of recent sales transactions."""
+    query = db.query(PharmacySale)
+    if hospital_id:
+        query = query.filter(PharmacySale.hospital_id == hospital_id)
+    
+    total = query.count()
+    sales = query.order_by(PharmacySale.sold_at.desc()).offset((page-1)*page_size).limit(page_size).all()
+    
+    results = []
+    for s in sales:
+        results.append({
+            "id": s.id,
+            "medicine_name": s.medicine_name,
+            "quantity": s.quantity,
+            "unit_price": s.unit_price,
+            "total_price": s.total_price,
+            "sold_at": s.sold_at.isoformat(),
+            "payment_status": s.payment_status
+        })
+        
+    return ok(data=results, meta={"total": total, "page": page, "page_size": page_size})
+
 @public_router.get("/search-medicine")
 async def search_medicine(
     q: str = Query(..., description="Search by medicine name or generic name"),
@@ -234,6 +361,7 @@ async def dispense_medicine(
             
             sale = PharmacySale(
                 id=str(uuid.uuid4()),
+                hospital_id=current.hospital_id, # Link sale to hospital
                 patient_id=payload.patient_id,
                 doctor_id=payload.doctor_id,
                 medicine_id=med.product_id,
