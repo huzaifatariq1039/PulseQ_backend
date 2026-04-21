@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, status, Query, Depends
 from typing import List, Optional, Dict, Any
 from app.models import DoctorCreate, DoctorResponse, DoctorSearchResponse, DoctorWithQueue, QueueStatus
 from app.database import get_db
+from app.utils.responses import ok
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from app.db_models import Doctor, Hospital, User
@@ -50,7 +51,7 @@ async def update_doctor_status(
     db.refresh(doctor)
     
     merged = {k: v for k, v in doctor.__dict__.items() if not k.startswith('_')}
-    return {"success": True, "data": merged, "message": "Doctor status updated"}
+    return ok(data=merged, message="Doctor status updated")
 
 
 @router.get("/manage", dependencies=[Depends(require_roles("receptionist", "admin", "patient"))])
@@ -172,13 +173,12 @@ async def receptionist_manage_doctors(
             }
         )
 
-    return {"success": True, "data": out, "meta": {"page": page, "page_size": page_size, "total": total}}
+    return ok(data=out, meta={"page": page, "page_size": page_size, "total": total})
 
 
-@router.get("/departments", dependencies=[Depends(require_roles("receptionist", "admin"))])
-async def receptionist_list_departments(
+@router.get("/departments")
+async def list_departments(
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_active_user),
     hospital_id: Optional[str] = Query(None, description="Optional hospital scope"),
 ) -> Dict[str, Any]:
     # Departments table may not exist in PostgreSQL, fallback to extracting from doctors
@@ -198,7 +198,16 @@ async def receptionist_list_departments(
     
     out = sorted(set(names), key=lambda x: x.lower())
 
-    return {"success": True, "data": out}
+    return ok(data=out)
+
+
+@router.get("/{doctor_id}/details", response_model=DoctorResponse)
+async def get_doctor_details_alias(
+    doctor_id: str,
+    db: Session = Depends(get_db)
+):
+    """Alias for get_doctor to support frontend /details suffix"""
+    return await get_doctor(doctor_id, db)
 
 
 @router.put("/{doctor_id}", dependencies=[Depends(require_roles("receptionist", "admin"))])
@@ -319,7 +328,7 @@ async def receptionist_update_doctor(
     
     if not merged.get("id"):
         merged["id"] = doctor_id
-    return {"success": True, "data": merged, "message": "Doctor updated"}
+    return ok(data=merged, message="Doctor updated")
 
 # -------------------- Time Normalization --------------------
 def _normalize_time_to_hhmm(s: Optional[str]) -> Optional[str]:
@@ -527,7 +536,12 @@ async def get_available_slots(
         # For now, mark all slots as available
         out.append({"time": s.get("time"), "available": True})
 
-    return {"doctor_id": doctor_id, "day": day, "slot_minutes": slot_minutes, "slots": out}
+    return ok(data={
+        "doctor_id": doctor_id,
+        "day": day,
+        "slot_minutes": slot_minutes,
+        "slots": out
+    })
 
 @router.get("/")
 async def list_doctors(
@@ -854,74 +868,104 @@ async def get_subcategories(
     hospital_id: Optional[str] = Query(None, description="If provided, returns only subcategories present in this hospital's doctors"),
     db: Session = Depends(get_db)
 ):
-    """Return subcategories for a selected main category.
+    """Return subcategories for a selected main category."""
+    try:
+        category_mappings = {
+            "General Medical": [
+                "General Medicine", "Family Medicine", "Internal Medicine", "Emergency Medicine"
+            ],
+            "Specialist": [
+                "Cardiology", "Neurology", "Dermatology", "Pediatrics", "Psychiatry",
+                "Radiology", "Pathology", "Anesthesiology", "Oncology", "Endocrinology",
+                "Gastroenterology", "Pulmonology", "Nephrology", "Rheumatology",
+                "Ophthalmology", "ENT", "Gynecology", "Urology"
+            ],
+            "Surgeon": [
+                "General Surgery", "Cardiac Surgery", "Heart Surgeon", "Neuro Surgeon",
+                "Ortho Surgeon", "Plastic Surgery", "Vascular Surgery", "Thoracic Surgery",
+                "Pediatric Surgery", "Trauma Surgery", "Transplant Surgery",
+                "Laparoscopic Surgery", "Reconstructive Surgery", "Surgeon"
+            ],
+        }
 
-    Behavior:
-    - Without hospital_id: returns the static subcategory list for the main category.
-    - With hospital_id: returns a dynamic list based on doctors in that hospital, filtered by the main category rules,
-      so the dropdown only shows relevant subcategories actually available there.
-    """
-    category_mappings = {
-        "General Medical": [
-            "General Medicine", "Family Medicine", "Internal Medicine", "Emergency Medicine"
-        ],
-        "Specialist": [
-            "Cardiology", "Neurology", "Dermatology", "Pediatrics", "Psychiatry",
-            "Radiology", "Pathology", "Anesthesiology", "Oncology", "Endocrinology",
-            "Gastroenterology", "Pulmonology", "Nephrology", "Rheumatology",
-            "Ophthalmology", "ENT", "Gynecology", "Urology"
-        ],
-        "Surgeon": [
-            "General Surgery", "Cardiac Surgery", "Heart Surgeon", "Neuro Surgeon",
-            "Ortho Surgeon", "Plastic Surgery", "Vascular Surgery", "Thoracic Surgery",
-            "Pediatric Surgery", "Trauma Surgery", "Transplant Surgery",
-            "Laparoscopic Surgery", "Reconstructive Surgery", "Surgeon"
-        ],
-    }
+        if main_category not in category_mappings:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid category. Must be one of: {list(category_mappings.keys())}"
+            )
 
-    if main_category not in category_mappings:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid category. Must be one of: {list(category_mappings.keys())}"
-        )
+        # No hospital filter: return static list
+        if not hospital_id:
+            main_labels_norm = {k.strip().lower() for k in category_mappings.keys()}
+            cleaned = sorted({ s for s in category_mappings[main_category] if s and s.strip().lower() not in main_labels_norm }, key=lambda x: x.lower())
+            return ok(data={"main_category": main_category, "subcategories": cleaned})
 
-    # No hospital filter: return static list
-    if not hospital_id:
-        main_labels_norm = {k.strip().lower() for k in category_mappings.keys()}
-        cleaned = sorted({ s for s in category_mappings[main_category] if s and s.strip().lower() not in main_labels_norm }, key=lambda x: x.lower())
-        return {"main_category": main_category, "subcategories": cleaned}
+        # Dynamic list constrained to a specific hospital
+        doctors = db.query(Doctor).filter(Doctor.hospital_id == hospital_id).all()
 
-    # Dynamic list constrained to a specific hospital
-    doctors = db.query(Doctor).filter(Doctor.hospital_id == hospital_id).all()
+        dyn: set[str] = set()
+        general_set = set(category_mappings["General Medical"])  # for exclusions
+        for d in doctors:
+            sub = str(getattr(d, "subcategory", "") or "").strip()
+            spec = str(getattr(d, "specialization", "") or "").strip()
+            low_sub = sub.lower()
+            low_spec = spec.lower()
 
-    dyn: set[str] = set()
-    general_set = set(category_mappings["General Medical"])  # for exclusions
-    for d in doctors:
-        sub = str(getattr(d, "subcategory", "") or "").strip()
-        spec = str(getattr(d, "specialization", "") or "").strip()
-        low_sub = sub.lower()
-        low_spec = spec.lower()
-
-        if main_category == "Surgeon":
-            if "surgeon" in low_sub or "surgeon" in low_spec:
-                if sub:
+            if main_category == "Surgeon":
+                if "surgeon" in low_sub or "surgeon" in low_spec:
+                    if sub:
+                        dyn.add(sub)
+                    if spec:
+                        dyn.add(spec)
+            elif main_category == "General Medical":
+                if sub in category_mappings["General Medical"]:
                     dyn.add(sub)
-                if spec:
+                if spec in category_mappings["General Medical"]:
                     dyn.add(spec)
-        elif main_category == "General Medical":
-            if sub in category_mappings["General Medical"]:
-                dyn.add(sub)
-            if spec in category_mappings["General Medical"]:
-                dyn.add(spec)
-        else:  # Specialist
-            if ("surgeon" not in low_sub and sub and sub not in general_set):
-                dyn.add(sub)
-            if ("surgeon" not in low_spec and spec and spec not in general_set):
-                dyn.add(spec)
+            else:  # Specialist
+                if ("surgeon" not in low_sub and sub and sub not in general_set):
+                    dyn.add(sub)
+                if ("surgeon" not in low_spec and spec and spec not in general_set):
+                    dyn.add(spec)
 
-    main_labels_norm = {k.strip().lower() for k in category_mappings.keys()}
-    cleaned = sorted({ s for s in dyn if s and s.strip().lower() not in main_labels_norm }, key=lambda x: x.lower())
-    return {"main_category": main_category, "hospital_id": hospital_id, "subcategories": cleaned}
+        main_labels_norm = {k.strip().lower() for k in category_mappings.keys()}
+        cleaned = sorted({ s for s in dyn if s and s.strip().lower() not in main_labels_norm }, key=lambda x: x.lower())
+        return ok(data={"main_category": main_category, "hospital_id": hospital_id, "subcategories": cleaned})
+
+    except Exception:
+        return ok(data={"main_category": main_category, "subcategories": []})
+
+
+@router.get("/categories/{main_category}/hospitals/{hospital_id}/subcategories")
+async def get_hospital_category_subcategories(
+    main_category: str,
+    hospital_id: str,
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    """Get unique subcategories for a given category within a specific hospital."""
+    try:
+        # Normalize category
+        norm_cat = str(main_category or "").strip().lower()
+        
+        # Get doctors for this category in this hospital
+        from sqlalchemy import or_
+        doctors = db.query(Doctor).filter(
+            Doctor.hospital_id == hospital_id,
+            or_(
+                func.lower(Doctor.specialization) == norm_cat,
+                func.lower(Doctor.department) == norm_cat
+            )
+        ).all()
+        
+        subs = []
+        for d in doctors:
+            if getattr(d, "subcategory", None):
+                subs.append(str(d.subcategory).strip())
+        
+        cleaned = sorted(list(set(c for c in subs if c)))
+        return ok(data={"main_category": main_category, "hospital_id": hospital_id, "subcategories": cleaned})
+    except Exception:
+        return ok(data={"main_category": main_category, "hospital_id": hospital_id, "subcategories": []})
 
 
 @router.get("/by-category/{main_category}")
@@ -1000,12 +1044,12 @@ async def get_doctors_by_main_category(
     main_labels_norm = { k.strip().lower() for k in category_mappings.keys() }
     cleaned_subcats = sorted({ s for s in subcategories if s and s.strip().lower() not in main_labels_norm }, key=lambda x: x.lower())
 
-    return {
+    return ok(data={
         "doctors": doctors_with_queue,
         "total_found": len(doctors_with_queue),
         "main_category": main_category,
         "subcategories": cleaned_subcats
-    }
+    })
 
 @router.get("/{doctor_id}", response_model=DoctorResponse)
 async def get_doctor(doctor_id: str, db: Session = Depends(get_db)):
@@ -1023,7 +1067,7 @@ async def get_doctor(doctor_id: str, db: Session = Depends(get_db)):
     doctor_data["fee"] = doctor_data.get("consultation_fee")
     doctor_data["per_session_fee"] = doctor_data.get("session_fee")
     
-    return DoctorResponse(**doctor_data)
+    return ok(data=DoctorResponse(**doctor_data))
 
 @router.get("/{doctor_id}/availability")
 async def get_doctor_availability(doctor_id: str, db: Session = Depends(get_db)):
@@ -1038,13 +1082,13 @@ async def get_doctor_availability(doctor_id: str, db: Session = Depends(get_db))
             detail="Doctor not found"
         )
 
-    return {
+    return ok(data={
         "doctor_id": doctor_id,
         "status": getattr(doctor, "status", None),
         "available_days": getattr(doctor, "available_days", None) or [],
         "start_time": getattr(doctor, "start_time", None),
         "end_time": getattr(doctor, "end_time", None),
-    }
+    })
 
 @router.get("/{doctor_id}/availability/today")
 async def get_doctor_availability_today(doctor_id: str, db: Session = Depends(get_db)):
@@ -1071,13 +1115,13 @@ async def get_doctor_availability_today(doctor_id: str, db: Session = Depends(ge
         ((not days) or (today_name in days))
     )
 
-    return {
+    return ok(data={
         "doctor_id": doctor_id,
         "available_today": available_today,
         "today_window": f"{start_time}-{end_time}" if start_time and end_time else None,
         "status": getattr(doctor, "status", None),
         "available_days": getattr(doctor, "available_days", None) or [],
-    }
+    })
 
 
 @router.get("/{doctor_id}/queue", response_model=QueueStatus)

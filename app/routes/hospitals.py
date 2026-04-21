@@ -1311,8 +1311,7 @@ async def delete_hospital(
 
     db.delete(hospital)
     db.commit()
-
-    return {"success": True, "message": "Hospital deleted"}
+    return ok(message="Hospital deleted")
 
 
 def calculate_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:

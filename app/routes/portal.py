@@ -77,8 +77,8 @@ async def list_portal_notifications(
 
     notifications = query.order_by(Notification.created_at.desc()).limit(limit).all()
     items = [{k: v for k, v in n.__dict__.items() if not k.startswith('_')} for n in notifications]
-
-    return {"success": True, "data": items, "meta": {"unread_only": unread_only, "count": len(items)}}
+    
+    return ok(data=items, meta={"unread_only": unread_only, "count": len(items)})
 
 
 @router.post("/notifications/{notification_id}/read")
@@ -103,7 +103,7 @@ async def mark_notification_read(
             notif.read_at = datetime.utcnow()
         db.commit()
         
-    return {"success": True}
+    return ok(message="Notification marked as read")
 
 
 @router.get("/doctor/tokens", dependencies=[Depends(require_roles("doctor", "patient", "admin"))])
@@ -129,7 +129,34 @@ async def get_doctor_tokens(
     tokens = query.order_by(Token.created_at.desc()).offset(skip).limit(size).all()
     items = [{k: v for k, v in t.__dict__.items() if not k.startswith('_')} for t in tokens]
     
-    return {"success": True, "data": items, "meta": {"page": page, "page_size": size, "total": total}}
+    return ok(data=items, meta={"page": page, "page_size": size, "total": total})
+
+
+@router.get("/completed-consultations", dependencies=[Depends(require_roles("doctor", "admin"))])
+async def get_completed_consultations(
+    db: Session = Depends(get_db),
+    current: TokenData = Depends(get_current_active_user),
+    page: Optional[int] = Query(1, ge=1),
+    page_size: Optional[int] = Query(20, ge=1, le=100),
+) -> Dict[str, Any]:
+    """Get completed tokens for the current doctor/admin."""
+    # Find clinical doctor profile if applicable
+    doctor = db.query(Doctor).filter(Doctor.user_id == current.user_id).first()
+    target_doctor_id = doctor.id if doctor else current.user_id
+    
+    query = db.query(Token).filter(
+        Token.doctor_id == target_doctor_id,
+        Token.status == "completed"
+    )
+    
+    total = query.count()
+    size = _parse_positive_int(page_size, 20)
+    skip = (page - 1) * size
+    
+    tokens = query.order_by(Token.completed_at.desc() if hasattr(Token, 'completed_at') else Token.updated_at.desc()).offset(skip).limit(size).all()
+    items = [{k: v for k, v in t.__dict__.items() if not k.startswith('_')} for t in tokens]
+    
+    return ok(data=items, meta={"page": page, "page_size": size, "total": total})
 
 
 @router.get("/doctor/dashboard", dependencies=[Depends(require_roles("doctor", "patient", "admin"))])
@@ -230,12 +257,49 @@ async def admin_dashboard(
     departments_count = db.query(func.count(func.distinct(Doctor.specialization))).scalar()
 
     # Today's tokens
-    today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    now = datetime.utcnow()
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     token_query = db.query(Token).filter(Token.created_at >= today_start)
     if hospital_id:
         token_query = token_query.filter(Token.hospital_id == hospital_id)
     
     total_patients_today = token_query.count()
+
+    # Wait time calculation (Average of started_at - created_at for today's tokens)
+    wait_time_query = db.query(func.avg(
+        func.extract('epoch', Token.started_at) - func.extract('epoch', Token.created_at)
+    )).filter(
+        Token.created_at >= today_start,
+        Token.started_at.isnot(None)
+    )
+    if hospital_id:
+        wait_time_query = wait_time_query.filter(Token.hospital_id == hospital_id)
+    
+    avg_wait_seconds = wait_time_query.scalar() or 0
+    avg_wait_minutes = round(avg_wait_seconds / 60)
+
+    # Patient Flow Today (Hourly)
+    flow_today = []
+    for hour in range(24):
+        h_start = today_start + timedelta(hours=hour)
+        h_end = h_start + timedelta(hours=1)
+        count = db.query(Token).filter(
+            Token.created_at >= h_start,
+            Token.created_at < h_end
+        ).count()
+        flow_today.append({"hour": f"{hour:02d}:00", "count": count})
+
+    # Patient Flow Monthly (Daily)
+    flow_monthly = []
+    # Get last 30 days
+    for day in range(30):
+        d_start = (now - timedelta(days=29-day)).replace(hour=0, minute=0, second=0, microsecond=0)
+        d_end = d_start + timedelta(days=1)
+        count = db.query(Token).filter(
+            Token.created_at >= d_start,
+            Token.created_at < d_end
+        ).count()
+        flow_monthly.append({"date": d_start.strftime("%d %b"), "count": count})
 
     # Logs
     recent_tokens = token_query.order_by(Token.created_at.desc()).limit(logs_limit).all()
@@ -252,11 +316,11 @@ async def admin_dashboard(
             "cards": {
                 "total_patients_today": total_patients_today,
                 "active_doctors": active_doctors,
-                "avg_wait_time_minutes": 0, # TODO: Implement wait time logic
+                "avg_wait_time_minutes": avg_wait_minutes,
                 "departments": departments_count,
             },
-            "patient_flow_today": [], # TODO: Implement flow buckets
-            "patient_flow_monthly": [],
+            "patient_flow_today": flow_today,
+            "patient_flow_monthly": flow_monthly,
             "live_system_logs": logs,
         }
     )

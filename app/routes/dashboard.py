@@ -10,6 +10,7 @@ from app.models import (
 from app.database import get_db
 from app.db_models import User, Token, ActivityLog, QuickAction, Hospital, Doctor
 from app.security import get_current_active_user
+from app.utils.responses import ok
 from datetime import datetime, timedelta
 from app.services.token_service import SmartTokenService
 import math
@@ -100,7 +101,7 @@ async def get_dashboard_data(
     cache_key = f"dashboard:root:{current_user.user_id}"
     cached = _cache_get(cache_key)
     if cached is not None:
-        return cached  # type: ignore[return-value]
+        return ok(data=cached)
 
     # Get user data
     user = db.query(User).filter(User.id == current_user.user_id).first()
@@ -139,7 +140,7 @@ async def get_dashboard_data(
     )
 
     _cache_set(cache_key, result)
-    return result
+    return ok(data=result)
 
 @router.get("/active-overview")
 async def get_dashboard_active_overview(
@@ -160,9 +161,8 @@ async def get_dashboard_active_overview(
     `/hospitals/search-unified`.
     """
     tokens = db.query(Token).filter(Token.patient_id == current_user.user_id).all()
-
     if not tokens:
-        return {"token": None, "queue": None}
+        return ok(data={"token": None, "queue": None})
 
     # Pick the most recent non-cancelled/non-completed token
     candidates = []
@@ -172,7 +172,7 @@ async def get_dashboard_active_overview(
         if status_val not in ["cancelled", "completed"]:
             candidates.append(data)
     if not candidates:
-        return {"token": None, "queue": None}
+        return ok(data={"token": None, "queue": None})
 
     candidates.sort(key=lambda x: x.get("updated_at") or x.get("created_at"), reverse=True)
     token = candidates[0]
@@ -331,7 +331,7 @@ async def get_dashboard_active_overview(
         pass
     overview["hospital_updates"] = hospital_updates
 
-    return {"token": overview, "queue": queue_status}
+    return ok(data={"token": overview, "queue": queue_status})
 
 @router.get("/nearby-hospitals-unified", response_model=HospitalUnifiedSearchResponse)
 async def get_dashboard_nearby_hospitals_unified(
@@ -609,7 +609,7 @@ async def get_user_statistics(user_id: str, db: Session = None) -> UserStatistic
         pending_payments=pending_payments
     )
 
-@router.get("/activities", response_model=List[ActivityLogModel])
+@router.get("/activities")
 async def get_user_activities(
     current_user = Depends(get_current_active_user),
     limit: int = Query(10, ge=1, le=50),
@@ -617,7 +617,8 @@ async def get_user_activities(
     db: Session = Depends(get_db),
 ):
     """Get user activity logs"""
-    return await get_recent_activities(current_user.user_id, limit, activity_type, db=db)
+    data = await get_recent_activities(current_user.user_id, limit, activity_type, db=db)
+    return ok(data=data)
 
 async def get_recent_activities(user_id: str, limit: int = 10, activity_type: Optional[ActivityType] = None, db: Session = None) -> List[ActivityLogModel]:
     """Get recent activities for a user"""
@@ -685,13 +686,14 @@ async def create_activity_log_endpoint(
     
     return ActivityLogModel(**activity_data)
 
-@router.get("/quick-actions", response_model=List[QuickActionModel])
+@router.get("/quick-actions")
 async def get_user_quick_actions_endpoint(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_active_user)
 ):
     """Get user's quick actions"""
-    return await get_user_quick_actions(current_user.user_id, db=db)
+    data = await get_user_quick_actions(current_user.user_id, db=db)
+    return ok(data=data)
 
 async def get_user_quick_actions(user_id: str, db: Session = None) -> List[QuickActionModel]:
     """Get quick actions for a user"""
@@ -821,8 +823,7 @@ async def update_quick_action(
     
     action_obj.is_enabled = is_enabled
     db.commit()
-    
-    return {"message": "Quick action updated successfully"}
+    return ok(message="Quick action updated successfully")
 
 async def get_recent_tokens(user_id: str, limit: int = 3, db: Session = None) -> List[dict]:
     """Get recent tokens for a user"""
@@ -849,7 +850,8 @@ async def get_recent_tokens_endpoint(
     db: Session = Depends(get_db),
 ):
     """Get recent tokens for the current user"""
-    return await get_recent_tokens(current_user.user_id, limit, db=db)
+    data = await get_recent_tokens(current_user.user_id, limit, db=db)
+    return ok(data=data)
 
 @router.get("/active-token")
 async def get_active_token(
@@ -865,7 +867,7 @@ async def get_active_token(
     tokens = db.query(Token).filter(Token.patient_id == current_user.user_id).all()
 
     if not tokens:
-        return {"token": None, "queue": None}
+        return ok(data={"token": None, "queue": None})
 
     # Use local server date; compare by date only (ignore time/tz)
     today = datetime.now().date()
@@ -890,7 +892,7 @@ async def get_active_token(
             active_today.append(data)
 
     if not active_today:
-        return {"token": None, "queue": None}
+        return ok(data={"token": None, "queue": None})
 
     active_today.sort(key=lambda x: x.get("created_at") or datetime.min, reverse=True)
     token_data = active_today[0]
@@ -924,7 +926,7 @@ async def get_active_token(
     token_view = dict(token_data)
     token_view["visible_token"] = _visible_token_label(token_view)
     
-    return {"token": token_view, "queue": queue_status}
+    return ok(data={"token": token_view, "queue": queue_status})
 
 
 @router.get("/nearby-hospitals", response_model=HospitalSearchResponse)

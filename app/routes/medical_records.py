@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from app.db_models import User, ActivityLog # Assuming MedicalRecord model exists
 from app.security import get_current_active_user
+from app.utils.responses import ok
 from datetime import datetime, timedelta
 import uuid
 
@@ -58,12 +59,12 @@ async def get_medical_records(
             
         records.append(data)
     
-    return {
+    return ok(data={
         "records": records,
         "total_records": total_count,
         "recent_records": recent_count,
         "follow_up_records": follow_up_count,
-    }
+    })
 
 @router.get("/stats")
 async def get_medical_record_stats(
@@ -86,21 +87,20 @@ async def get_medical_record_stats(
         func.lower(MedicalRecord.record_type) == 'follow_up'
     ).count()
     
-    return {
+    return ok(data={
         "total_records": total_count,
         "recent_records": recent_count,
         "follow_up_records": follow_up_count,
         "recent_window_days": 30,
-    }
+    })
 
 @router.get("/allowed-types")
 async def get_allowed_types():
     """Return allowed content-types and size limits."""
-    return {
+    return ok(data={
         "allowed_content_types": ALLOWED_TYPES,
-        "max_file_mb": MAX_FILE_MB,
-        "notes": "Supported formats include JPEG, PNG, and PDF up to 10 MB"
-    }
+        "max_file_size_mb": MAX_FILE_MB
+    })
 
 @router.post("/upload")
 async def upload_medical_record(

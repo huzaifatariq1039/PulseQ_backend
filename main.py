@@ -155,6 +155,7 @@ app.include_router(queue.router, prefix="/api/v1/patient/queue", tags=["Queue Se
 app.include_router(consultation.router, prefix="/api/v1/staff/consultation", tags=["Staff Portal"])
 app.include_router(realtime.router, prefix="/api/v1/staff/realtime", tags=["Staff Portal"])
 app.include_router(portal.router, prefix="/api/v1/staff/portal", tags=["Staff Portal"])
+app.include_router(portal.router, prefix="/api/v1/portal", tags=["Staff Portal (Alias)"])
 app.include_router(pharmacy_portal_router, prefix="/api/v1/staff/pharmacy", tags=["Staff Portal"])
 
 # 5. Intelligence & AI
