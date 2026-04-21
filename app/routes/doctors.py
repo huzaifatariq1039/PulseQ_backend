@@ -683,45 +683,50 @@ async def get_doctors_by_hospital(
 
     # Now filter results according to category/subcategory
     results = []
+    # Normalize map for case-insensitive matching
+    norm_map = {k: [s.lower() for s in v] for k, v in main_category_map.items()}
+
     for d in doctors:
         data = {k: v for k, v in d.__dict__.items() if not k.startswith('_')}
-        doctor_sub = (data.get("subcategory") or "").strip()
-        doctor_spec = (data.get("specialization") or "").strip()
+        doctor_sub = str(data.get("subcategory") or "").strip().lower()
+        doctor_spec = str(data.get("specialization") or "").strip().lower()
 
         # If a concrete subcategory is given, match it exactly
         if subcategory:
-            if doctor_sub.lower() == subcategory.strip().lower() or doctor_spec.lower() == subcategory.strip().lower():
+            sub_target = subcategory.strip().lower()
+            if doctor_sub == sub_target or doctor_spec == sub_target:
                 results.append(data)
             continue
 
         # If main category selected -> inclusion rules
         if main_selected == "Surgeon":
-            if "surgeon" in doctor_sub.lower() or "surgeon" in doctor_spec.lower() or (
-                resolved_subcategories and (
-                    doctor_sub in resolved_subcategories or doctor_spec in resolved_subcategories
-                )
+            if "surgeon" in doctor_sub or "surgeon" in doctor_spec or (
+                resolved_subcategories and any(s.lower() in [doctor_sub, doctor_spec] for s in resolved_subcategories)
             ):
                 results.append(data)
             continue
         elif main_selected == "General Medical":
-            if doctor_sub in main_category_map["General Medical"] or doctor_spec in main_category_map["General Medical"]:
+            if doctor_sub in norm_map["General Medical"] or doctor_spec in norm_map["General Medical"]:
                 results.append(data)
             continue
         elif main_selected == "Specialist":
             # Specialist = not General Medical and not Surgeon
-            if (
-                "surgeon" not in doctor_sub.lower() and "surgeon" not in doctor_spec.lower()
-                and doctor_sub not in main_category_map["General Medical"]
-                and doctor_spec not in main_category_map["General Medical"]
-            ):
+            is_general = doctor_sub in norm_map["General Medical"] or doctor_spec in norm_map["General Medical"]
+            is_surgeon = "surgeon" in doctor_sub or "surgeon" in doctor_spec
+            
+            if not is_general and not is_surgeon:
                 # If we built subcategories, prefer those; else include
-                if not resolved_subcategories or doctor_sub in resolved_subcategories or doctor_spec in resolved_subcategories:
+                if not resolved_subcategories:
                     results.append(data)
+                else:
+                    if any(s.lower() in [doctor_sub, doctor_spec] for s in resolved_subcategories):
+                        results.append(data)
             continue
 
         # If category provided but not a main category, treat it as a specialization filter
         if category and main_selected is None:
-            if doctor_spec.lower() == category.strip().lower() or doctor_sub.lower() == category.strip().lower():
+            cat_target = category.strip().lower()
+            if doctor_spec == cat_target or doctor_sub == cat_target:
                 results.append(data)
             continue
 
@@ -732,9 +737,20 @@ async def get_doctors_by_hospital(
 
     doctors_with_queue = []
     for doctor_data in results:
-        doctor = DoctorResponse(**doctor_data)
-        queue = await get_doctor_queue(doctor_data["id"], db=db)
-        doctors_with_queue.append(DoctorWithQueue(doctor=doctor, queue=queue))
+        # Add compatibility fields for frontend/Pydantic validation
+        doctor_data["department"] = doctor_data.get("specialization")
+        doctor_data["fee"] = doctor_data.get("consultation_fee")
+        doctor_data["per_session_fee"] = doctor_data.get("session_fee")
+        if "updated_at" not in doctor_data:
+            doctor_data["updated_at"] = doctor_data.get("created_at")
+        
+        try:
+            doctor = DoctorResponse(**doctor_data)
+            queue = await get_doctor_queue(doctor_data["id"], db=db)
+            doctors_with_queue.append(DoctorWithQueue(doctor=doctor, queue=queue))
+        except Exception as e:
+            logger.error(f"Error validating doctor {doctor_data.get('id')}: {e}")
+            continue
 
     # Clean subcategories to avoid returning main labels and duplicates
     main_labels_norm = {k.strip().lower() for k in main_category_map.keys()}
@@ -743,14 +759,14 @@ async def get_doctors_by_hospital(
         if s and s.strip().lower() not in main_labels_norm
     }, key=lambda x: x.lower())
 
-    # Build response similar to DoctorSearchResponse but also include subcategories for UI
-    return {
+    # Build response using ok() for consistent structure
+    return ok(data={
         "doctors": doctors_with_queue,
         "total_found": len(doctors_with_queue),
         "hospital_id": hospital_id,
         "category": category,
         "subcategories": cleaned_subcats
-    }
+    })
 
 @router.get("/search")
 async def search_doctors(
@@ -801,20 +817,29 @@ async def search_doctors(
     # Prepare response with queue information
     doctors_with_queue = []
     for doctor_data in results[:limit]:
-        doctor = DoctorResponse(**doctor_data)
-        queue = await get_doctor_queue(doctor_data["id"], db=db)
-        
-        doctors_with_queue.append(DoctorWithQueue(
-            doctor=doctor,
-            queue=queue
-        ))
+        # Add compatibility fields
+        doctor_data["department"] = doctor_data.get("specialization")
+        doctor_data["fee"] = doctor_data.get("consultation_fee")
+        doctor_data["per_session_fee"] = doctor_data.get("session_fee")
+
+        try:
+            doctor = DoctorResponse(**doctor_data)
+            queue = await get_doctor_queue(doctor_data["id"], db=db)
+            
+            doctors_with_queue.append(DoctorWithQueue(
+                doctor=doctor,
+                queue=queue
+            ))
+        except Exception as e:
+            logger.error(f"Error validating doctor {doctor_data.get('id')}: {e}")
+            continue
     
-    return DoctorSearchResponse(
-        doctors=doctors_with_queue,
-        total_found=len(doctors_with_queue),
-        hospital_id=hospital_id or "",
-        category=category
-    )
+    return ok(data={
+        "doctors": doctors_with_queue,
+        "total_found": len(doctors_with_queue),
+        "hospital_id": hospital_id or "",
+        "category": category
+    })
 
 @router.get("/categories")
 async def get_doctor_categories():
@@ -1030,13 +1055,22 @@ async def get_doctors_by_main_category(
     doctors_with_queue = []
     for d in results:
         doctor_data = {k: v for k, v in d.__dict__.items() if not k.startswith('_')}
-        doctor = DoctorResponse(**doctor_data)
-        queue = await get_doctor_queue(str(getattr(d, "id", "")), db=db)
-        
-        doctors_with_queue.append(DoctorWithQueue(
-            doctor=doctor,
-            queue=queue
-        ))
+        # Add compatibility fields
+        doctor_data["department"] = doctor_data.get("specialization")
+        doctor_data["fee"] = doctor_data.get("consultation_fee")
+        doctor_data["per_session_fee"] = doctor_data.get("session_fee")
+
+        try:
+            doctor = DoctorResponse(**doctor_data)
+            queue = await get_doctor_queue(str(getattr(d, "id", "")), db=db)
+            
+            doctors_with_queue.append(DoctorWithQueue(
+                doctor=doctor,
+                queue=queue
+            ))
+        except Exception as e:
+            logger.error(f"Error validating doctor {doctor_data.get('id')}: {e}")
+            continue
     
     # Clean subcategories to avoid returning main labels and duplicates
     main_labels_norm = { k.strip().lower() for k in category_mappings.keys() }

@@ -216,6 +216,7 @@ class ActivityLog(Base):
     description = Column(Text, nullable=False)
     meta_data = Column(JSON, nullable=True)  # Renamed from 'metadata' to avoid SQLAlchemy reserved name
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     # Relationships
     user = relationship("User", back_populates="activities")
