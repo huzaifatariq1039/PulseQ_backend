@@ -227,14 +227,20 @@ async def pos_get_medicines(
     # Logic preserved but made safe for missing models
     try:
         from app.db_models import PharmacyMedicine
-        qn = f"%{search.strip().lower()}%"
-        meds = db.query(PharmacyMedicine).filter(
-            or_(
-                func.lower(PharmacyMedicine.name).like(qn),
-                func.lower(PharmacyMedicine.generic_name).like(qn),
-                func.lower(PharmacyMedicine.barcode).like(qn)
+        
+        query = db.query(PharmacyMedicine).filter(PharmacyMedicine.is_deleted.isnot(True))
+
+        if search and search.strip():
+            qn = f"%{search.strip().lower()}%"
+            query = query.filter(
+                or_(
+                    func.lower(PharmacyMedicine.name).like(qn),
+                    func.lower(PharmacyMedicine.generic_name).like(qn),
+                    func.lower(PharmacyMedicine.batch_no).like(qn)
+                )
             )
-        ).limit(20).all()
+
+        meds = query.limit(20).all()
         return ok(data=[{ "id": m.product_id, "name": m.name } for m in meds])
     except ImportError:
         return ok(data=[], message="Medicine model not available")

@@ -99,7 +99,7 @@ async def get_pharmacy_dashboard_stats(
                 else_=0
             )), else_=0
         )), 0).label('active'),
-    )
+    ).filter(PharmacyMedicine.is_deleted.isnot(True))
 
     if hospital_id:
         query = query.filter(PharmacyMedicine.hospital_id == hospital_id)
@@ -273,14 +273,21 @@ async def search_medicine(
     q: str = Query(..., description="Search by medicine name or generic name"),
     db: Session = Depends(get_db)
 ) -> Dict[str, Any]:
-    # TODO: Use proper PharmacyMedicine model from db_models
-    qn = f"%{q.strip().lower()}%"
-    medicines = db.query(PharmacyMedicine).filter(
-        or_(
-            func.lower(PharmacyMedicine.name).like(qn),
-            func.lower(PharmacyMedicine.generic_name).like(qn)
+    # Split search into terms
+    terms = [t for t in q.strip().split() if t]
+    
+    query = db.query(PharmacyMedicine).filter(PharmacyMedicine.is_deleted.isnot(True))
+    
+    for term in terms:
+        like_term = f"%{term}%"
+        query = query.filter(
+            or_(
+                PharmacyMedicine.name.ilike(like_term),
+                PharmacyMedicine.generic_name.ilike(like_term)
+            )
         )
-    ).all()
+        
+    medicines = query.all()
 
     results = []
     for m in medicines:
@@ -425,7 +432,7 @@ async def get_all_medicines(
         PharmacyMedicine.hospital_id, PharmacyMedicine.created_at,
         PharmacyMedicine.updated_at,
     )
-    base = db.query(*cols)
+    base = db.query(*cols).filter(PharmacyMedicine.is_deleted.isnot(True))
     if hospital_id:
         base = base.filter(PharmacyMedicine.hospital_id == hospital_id)
 
@@ -543,6 +550,8 @@ async def list_items(
     db: Session = Depends(get_db),
     hospital_id: Optional[str] = Query(None),
     q: Optional[str] = Query(None),
+    search_param: Optional[str] = Query(None, alias="search"),
+    is_deleted: Optional[bool] = Query(False),
     page: int = Query(1, ge=1),
     page_size: int = Query(100, ge=1, le=500),
 ) -> Any:
@@ -557,19 +566,30 @@ async def list_items(
         PharmacyMedicine.hospital_id, PharmacyMedicine.created_at,
         PharmacyMedicine.updated_at,
     )
+    
     base = db.query(*cols)
+    if is_deleted:
+        base = base.filter(PharmacyMedicine.is_deleted == True)
+    else:
+        base = base.filter(PharmacyMedicine.is_deleted.isnot(True))
 
     if hospital_id:
         base = base.filter(PharmacyMedicine.hospital_id == hospital_id)
-    if q:
-        search = f"%{q}%"
-        base = base.filter(
-            or_(
-                PharmacyMedicine.name.ilike(search),
-                PharmacyMedicine.generic_name.ilike(search),
-                PharmacyMedicine.batch_no.ilike(search)
+        
+    search_term = q or search_param
+    if search_term:
+        # Split search into terms (e.g., "panadol 500" -> ["panadol", "500"])
+        terms = [t for t in search_term.strip().split() if t]
+        for term in terms:
+            like_term = f"%{term}%"
+            # Must match ALL terms in at least one of the fields (AND logic between terms, OR logic within a term)
+            base = base.filter(
+                or_(
+                    PharmacyMedicine.name.ilike(like_term),
+                    PharmacyMedicine.generic_name.ilike(like_term),
+                    PharmacyMedicine.batch_no.ilike(like_term)
+                )
             )
-        )
 
     total = base.count()
     rows = base.order_by(PharmacyMedicine.updated_at.desc()).offset((page-1)*page_size).limit(page_size).all()
@@ -625,7 +645,10 @@ async def delete_item(
     deleted_name = med.name
     deleted_id = med.id
     
-    db.delete(med)
+    # Soft delete to move to 'trash' instead of hard deleting
+    med.is_deleted = True
+    med.deleted_at = datetime.utcnow()
+    
     db.commit()
     
     return ok(message=f"Medicine '{deleted_name}' deleted successfully", data={"deleted_id": deleted_id})

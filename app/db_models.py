@@ -267,6 +267,8 @@ class PharmacyMedicine(Base):
     category = Column(String(100), nullable=True, index=True)
     sub_category = Column(String(100), nullable=True, index=True)
     hospital_id = Column(String, ForeignKey("hospitals.id"), nullable=True, index=True)
+    is_deleted = Column(Boolean, default=False, index=True)
+    deleted_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now(), index=True)
 
