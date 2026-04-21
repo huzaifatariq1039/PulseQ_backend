@@ -9,7 +9,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from sqlalchemy import func, or_
-from app.db_models import User, Doctor, Hospital, Token, ActivityLog # Assuming these models exist or will be added
+from app.db_models import PharmacyMedicine, PharmacySale
 
 from app.security import get_current_active_user
 from app.database import get_db
@@ -72,7 +72,6 @@ async def search_medicine(
     db: Session = Depends(get_db)
 ) -> Dict[str, Any]:
     # TODO: Use proper PharmacyMedicine model from db_models
-    from app.db_models import PharmacyMedicine
     qn = f"%{q.strip().lower()}%"
     medicines = db.query(PharmacyMedicine).filter(
         or_(
@@ -96,11 +95,9 @@ async def search_medicine(
 
     return {"results": results}
 
-@router.post("/sync-from-legacy", dependencies=[Depends(require_roles("pharmacy", "admin"))])
 async def _sync_medicines_internal(db: Session, hospital_id: Optional[str] = None) -> Dict[str, int]:
     """Internal function to migrate medicines from Firebase to PostgreSQL."""
     from app.services.pharmacy_inventory_service import list_medicines as list_legacy
-    from app.db_models import PharmacyMedicine
     
     # 1. Fetch all legacy items
     # If hospital_id is provided, we could filter by it, but list_legacy doesn't support it yet
@@ -175,8 +172,6 @@ async def get_all_medicines(
     auto_sync: bool = Query(True, description="Automatically import legacy data if PostgreSQL is empty")
 ) -> Dict[str, Any]:
     """Get a paginated list of all medicines in the inventory"""
-    from app.db_models import PharmacyMedicine
-    
     # Query building
     query = db.query(PharmacyMedicine)
     if hospital_id:
@@ -219,14 +214,12 @@ async def get_all_medicines(
         }
     )
 
-@public_router.post("/dispense-medicine", dependencies=[Depends(require_roles("pharmacy", "admin"))])
+@router.post("/dispense-medicine", dependencies=[Depends(require_roles("pharmacy", "admin"))])
 async def dispense_medicine(
     payload: DispenseMedicineRequest,
     db: Session = Depends(get_db),
     current: TokenData = Depends(get_current_active_user),
 ) -> Dict[str, Any]:
-    from app.db_models import PharmacyMedicine, PharmacySale
-    
     # Simple transaction in SQLAlchemy
     try:
         for item in payload.medicines:
@@ -261,14 +254,12 @@ async def dispense_medicine(
         logger.exception("Dispense failed")
         raise HTTPException(status_code=500, detail="Dispense failed")
 
-@public_router.post("/add-medicine", dependencies=[Depends(require_roles("pharmacy", "admin"))])
+@router.post("/add-medicine", dependencies=[Depends(require_roles("pharmacy", "admin"))])
 async def add_medicine(
     payload: AddMedicineRequest,
     db: Session = Depends(get_db),
     current: TokenData = Depends(get_current_active_user),
 ) -> Dict[str, Any]:
-    from app.db_models import PharmacyMedicine
-    
     existing = db.query(PharmacyMedicine).filter(PharmacyMedicine.product_id == payload.product_id).first()
     if existing:
         raise HTTPException(status_code=400, detail="Medicine already exists")
@@ -277,6 +268,7 @@ async def add_medicine(
     exp_dt = datetime.fromisoformat(exp_iso) if exp_iso else None
 
     new_med = PharmacyMedicine(
+        id=str(uuid.uuid4()),
         product_id=payload.product_id,
         batch_no=payload.batch_no,
         name=payload.name,
@@ -307,13 +299,11 @@ async def list_items(
     auto_sync: bool = Query(True, description="Automatically import legacy data if PostgreSQL is empty")
 ) -> Any:
     """List pharmacy inventory items with filtering and pagination."""
-    from app.db_models import PharmacyMedicine
-    
     query = db.query(PharmacyMedicine)
     
     # Auto-sync check
     if query.count() == 0 and auto_sync:
-        await sync_medicines_from_legacy(db)
+        await _sync_medicines_internal(db)
         query = db.query(PharmacyMedicine)
     
     if hospital_id:
