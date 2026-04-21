@@ -1,5 +1,5 @@
 """SQLAlchemy models for PostgreSQL database"""
-from sqlalchemy import Column, String, Integer, Float, DateTime, Boolean, Text, ForeignKey, Enum, JSON
+from sqlalchemy import Column, String, Integer, Float, DateTime, Boolean, Text, ForeignKey, Enum, JSON, Index
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.database import Base
@@ -262,13 +262,18 @@ class PharmacyMedicine(Base):
     purchase_price = Column(Float, nullable=False)
     selling_price = Column(Float, nullable=False)
     stock_unit = Column(String(50), nullable=True)
-    quantity = Column(Integer, default=0)
+    quantity = Column(Integer, default=0, index=True)
     expiration_date = Column(DateTime(timezone=True), nullable=True, index=True)
     category = Column(String(100), nullable=True, index=True)
     sub_category = Column(String(100), nullable=True, index=True)
     hospital_id = Column(String, ForeignKey("hospitals.id"), nullable=True, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), index=True)
+
+    __table_args__ = (
+        # Composite index for the most common query: filter by hospital + sort by updated_at
+        Index('ix_pharmacy_medicines_hospital_updated', 'hospital_id', 'updated_at'),
+    )
 
 
 # Department Model

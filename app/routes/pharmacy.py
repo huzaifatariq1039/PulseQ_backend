@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, case, literal_column
 from app.db_models import PharmacyMedicine, PharmacySale
 
 from app.security import get_current_active_user
@@ -33,16 +33,16 @@ class AddMedicineRequest(BaseModel):
     product_id: int = Field(..., ge=0)
     batch_no: str
     name: str
-    generic_name: str
-    type: str
-    distributor: str
+    generic_name: Optional[str] = None
+    type: Optional[str] = None
+    distributor: Optional[str] = None
     purchase_price: float = Field(..., gt=0)
     selling_price: float = Field(..., gt=0)
-    stock_unit: str
+    stock_unit: Optional[str] = None
     quantity: int = Field(..., ge=0)
-    expiration_date: str
-    category: str
-    sub_category: str
+    expiration_date: Optional[str] = None
+    category: Optional[str] = None
+    sub_category: Optional[str] = None
     hospital_id: Optional[str] = None
 
 class DispenseMedicineItem(BaseModel):
@@ -74,46 +74,43 @@ async def get_pharmacy_dashboard_stats(
     db: Session = Depends(get_db),
     hospital_id: Optional[str] = Query(None),
 ):
-    """Get summary statistics for the pharmacy dashboard - OPTIMIZED with SQL aggregation"""
-    # OPTIMIZED: Use SQL aggregation instead of fetching all records
+    """Get summary statistics for the pharmacy dashboard - single SQL query."""
+    now = datetime.utcnow()
+
+    # Single query: all stats computed in one round-trip
     query = db.query(
         func.count(PharmacyMedicine.id).label('total'),
-        func.sum(func.case((PharmacyMedicine.quantity > 0, 1), else_=0)).label('in_stock'),
-        func.sum(func.case((PharmacyMedicine.quantity < 10, 1), else_=0)).label('low_stock'),
-        func.coalesce(func.sum(PharmacyMedicine.quantity * PharmacyMedicine.selling_price), 0).label('inventory_value')
+        func.coalesce(func.sum(case(
+            (PharmacyMedicine.quantity > 0, 1), else_=0
+        )), 0).label('in_stock'),
+        func.coalesce(func.sum(case(
+            (PharmacyMedicine.quantity < 10, 1), else_=0
+        )), 0).label('low_stock'),
+        func.coalesce(func.sum(
+            PharmacyMedicine.quantity * PharmacyMedicine.selling_price
+        ), 0).label('inventory_value'),
+        func.coalesce(func.sum(case(
+            (PharmacyMedicine.expiration_date <= now, 1), else_=0
+        )), 0).label('expired'),
+        func.coalesce(func.sum(case(
+            (PharmacyMedicine.quantity > 0, case(
+                (or_(PharmacyMedicine.expiration_date.is_(None),
+                     PharmacyMedicine.expiration_date > now), 1),
+                else_=0
+            )), else_=0
+        )), 0).label('active'),
     )
-    
+
     if hospital_id:
         query = query.filter(PharmacyMedicine.hospital_id == hospital_id)
-    
+
     stats = query.first()
-    
-    # Calculate expired items separately (needs date comparison)
-    now = datetime.utcnow()
-    expired_count = db.query(func.count(PharmacyMedicine.id)).filter(
-        PharmacyMedicine.expiration_date <= now
-    )
-    if hospital_id:
-        expired_count = expired_count.filter(PharmacyMedicine.hospital_id == hospital_id)
-    expired_items = expired_count.scalar() or 0
-    
-    # Active = in stock AND not expired
-    active_count = db.query(func.count(PharmacyMedicine.id)).filter(
-        PharmacyMedicine.quantity > 0,
-        or_(
-            PharmacyMedicine.expiration_date.is_(None),
-            PharmacyMedicine.expiration_date > now
-        )
-    )
-    if hospital_id:
-        active_count = active_count.filter(PharmacyMedicine.hospital_id == hospital_id)
-    active_medicines = active_count.scalar() or 0
-    
+
     return ok(data={
-        "total_medicines": stats.total or 0,
-        "active_medicines": active_medicines,
-        "low_stock_items": stats.low_stock or 0,
-        "expired_items": expired_items,
+        "total_medicines": int(stats.total or 0),
+        "active_medicines": int(stats.active or 0),
+        "low_stock_items": int(stats.low_stock or 0),
+        "expired_items": int(stats.expired or 0),
         "inventory_value": round(float(stats.inventory_value or 0), 2)
     })
 
@@ -123,34 +120,81 @@ async def get_pharmacy_sales_summary(
     hospital_id: Optional[str] = Query(None),
 ):
     """Get summary of sales and revenue - OPTIMIZED with SQL aggregation"""
-    # OPTIMIZED: Use SQL aggregation
-    query = db.query(
+
+    def _sum_sales(start: datetime, end: datetime) -> float:
+        """Helper to get total sales between two dates."""
+        q = db.query(
+            func.coalesce(func.sum(PharmacySale.total_price), 0)
+        ).filter(PharmacySale.sold_at >= start, PharmacySale.sold_at < end)
+        if hospital_id:
+            q = q.filter(PharmacySale.hospital_id == hospital_id)
+        return float(q.scalar() or 0)
+
+    def _count_sales(start: datetime, end: datetime) -> int:
+        """Helper to get total sale count between two dates."""
+        q = db.query(func.count(PharmacySale.id)).filter(
+            PharmacySale.sold_at >= start, PharmacySale.sold_at < end
+        )
+        if hospital_id:
+            q = q.filter(PharmacySale.hospital_id == hospital_id)
+        return int(q.scalar() or 0)
+
+    def _pct_change(current: float, previous: float) -> float:
+        """Calculate percentage change. Returns 0 if no previous data."""
+        if previous == 0:
+            return 100.0 if current > 0 else 0.0
+        return round(((current - previous) / previous) * 100, 1)
+
+    # --- Total revenue (all time) ---
+    total_query = db.query(
         func.coalesce(func.sum(PharmacySale.total_price), 0).label('total_revenue'),
         func.count(PharmacySale.id).label('total_count')
     )
-    
     if hospital_id:
-        query = query.filter(PharmacySale.hospital_id == hospital_id)
-    
-    totals = query.first()
-    
-    # Daily revenue
-    today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
-    daily_query = db.query(
-        func.coalesce(func.sum(PharmacySale.total_price), 0).label('daily_revenue'),
-        func.count(PharmacySale.id).label('daily_count')
-    ).filter(PharmacySale.sold_at >= today_start)
-    
-    if hospital_id:
-        daily_query = daily_query.filter(PharmacySale.hospital_id == hospital_id)
-    
-    daily_totals = daily_query.first()
-    
+        total_query = total_query.filter(PharmacySale.hospital_id == hospital_id)
+    totals = total_query.first()
+
+    now = datetime.utcnow()
+
+    # --- Today ---
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    today_end = today_start + timedelta(days=1)
+    daily_revenue = _sum_sales(today_start, today_end)
+    daily_count = _count_sales(today_start, today_end)
+
+    # --- This week vs last week ---
+    # Week starts on Monday (weekday() == 0)
+    days_since_monday = now.weekday()
+    this_week_start = (now - timedelta(days=days_since_monday)).replace(hour=0, minute=0, second=0, microsecond=0)
+    last_week_start = this_week_start - timedelta(days=7)
+
+    this_week_revenue = _sum_sales(this_week_start, now)
+    last_week_revenue = _sum_sales(last_week_start, this_week_start)
+    weekly_pct_change = _pct_change(this_week_revenue, last_week_revenue)
+
+    # --- This month vs last month ---
+    this_month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    # Last month start
+    if this_month_start.month == 1:
+        last_month_start = this_month_start.replace(year=this_month_start.year - 1, month=12)
+    else:
+        last_month_start = this_month_start.replace(month=this_month_start.month - 1)
+
+    this_month_revenue = _sum_sales(this_month_start, now)
+    last_month_revenue = _sum_sales(last_month_start, this_month_start)
+    monthly_pct_change = _pct_change(this_month_revenue, last_month_revenue)
+
     return ok(data={
         "total_revenue": round(float(totals.total_revenue or 0), 2),
         "total_sales_count": totals.total_count or 0,
-        "daily_revenue": round(float(daily_totals.daily_revenue or 0), 2),
-        "daily_sales_count": daily_totals.daily_count or 0
+        "daily_revenue": round(daily_revenue, 2),
+        "daily_sales_count": daily_count,
+        "weekly_revenue": round(this_week_revenue, 2),
+        "weekly_pct_change": weekly_pct_change,
+        "weekly_trend": "up" if weekly_pct_change > 0 else ("down" if weekly_pct_change < 0 else "neutral"),
+        "monthly_revenue": round(this_month_revenue, 2),
+        "monthly_pct_change": monthly_pct_change,
+        "monthly_trend": "up" if monthly_pct_change > 0 else ("down" if monthly_pct_change < 0 else "neutral"),
     })
 
 @router.get("/reports/revenue-chart", dependencies=[Depends(require_roles("pharmacy", "admin"))])
@@ -253,6 +297,47 @@ async def search_medicine(
 
     return {"results": results}
 
+@public_router.post("/add-medicine")
+async def public_add_medicine(
+    payload: AddMedicineRequest,
+    db: Session = Depends(get_db),
+    current: TokenData = Depends(get_current_active_user),
+) -> Dict[str, Any]:
+    """Add medicine (public router alias for frontend compatibility)."""
+    existing = db.query(PharmacyMedicine).filter(PharmacyMedicine.product_id == payload.product_id).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Medicine with this product ID already exists")
+
+    exp_iso = _normalize_date_str(payload.expiration_date)
+    exp_dt = None
+    if exp_iso:
+        try:
+            exp_dt = datetime.fromisoformat(exp_iso)
+        except (ValueError, TypeError):
+            pass
+
+    new_med = PharmacyMedicine(
+        id=str(uuid.uuid4()),
+        product_id=payload.product_id,
+        batch_no=payload.batch_no,
+        name=payload.name,
+        generic_name=payload.generic_name,
+        type=payload.type,
+        distributor=payload.distributor,
+        purchase_price=payload.purchase_price,
+        selling_price=payload.selling_price,
+        stock_unit=payload.stock_unit,
+        quantity=payload.quantity,
+        expiration_date=exp_dt,
+        category=payload.category,
+        sub_category=payload.sub_category,
+        hospital_id=payload.hospital_id or getattr(current, 'hospital_id', None),
+        created_at=datetime.utcnow()
+    )
+    db.add(new_med)
+    db.commit()
+    return ok(message="Medicine added successfully", data={"id": new_med.id, "product_id": new_med.product_id})
+
 async def _sync_medicines_internal(db: Session, hospital_id: Optional[str] = None) -> Dict[str, int]:
     """Internal function to migrate medicines from Firebase to PostgreSQL."""
     from app.services.pharmacy_inventory_service import list_medicines as list_legacy
@@ -328,44 +413,48 @@ async def get_all_medicines(
     page: int = Query(1, ge=1),
     page_size: int = Query(100, ge=1, le=500),  
 ) -> Dict[str, Any]:
-    """Get a optimized list of all medicines in the inventory"""
-    query = db.query(PharmacyMedicine)
+    """Get medicines list - optimized with column-level SELECT."""
+    # Column-level SELECT: only fetch needed columns, skip ORM hydration
+    cols = (
+        PharmacyMedicine.id, PharmacyMedicine.product_id, PharmacyMedicine.batch_no,
+        PharmacyMedicine.name, PharmacyMedicine.generic_name, PharmacyMedicine.type,
+        PharmacyMedicine.distributor, PharmacyMedicine.purchase_price,
+        PharmacyMedicine.selling_price, PharmacyMedicine.stock_unit,
+        PharmacyMedicine.quantity, PharmacyMedicine.expiration_date,
+        PharmacyMedicine.category, PharmacyMedicine.sub_category,
+        PharmacyMedicine.hospital_id, PharmacyMedicine.created_at,
+        PharmacyMedicine.updated_at,
+    )
+    base = db.query(*cols)
     if hospital_id:
-        query = query.filter(PharmacyMedicine.hospital_id == hospital_id)
-        
-    total = query.count()
-    medicines = query.order_by(PharmacyMedicine.name).offset((page-1)*page_size).limit(page_size).all()
-    
-    # Fast fallback: If POS sync is behind, we still show PG data
-    results = []
-    for m in medicines:
-        results.append({
-            "id": m.id,
-            "product_id": m.product_id,
-            "batch_no": m.batch_no,
-            "name": m.name,
-            "generic_name": m.generic_name,
-            "type": m.type,
-            "distributor": m.distributor,
-            "purchase_price": float(m.purchase_price or 0),
-            "selling_price": float(m.selling_price or 0),
-            "stock_unit": m.stock_unit,
-            "quantity": int(m.quantity or 0),
-            "low_stock": bool((m.quantity or 0) < 5),
-            "expiration_date": m.expiration_date.isoformat() if m.expiration_date else None,
-            "category": m.category,
-            "sub_category": m.sub_category,
-            "hospital_id": m.hospital_id,
-            "created_at": m.created_at.isoformat() if m.created_at else None,
-            "updated_at": m.updated_at.isoformat() if m.updated_at else None
-        })
+        base = base.filter(PharmacyMedicine.hospital_id == hospital_id)
+
+    total = base.count()
+    rows = base.order_by(PharmacyMedicine.name).offset((page-1)*page_size).limit(page_size).all()
+
+    results = [
+        {
+            "id": r.id, "product_id": r.product_id, "batch_no": r.batch_no,
+            "name": r.name, "generic_name": r.generic_name, "type": r.type,
+            "distributor": r.distributor,
+            "purchase_price": float(r.purchase_price or 0),
+            "selling_price": float(r.selling_price or 0),
+            "stock_unit": r.stock_unit,
+            "quantity": int(r.quantity or 0),
+            "low_stock": (r.quantity or 0) < 5,
+            "expiration_date": r.expiration_date.isoformat() if r.expiration_date else None,
+            "category": r.category, "sub_category": r.sub_category,
+            "hospital_id": r.hospital_id,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+            "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+        }
+        for r in rows
+    ]
 
     return ok(
         data=results,
         meta={
-            "total": total,
-            "page": page,
-            "page_size": page_size,
+            "total": total, "page": page, "page_size": page_size,
             "hospital_id": hospital_id,
             "total_pages": (total + page_size - 1) // page_size,
             "has_next": page * page_size < total,
@@ -455,54 +544,57 @@ async def list_items(
     hospital_id: Optional[str] = Query(None),
     q: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
-    page_size: int = Query(100, ge=1, le=500),  # Increased default to 100, max to 500
+    page_size: int = Query(100, ge=1, le=500),
 ) -> Any:
-    """List pharmacy inventory items with optimized filtering and pagination."""
-    query = db.query(PharmacyMedicine)
-    
+    """List pharmacy inventory items - optimized with column-level SELECT."""
+    cols = (
+        PharmacyMedicine.id, PharmacyMedicine.product_id, PharmacyMedicine.batch_no,
+        PharmacyMedicine.name, PharmacyMedicine.generic_name, PharmacyMedicine.type,
+        PharmacyMedicine.distributor, PharmacyMedicine.purchase_price,
+        PharmacyMedicine.selling_price, PharmacyMedicine.stock_unit,
+        PharmacyMedicine.quantity, PharmacyMedicine.expiration_date,
+        PharmacyMedicine.category, PharmacyMedicine.sub_category,
+        PharmacyMedicine.hospital_id, PharmacyMedicine.created_at,
+        PharmacyMedicine.updated_at,
+    )
+    base = db.query(*cols)
+
     if hospital_id:
-        query = query.filter(PharmacyMedicine.hospital_id == hospital_id)
+        base = base.filter(PharmacyMedicine.hospital_id == hospital_id)
     if q:
         search = f"%{q}%"
-        # Optimized: ilike uses indexes if configured with pg_trgm
-        query = query.filter(
+        base = base.filter(
             or_(
                 PharmacyMedicine.name.ilike(search),
                 PharmacyMedicine.generic_name.ilike(search),
                 PharmacyMedicine.batch_no.ilike(search)
             )
         )
-    
-    total = query.count()
-    items = query.order_by(PharmacyMedicine.updated_at.desc()).offset((page-1)*page_size).limit(page_size).all()
-    
-    results = []
-    for i in items:
-        results.append({
-            "id": i.id,
-            "product_id": i.product_id,
-            "batch_no": i.batch_no,
-            "name": i.name,
-            "generic_name": i.generic_name,
-            "type": i.type,
-            "distributor": i.distributor,
-            "purchase_price": float(i.purchase_price or 0),
-            "selling_price": float(i.selling_price or 0),
-            "stock_unit": i.stock_unit,
-            "quantity": int(i.quantity or 0),
-            "low_stock": bool((i.quantity or 0) < 5),
-            "expiration_date": i.expiration_date.isoformat() if i.expiration_date else None,
-            "category": i.category,
-            "sub_category": i.sub_category,
-            "hospital_id": i.hospital_id,
-            "created_at": i.created_at.isoformat() if i.created_at else None,
-            "updated_at": i.updated_at.isoformat() if i.updated_at else None
-        })
-    
+
+    total = base.count()
+    rows = base.order_by(PharmacyMedicine.updated_at.desc()).offset((page-1)*page_size).limit(page_size).all()
+
+    results = [
+        {
+            "id": r.id, "product_id": r.product_id, "batch_no": r.batch_no,
+            "name": r.name, "generic_name": r.generic_name, "type": r.type,
+            "distributor": r.distributor,
+            "purchase_price": float(r.purchase_price or 0),
+            "selling_price": float(r.selling_price or 0),
+            "stock_unit": r.stock_unit,
+            "quantity": int(r.quantity or 0),
+            "low_stock": (r.quantity or 0) < 5,
+            "expiration_date": r.expiration_date.isoformat() if r.expiration_date else None,
+            "category": r.category, "sub_category": r.sub_category,
+            "hospital_id": r.hospital_id,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+            "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+        }
+        for r in rows
+    ]
+
     return ok(data=results, meta={
-        "page": page, 
-        "page_size": page_size, 
-        "total": total,
+        "page": page, "page_size": page_size, "total": total,
         "total_pages": (total + page_size - 1) // page_size,
         "has_next": page * page_size < total,
         "has_prev": page > 1
@@ -518,15 +610,22 @@ async def delete_item(
     current: TokenData = Depends(get_current_active_user),
 ) -> Any:
     from app.db_models import PharmacyMedicine
-    med = db.query(PharmacyMedicine).filter(PharmacyMedicine.product_id == int(item_id)).first()
-    if not med: raise HTTPException(status_code=404, detail="Not found")
     
-    # Soft delete if column exists, else hard delete
-    if hasattr(med, 'is_deleted'):
-        med.is_deleted = True
-        med.updated_at = datetime.utcnow()
-    else:
-        db.delete(med)
+    # Try matching by UUID id first, then by product_id
+    med = db.query(PharmacyMedicine).filter(PharmacyMedicine.id == item_id).first()
+    if not med:
+        try:
+            med = db.query(PharmacyMedicine).filter(PharmacyMedicine.product_id == int(item_id)).first()
+        except (ValueError, TypeError):
+            pass
     
+    if not med:
+        raise HTTPException(status_code=404, detail="Medicine not found")
+    
+    deleted_name = med.name
+    deleted_id = med.id
+    
+    db.delete(med)
     db.commit()
-    return ok(message="Medicine deleted")
+    
+    return ok(message=f"Medicine '{deleted_name}' deleted successfully", data={"deleted_id": deleted_id})
