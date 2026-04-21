@@ -15,6 +15,7 @@ from app.services.ai_engine import ai_engine
 from app.services.queue_management_service import QueueManagementService
 from app.config import QUEUE_AUTOSKIP_INTERVAL_SECONDS
 from app.services.app_scheduler import start_scheduler, shutdown_scheduler
+from app.services.sync_service import sync_pos_to_postgres
 
 # Import routes
 from app.routes import auth, hospitals, doctors, tokens, dashboard
@@ -45,6 +46,7 @@ async def lifespan(app: FastAPI):
     print(f"🌐 Allowed Origins: {cors_origins}")
 
     autoskip_task: asyncio.Task | None = None
+    pos_sync_task: asyncio.Task | None = None
     
     # Initialize PostgreSQL database
     try:
@@ -72,8 +74,11 @@ async def lifespan(app: FastAPI):
     try:
         autoskip_task = asyncio.create_task(_autoskip_worker())
         print(f"Auto-skip worker started (interval={int(QUEUE_AUTOSKIP_INTERVAL_SECONDS)}s)")
+        
+        pos_sync_task = asyncio.create_task(sync_pos_to_postgres())
+        print("Go POS background sync worker started (5min interval)")
     except Exception as e:
-        print(f"Auto-skip worker failed to start: {e}")
+        print(f"Background worker failed to start: {e}")
 
     # Start APScheduler (for production-safe background scheduling)
     try:
@@ -95,6 +100,8 @@ async def lifespan(app: FastAPI):
     try:
         if autoskip_task:
             autoskip_task.cancel()
+        if pos_sync_task:
+            pos_sync_task.cancel()
     except Exception:
         pass
 

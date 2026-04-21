@@ -263,9 +263,9 @@ class PharmacyMedicine(Base):
     selling_price = Column(Float, nullable=False)
     stock_unit = Column(String(50), nullable=True)
     quantity = Column(Integer, default=0)
-    expiration_date = Column(DateTime(timezone=True), nullable=True)
-    category = Column(String(100), nullable=True)
-    sub_category = Column(String(100), nullable=True)
+    expiration_date = Column(DateTime(timezone=True), nullable=True, index=True)
+    category = Column(String(100), nullable=True, index=True)
+    sub_category = Column(String(100), nullable=True, index=True)
     hospital_id = Column(String, ForeignKey("hospitals.id"), nullable=True, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
@@ -360,9 +360,9 @@ class PharmacySale(Base):
     __tablename__ = "pharmacy_sales"
 
     id = Column(String, primary_key=True, index=True)
-    hospital_id = Column(String, ForeignKey("hospitals.id"), nullable=True)
-    patient_id = Column(String, ForeignKey("users.id"), nullable=True)
-    doctor_id = Column(String, ForeignKey("doctors.id"), nullable=True)
+    hospital_id = Column(String, ForeignKey("hospitals.id"), nullable=True, index=True)
+    patient_id = Column(String, ForeignKey("users.id"), nullable=True, index=True)
+    doctor_id = Column(String, ForeignKey("doctors.id"), nullable=True, index=True)
     medicine_id = Column(Integer, nullable=True)
     medicine_name = Column(String(200), nullable=True)
     quantity = Column(Integer, default=1)
@@ -371,6 +371,6 @@ class PharmacySale(Base):
     total_amount = Column(Float, nullable=True)  # Used in POS
     items = Column(JSON, nullable=True)  # Used in POS for multiple items
     payment_status = Column(String(20), default="paid")
-    sold_at = Column(DateTime(timezone=True), server_default=func.now())
+    sold_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
     performed_by = Column(String, ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

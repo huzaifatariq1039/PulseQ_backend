@@ -1,8 +1,9 @@
 from typing import Any, Dict, Optional, List, Tuple
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import logging
 import io
 import uuid
+import asyncio
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
@@ -16,6 +17,7 @@ from app.database import get_db
 from app.models import TokenData
 from app.security import require_roles
 from app.utils.responses import ok
+from app.services.go_pos_service import go_pos_service
 
 router = APIRouter()
 public_router = APIRouter()
@@ -167,17 +169,15 @@ async def get_revenue_chart_data(
 @router.get("/sales/history", dependencies=[Depends(require_roles("pharmacy", "admin"))])
 async def get_sales_history(
     db: Session = Depends(get_db),
-    hospital_id: Optional[str] = Query(None),
-    page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100)
+    hospital_id: Optional[str] = Query(None)
 ):
-    """Get list of recent sales transactions."""
+    """Get list of all sales transactions."""
     query = db.query(PharmacySale)
     if hospital_id:
         query = query.filter(PharmacySale.hospital_id == hospital_id)
     
     total = query.count()
-    sales = query.order_by(PharmacySale.sold_at.desc()).offset((page-1)*page_size).limit(page_size).all()
+    sales = query.order_by(PharmacySale.sold_at.desc()).all()
     
     results = []
     for s in sales:
@@ -191,7 +191,7 @@ async def get_sales_history(
             "payment_status": s.payment_status
         })
         
-    return ok(data=results, meta={"total": total, "page": page, "page_size": page_size})
+    return ok(data=results, meta={"total": total})
 
 @public_router.get("/search-medicine")
 async def search_medicine(
@@ -205,7 +205,7 @@ async def search_medicine(
             func.lower(PharmacyMedicine.name).like(qn),
             func.lower(PharmacyMedicine.generic_name).like(qn)
         )
-    ).limit(20).all()
+    ).all()
 
     results = []
     for m in medicines:
@@ -295,38 +295,25 @@ async def get_all_medicines(
     db: Session = Depends(get_db),
     hospital_id: Optional[str] = Query(None, description="Filter by hospital ID"),
     page: int = Query(1, ge=1),
-    page_size: int = Query(50, ge=1, le=500),
-    auto_sync: bool = Query(True, description="Automatically import legacy data if PostgreSQL is empty")
+    page_size: int = Query(50, ge=1, le=100),
 ) -> Dict[str, Any]:
-    """Get a paginated list of all medicines in the inventory"""
-    # Query building
+    """Get a optimized list of all medicines in the inventory"""
     query = db.query(PharmacyMedicine)
     if hospital_id:
         query = query.filter(PharmacyMedicine.hospital_id == hospital_id)
         
     total = query.count()
+    medicines = query.order_by(PharmacyMedicine.name).offset((page-1)*page_size).limit(page_size).all()
     
-    # Auto-sync logic: if PG is empty and auto_sync is on, try to import from Firebase
-    if total == 0 and auto_sync:
-        sync_result = await _sync_medicines_internal(db, hospital_id=hospital_id)
-        # Re-count after sync
-        total = query.count()
-
-    medicines = query.offset((page-1)*page_size).limit(page_size).all()
-    
+    # Fast fallback: If POS sync is behind, we still show PG data
     results = []
     for m in medicines:
         results.append({
             "product_id": m.product_id,
             "name": m.name,
             "generic_name": m.generic_name,
-            "type": m.type,
-            "distributor": m.distributor,
             "selling_price": float(m.selling_price or 0),
             "quantity": int(m.quantity or 0),
-            "expiration_date": m.expiration_date.isoformat() if m.expiration_date else None,
-            "category": m.category,
-            "sub_category": m.sub_category,
             "low_stock": bool((m.quantity or 0) < 5),
             "hospital_id": m.hospital_id
         })
@@ -423,33 +410,39 @@ async def list_items(
     hospital_id: Optional[str] = Query(None),
     q: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=500),
-    auto_sync: bool = Query(True, description="Automatically import legacy data if PostgreSQL is empty")
+    page_size: int = Query(50, ge=1, le=100),
 ) -> Any:
-    """List pharmacy inventory items with filtering and pagination."""
+    """List pharmacy inventory items with optimized filtering and pagination."""
     query = db.query(PharmacyMedicine)
-    
-    # Auto-sync check
-    if query.count() == 0 and auto_sync:
-        await _sync_medicines_internal(db)
-        query = db.query(PharmacyMedicine)
     
     if hospital_id:
         query = query.filter(PharmacyMedicine.hospital_id == hospital_id)
     if q:
         search = f"%{q}%"
+        # Optimized: ilike uses indexes if configured with pg_trgm
         query = query.filter(
             or_(
                 PharmacyMedicine.name.ilike(search),
                 PharmacyMedicine.generic_name.ilike(search),
-                PharmacyMedicine.batch_no.ilike(search),
-                PharmacyMedicine.distributor.ilike(search)
+                PharmacyMedicine.batch_no.ilike(search)
             )
         )
     
     total = query.count()
-    items = query.offset((page-1)*page_size).limit(page_size).all()
-    results = [{k: v for k, v in i.__dict__.items() if not k.startswith('_')} for i in items]
+    items = query.order_by(PharmacyMedicine.updated_at.desc()).offset((page-1)*page_size).limit(page_size).all()
+    
+    # Reduce payload size: Only return what the UI needs for the list view
+    results = []
+    for i in items:
+        results.append({
+            "id": i.id,
+            "product_id": i.product_id,
+            "name": i.name,
+            "quantity": i.quantity,
+            "selling_price": i.selling_price,
+            "batch_no": i.batch_no,
+            "updated_at": i.updated_at.isoformat() if i.updated_at else None
+        })
     
     return ok(data=results, meta={"page": page, "page_size": page_size, "total": total})
 
