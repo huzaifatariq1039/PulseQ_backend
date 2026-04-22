@@ -118,10 +118,13 @@ async def reception_queue(
         dept_text = f"{department or ''}"
         inferred_has_session = _infer_has_session(dept_text)
 
-        consultation_fee = getattr(t, 'consultation_fee', None) or (doctor.consultation_fee if doctor else None)
-        session_fee = getattr(t, 'session_fee', None) or (getattr(doctor, 'session_fee', None) if doctor else None)
+        consultation_fee = getattr(t, 'consultation_fee', None) or (doctor.consultation_fee if doctor else 0.0)
+        session_fee = getattr(t, 'session_fee', None) or (getattr(doctor, 'session_fee', None) if doctor else 0.0)
 
-        total_fee = (consultation_fee or 0) + (session_fee or 0 if inferred_has_session else 0)
+        # Force total_fee to use the Token's actual saved total_fee which includes the Token fee of 50
+        total_fee = getattr(t, 'total_fee', None) 
+        if total_fee is None:
+            total_fee = (consultation_fee or 0) + (session_fee or 0 if inferred_has_session else 0)
 
         items.append({
             "token_id": t.id,
