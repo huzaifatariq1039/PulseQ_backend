@@ -369,10 +369,21 @@ async def receptionist_dashboard(
         return age, "Male"
 
     upcoming = []
+    average_consultation_time = 15 # minutes
+    wait_time_counter = average_consultation_time
+
     for t in active:
         if now_serving and t.id == now_serving.id:
             continue
         age, gender = _get_age_and_gender(t.patient_id)
+        
+        actual_wait = getattr(t, 'estimated_wait_time', 0) or 0
+        if actual_wait == 0:
+            assigned_wait = wait_time_counter
+            wait_time_counter += average_consultation_time
+        else:
+            assigned_wait = actual_wait
+            
         upcoming.append({
             "token_id": t.id,
             "token_number": t.display_code or str(t.token_number),
@@ -381,7 +392,7 @@ async def receptionist_dashboard(
             "patient_gender": gender,
             "status": str(t.status).lower(),
             "doctor_name": t.doctor_name,
-            "waiting_time_minutes": getattr(t, 'estimated_wait_time', 0) or 0
+            "waiting_time_minutes": assigned_wait
         })
         if len(upcoming) >= upcoming_limit:
             break

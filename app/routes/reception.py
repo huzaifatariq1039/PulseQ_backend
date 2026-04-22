@@ -113,6 +113,18 @@ async def reception_queue(
     items: List[Dict[str, Any]] = []
     for t in tokens:
         doctor = db.query(Doctor).filter(Doctor.id == t.doctor_id).first()
+        user = db.query(User).filter(User.id == t.patient_id).first()
+        
+        # Calculate Age and Gender
+        age, gender = "0y", "Unknown"
+        if user:
+            gender = getattr(user, 'gender', "Unknown")
+            if user.date_of_birth:
+                try:
+                    dob = datetime.strptime(user.date_of_birth, "%Y-%m-%d")
+                    age = f"{(datetime.utcnow() - dob).days // 365}y"
+                except Exception:
+                    pass
         
         department = getattr(t, 'doctor_specialization', None) or (doctor.specialization if doctor else "")
         dept_text = f"{department or ''}"
@@ -131,8 +143,11 @@ async def reception_queue(
             "token_number": t.display_code or str(t.token_number),
             "mrn": t.mrn,
             "patient_name": t.patient_name,
+            "patient_age": age,
+            "patient_gender": gender,
             "doctor_name": t.doctor_name,
             "department": department,
+            "reason": getattr(t, 'department', None) or "",
             "consultation_fee": consultation_fee,
             "session_fee": session_fee if inferred_has_session else None,
             "total_fee": total_fee,
