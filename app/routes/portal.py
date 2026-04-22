@@ -12,6 +12,7 @@ import random
 from app.services.token_service import SmartTokenService
 from app.routes.pharmacy import router as pharmacy_router
 from app.utils.mrn import get_or_create_patient_mrn
+import uuid
 
 router = APIRouter()
 
@@ -463,6 +464,7 @@ async def receptionist_create_walkin_token(
             name=patient_name,
             phone=phone,
             role="patient",
+            password_hash="", # Dummy hash for walk-in patients to satisfy DB constraints
             date_of_birth=dob_str
         )
         db.add(user)
@@ -523,4 +525,3 @@ async def receptionist_skip_token(
     return ok(message="Token skipped")
 
 # -------------------- Utility --------------------
-import uuid
