@@ -483,7 +483,7 @@ async def receptionist_create_walkin_token(
     hospital_name_str = hospital.name if hospital else "Unknown Hospital"
 
     # Fetch/Generate MRN
-    mrn = get_or_create_patient_mrn(db, user, hospital_id)
+    mrn = get_or_create_patient_mrn(db, user.id, hospital_id)
 
     # Calculate Fees
     doc_fee = float(doctor.consultation_fee or 0)
@@ -500,6 +500,15 @@ async def receptionist_create_walkin_token(
     next_num = (last_token.token_number + 1) if last_token else 1
     token_id = str(uuid.uuid4())
     
+    # Format display code (e.g. A-001)
+    doc_initial = doctor.name.strip()[0].upper() if doctor.name else "T"
+    # Ensure it's alphabetical, if Dr. Ali, take "A". Replace "Dr" if it exists.
+    if doctor.name and doctor.name.lower().startswith("dr"):
+        clean_name = doctor.name[2:].replace(".", "").strip()
+        doc_initial = clean_name[0].upper() if clean_name else "D"
+        
+    display_code = f"{doc_initial}-{next_num:03d}"
+    
     new_token = Token(
         id=token_id,
         patient_id=user.id,
@@ -507,6 +516,7 @@ async def receptionist_create_walkin_token(
         hospital_id=hospital_id,
         mrn=mrn,
         token_number=next_num,
+        display_code=display_code,
         hex_code=token_id[:8],
         appointment_date=datetime.utcnow(),
         status="pending",
@@ -524,7 +534,7 @@ async def receptionist_create_walkin_token(
     return ok(
         data={
             "token_id": token_id,
-            "token_number": new_token.display_code or str(next_num),
+            "token_number": display_code,
             "hospital_name": hospital_name_str,
             "department": reason,
             "doctor_name": doctor.name,
