@@ -126,6 +126,7 @@ async def reception_queue(
         items.append({
             "token_id": t.id,
             "token_number": t.display_code or str(t.token_number),
+            "mrn": t.mrn,
             "patient_name": t.patient_name,
             "doctor_name": t.doctor_name,
             "department": department,
