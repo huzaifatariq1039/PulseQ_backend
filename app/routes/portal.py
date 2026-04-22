@@ -478,6 +478,18 @@ async def receptionist_create_walkin_token(
     db.commit()
     db.refresh(user)
 
+    # Get Hospital Name
+    hospital = db.query(Hospital).filter(Hospital.id == hospital_id).first()
+    hospital_name_str = hospital.name if hospital else "Unknown Hospital"
+
+    # Fetch/Generate MRN
+    mrn = get_or_create_patient_mrn(db, user, hospital_id)
+
+    # Calculate Fees
+    doc_fee = float(doctor.consultation_fee or 0)
+    token_fee = 50.0
+    total_fee = doc_fee + token_fee
+
     # Allocation logic (Simplified)
     # TODO: Proper sequential allocation with locking
     last_token = db.query(Token).filter(
@@ -493,6 +505,7 @@ async def receptionist_create_walkin_token(
         patient_id=user.id,
         doctor_id=doctor_id,
         hospital_id=hospital_id,
+        mrn=mrn,
         token_number=next_num,
         hex_code=token_id[:8],
         appointment_date=datetime.utcnow(),
@@ -500,13 +513,34 @@ async def receptionist_create_walkin_token(
         patient_name=patient_name,
         doctor_name=doctor.name,
         department=reason,
-        hospital_name="Hospital" # TODO: Fetch hospital name
+        hospital_name=hospital_name_str,
+        consultation_fee=doc_fee,
+        total_fee=total_fee
     )
     
     db.add(new_token)
     db.commit()
     
-    return ok(data={"token_id": token_id}, message="Walk-in token created")
+    return ok(
+        data={
+            "token_id": token_id,
+            "token_number": new_token.display_code or str(next_num),
+            "hospital_name": hospital_name_str,
+            "department": reason,
+            "doctor_name": doctor.name,
+            "patient_name": patient_name,
+            "phone": phone,
+            "mrn": mrn,
+            "age": age,
+            "gender": gender,
+            "payment": "UNPAID",
+            "status": "PENDING",
+            "consultation_fee": doc_fee,
+            "token_fee": token_fee,
+            "total_fee": total_fee
+        }, 
+        message="Walk-in token created"
+    )
 
 @router.post("/receptionist/tokens/{token_id}/skip", dependencies=[Depends(require_roles("receptionist", "patient", "admin"))])
 async def receptionist_skip_token(
