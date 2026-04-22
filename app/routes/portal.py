@@ -369,21 +369,11 @@ async def receptionist_dashboard(
         return age, "Male"
 
     upcoming = []
-    average_consultation_time = 15 # minutes
-    wait_time_counter = average_consultation_time
-
     for t in active:
         if now_serving and t.id == now_serving.id:
             continue
         age, gender = _get_age_and_gender(t.patient_id)
         
-        actual_wait = getattr(t, 'estimated_wait_time', 0) or 0
-        if actual_wait == 0:
-            assigned_wait = wait_time_counter
-            wait_time_counter += average_consultation_time
-        else:
-            assigned_wait = actual_wait
-            
         upcoming.append({
             "token_id": t.id,
             "token_number": t.display_code or str(t.token_number),
@@ -392,7 +382,7 @@ async def receptionist_dashboard(
             "patient_gender": gender,
             "status": str(t.status).lower(),
             "doctor_name": t.doctor_name,
-            "waiting_time_minutes": assigned_wait
+            "waiting_time_minutes": getattr(t, 'estimated_wait_time', 0) or 0
         })
         if len(upcoming) >= upcoming_limit:
             break
@@ -432,7 +422,9 @@ async def receptionist_dashboard(
                 "waiting": len(waiting),
                 "completed": len(completed),
                 "skipped": len(skipped),
-                "avg_wait_minutes": (len(waiting) * 9) if waiting else 0,
+                "avg_wait_minutes": (
+                    sum((getattr(t, 'estimated_wait_time', 0) or 0) for t in active) // len([t for t in active if (getattr(t, 'estimated_wait_time', 0) or 0) > 0])
+                ) if any((getattr(t, 'estimated_wait_time', 0) or 0) > 0 for t in active) else 0,
             }
         }
     )
@@ -476,13 +468,16 @@ async def receptionist_create_walkin_token(
             phone=phone,
             role="patient",
             password_hash="", # Dummy hash for walk-in patients to satisfy DB constraints
-            date_of_birth=dob_str
+            date_of_birth=dob_str,
+            gender=gender
         )
         db.add(user)
     else:
         # Update details if provided
         if dob_str and not user.date_of_birth:
             user.date_of_birth = dob_str
+        if gender and not user.gender:
+            user.gender = gender
         if patient_name and user.name != patient_name:
             user.name = patient_name
 
@@ -520,6 +515,14 @@ async def receptionist_create_walkin_token(
         
     display_code = f"{doc_initial}-{next_num:03d}"
     
+    # Track patients mathematically ahead in queue to assign estimated wait statically
+    patients_ahead = db.query(Token).filter(
+        Token.doctor_id == doctor_id,
+        func.date(Token.appointment_date) == datetime.utcnow().date(),
+        Token.status.in_(["pending", "in_queue", "in_progress"])
+    ).count()
+    estimated_wait_time = max(0, patients_ahead * 15)
+    
     new_token = Token(
         id=token_id,
         patient_id=user.id,
@@ -536,7 +539,8 @@ async def receptionist_create_walkin_token(
         department=reason,
         hospital_name=hospital_name_str,
         consultation_fee=doc_fee,
-        total_fee=total_fee
+        total_fee=total_fee,
+        estimated_wait_time=estimated_wait_time
     )
     
     db.add(new_token)

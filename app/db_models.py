@@ -63,6 +63,7 @@ class User(Base):
     hospital_id = Column(String, ForeignKey("hospitals.id"), nullable=True, index=True) # Added index for hospital staff lookup
     location_access = Column(Boolean, default=False)
     date_of_birth = Column(String(20), nullable=True)
+    gender = Column(String(20), nullable=True)
     address = Column(String(500), nullable=True)
     mrn_by_hospital = Column(JSON, default=dict) # Added for MRN tracking
     created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True) # Added index for user reporting
