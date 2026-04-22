@@ -495,7 +495,6 @@ async def receptionist_create_walkin_token(
         hex_code=token_id[:8],
         appointment_date=datetime.utcnow(),
         status="pending",
-        is_walk_in=True,
         patient_name=patient_name,
         doctor_name=doctor.name,
         department=reason,
