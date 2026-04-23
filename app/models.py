@@ -522,6 +522,11 @@ class SmartTokenResponse(BaseModel):
     hospital_name: Optional[str] = None
     patient_name: Optional[str] = None
     patient_phone: Optional[str] = None
+    patient_age: Optional[int] = None
+    patient_gender: Optional[str] = None
+    reason_for_visit: Optional[str] = None
+    # Nested patient object for frontend convenience
+    patient: Optional[Dict[str, Any]] = None
     queue_opt_in: bool = False
     queue_opted_in_at: Optional[datetime] = None
     confirmed: bool = False
@@ -784,3 +789,6 @@ class TokenCreateSpec(BaseModel):
     appointment_date: str  # YYYY-MM-DD in clinic local timezone
     idempotency_key: str
     department: Optional[str] = None
+    patient_age: Optional[int] = None
+    patient_gender: Optional[str] = None
+    reason_for_visit: Optional[str] = None

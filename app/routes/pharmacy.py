@@ -263,10 +263,25 @@ async def get_sales_history(
             "unit_price": s.unit_price,
             "total_price": s.total_price,
             "sold_at": s.sold_at.isoformat(),
-            "payment_status": s.payment_status
+            "payment_status": s.payment_status,
+            "patient_id": s.patient_id,
+            "doctor_id": s.doctor_id,
+            "performed_by": s.performed_by
         })
         
     return ok(data=results, meta={"total": total, "page": page, "page_size": page_size})
+
+
+# Alias for backward compatibility - frontend calls /external/pos/sales/history
+@router.get("/external/pos/sales/history", dependencies=[Depends(require_roles("pharmacy", "admin"))])
+async def get_pos_sales_history_alias(
+    db: Session = Depends(get_db),
+    hospital_id: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+):
+    """Alias for /sales/history - for frontend backward compatibility"""
+    return await get_sales_history(db, hospital_id, page, page_size)
 
 @public_router.get("/search-medicine")
 async def search_medicine(

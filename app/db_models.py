@@ -163,6 +163,9 @@ class Token(Base):
     hospital_name = Column(String(200), nullable=True)
     patient_name = Column(String(100), nullable=True)
     patient_phone = Column(String(20), nullable=True)
+    patient_age = Column(Integer, nullable=True)
+    patient_gender = Column(String(20), nullable=True)
+    reason_for_visit = Column(Text, nullable=True)
 
     # Status/Confirmation Tracking
     queue_opt_in = Column(Boolean, default=False)

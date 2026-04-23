@@ -64,6 +64,23 @@ def _to_smart_token_response(t: Token) -> SmartTokenResponse:
     
     # Calculate is_active flag
     is_active = status_val not in ["cancelled", "completed"]
+    
+    # Build formatted token code (e.g., A-001, A-002, B-015)
+    # Use first letter of doctor's name + zero-padded token number
+    formatted_token = None
+    if t.doctor_name and t.token_number:
+        doctor_initial = t.doctor_name[0].upper()
+        formatted_token = f"{doctor_initial}-{t.token_number:03d}"
+    
+    # Build nested patient object for frontend convenience
+    patient_obj = None
+    if t.patient_name or t.patient_phone or t.patient_age or t.patient_gender:
+        patient_obj = {
+            "name": t.patient_name,
+            "phone": t.patient_phone,
+            "age": t.patient_age,
+            "gender": t.patient_gender
+        }
 
     return SmartTokenResponse(
         id=str(t.id),
@@ -74,6 +91,7 @@ def _to_smart_token_response(t: Token) -> SmartTokenResponse:
         token_number=t.token_number,
         hex_code=t.hex_code,
         display_code=t.display_code,
+        formatted_token=formatted_token,
         appointment_date=t.appointment_date,
         status=status_val,
         payment_status=pay_status_val,
@@ -94,6 +112,10 @@ def _to_smart_token_response(t: Token) -> SmartTokenResponse:
         hospital_name=t.hospital_name,
         patient_name=t.patient_name,
         patient_phone=t.patient_phone,
+        patient_age=t.patient_age,
+        patient_gender=t.patient_gender,
+        reason_for_visit=t.reason_for_visit,
+        patient=patient_obj,
         queue_opt_in=bool(t.queue_opt_in),
         queue_opted_in_at=t.queue_opted_in_at,
         confirmed=bool(t.confirmed),
@@ -943,6 +965,9 @@ async def create_token(
         "hospital_name": hospital.name,
         "patient_name": getattr(current_user, "name", None),
         "patient_phone": getattr(current_user, "phone", None),
+        "patient_age": spec.patient_age,
+        "patient_gender": spec.patient_gender,
+        "reason_for_visit": spec.reason_for_visit,
         "created_at": datetime.utcnow(),
         "updated_at": datetime.utcnow(),
     }
