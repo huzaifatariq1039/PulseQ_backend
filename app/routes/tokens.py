@@ -435,9 +435,7 @@ async def generate_smart_token_with_details(
     fingerprint_phone: Optional[str] = None,
 ):
     token_resp: SmartTokenResponse = await generate_smart_token(
-        doctor_id=payload.doctor_id,
-        hospital_id=payload.hospital_id,
-        appointment_date=payload.appointment_date,
+        payload=payload,
         db=db,
         current_user=current_user,
         fingerprint_name=fingerprint_name,
