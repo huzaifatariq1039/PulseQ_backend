@@ -418,9 +418,20 @@ async def cancel_token_logic(
     
     q = _queue_object_for(db, token.doctor_id, token.hospital_id, day_local)
     
+    refund_info_dict = {
+        "original_amount": refund_calc.get("original_amount", 0.0),
+        "processing_fee_percentage": refund_calc.get("processing_fee_percentage", 5.0),
+        "processing_fee_amount": refund_calc.get("processing_fee_amount", 0.0),
+        "refund_amount": refund_calc.get("refund_amount", 0.0),
+        "refund_method": cancellation.refund_method or RefundMethod.SMARTTOKEN_WALLET,
+        "processing_time_days": refund_calc.get("processing_time", "3-5 business days")
+    }
+
     return {
         "message": "Token cancelled successfully",
         "token_id": token_id,
+        "cancellation_reason": reason_enum,
+        "refund_info": refund_info_dict,
         "refund_id": refund_id,
         "queue": q
     }
