@@ -42,6 +42,79 @@ from app.services.ai_engine import ai_engine
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+# -------------------- Cached AI Metrics --------------------
+
+def _compute_ai_metrics_batch(doctor_id: str, db: Session) -> dict:
+    """Compute all AI metrics in ~4 DB queries instead of 8+ separate ones."""
+    now = datetime.utcnow()
+    current_hour = now.hour
+    current_day = now.weekday()
+
+    # --- Query 1: Last 200 completed tokens for this doctor ---
+    # Covers: doctor_history, avg_5, avg_30, last_duration
+    completed_tokens = db.query(Token).filter(
+        Token.doctor_id == doctor_id,
+        Token.status == "completed"
+    ).order_by(Token.completed_at.desc()).limit(200).all()
+
+    def _dur(t):
+        if t.duration_minutes:
+            return float(t.duration_minutes)
+        if t.started_at and t.completed_at:
+            try:
+                return float((t.completed_at - t.started_at).total_seconds() / 60.0)
+            except Exception:
+                return 0.0
+        return 0.0
+
+    durations = [_dur(t) for t in completed_tokens]
+    last_duration = durations[0] if durations else 0.0
+    avg_5 = sum(durations[:5]) / len(durations[:5]) if durations[:5] else 0.0
+    avg_30 = sum(durations[:30]) / len(durations[:30]) if durations[:30] else 0.0
+    doc_history = sum(durations) / len(durations) if durations else 0.0
+
+    # --- Query 2: Queue velocity (completed in last 2h) ---
+    window_start = now - timedelta(hours=2)
+    completed_2h = db.query(func.count(Token.id)).filter(
+        Token.doctor_id == doctor_id,
+        Token.status == "completed",
+        Token.completed_at >= window_start
+    ).scalar() or 0
+    hours = max((now - window_start).total_seconds() / 3600.0, 0.01)
+    q_velocity = float(completed_2h) / float(hours)
+
+    # --- Query 3: Available doctors count ---
+    doctors_avail = max(
+        db.query(func.count(Doctor.id)).filter(Doctor.status == "available").scalar() or 1,
+        1
+    )
+
+    # --- Query 4 & 5: Hour + weekday history averages via SQL AVG ---
+    hour_avg = db.query(func.avg(Token.duration_minutes)).filter(
+        Token.status == "completed",
+        Token.duration_minutes.isnot(None),
+        func.extract('hour', Token.completed_at) == current_hour
+    ).scalar()
+    hour_hist = float(hour_avg) if hour_avg else 12.0
+
+    weekday_avg = db.query(func.avg(Token.duration_minutes)).filter(
+        Token.status == "completed",
+        Token.duration_minutes.isnot(None),
+        func.extract('dow', Token.completed_at) == current_day
+    ).scalar()
+    weekday_hist = float(weekday_avg) if weekday_avg else 15.0
+
+    return {
+        "doc_history": doc_history,
+        "q_velocity": q_velocity,
+        "last_duration": last_duration,
+        "avg_5": avg_5,
+        "avg_30": avg_30,
+        "doctors_avail": doctors_avail,
+        "hour_hist": hour_hist,
+        "weekday_hist": weekday_hist,
+    }
+
 # -------------------- Queue/TZ Helpers --------------------
 
 def _tz_offset_for(doctor_data: dict, hospital_data: dict | None = None) -> int:
@@ -468,18 +541,24 @@ async def generate_smart_token_with_details(
     fingerprint_name: Optional[str] = None,
     fingerprint_phone: Optional[str] = None,
 ):
+    # Pre-fetch doctor & hospital ONCE and reuse throughout
+    doctor = db.query(Doctor).filter(Doctor.id == payload.doctor_id).first()
+    hospital = db.query(Hospital).filter(Hospital.id == payload.hospital_id).first()
+    if not doctor or not hospital:
+        raise HTTPException(status_code=400, detail="Doctor or Hospital not found")
+
+    doctor_data = {k: v for k, v in doctor.__dict__.items() if not k.startswith('_')}
+    hospital_data = {k: v for k, v in hospital.__dict__.items() if not k.startswith('_')}
+
     token_resp: SmartTokenResponse = await generate_smart_token(
         payload=payload,
         db=db,
         current_user=current_user,
         fingerprint_name=fingerprint_name,
         fingerprint_phone=fingerprint_phone,
+        _prefetched_doctor=doctor_data,
+        _prefetched_hospital=hospital_data,
     )
-
-    doctor = db.query(Doctor).filter(Doctor.id == token_resp.doctor_id).first()
-    hospital = db.query(Hospital).filter(Hospital.id == token_resp.hospital_id).first()
-    doctor_data = {k: v for k, v in doctor.__dict__.items() if not k.startswith('_')} if doctor else {}
-    hospital_data = {k: v for k, v in hospital.__dict__.items() if not k.startswith('_')} if hospital else {}
 
     queue_status = SmartTokenService.get_queue_status(
         token_resp.doctor_id,
@@ -504,18 +583,24 @@ async def generate_smart_token(
     fingerprint_phone: Optional[str] = None,
     include_consultation_fee: Optional[bool] = None,
     include_session_fee: Optional[bool] = None,
+    _prefetched_doctor: Optional[dict] = None,
+    _prefetched_hospital: Optional[dict] = None,
 ):
     doctor_id = payload.doctor_id
     hospital_id = payload.hospital_id
     appointment_date = payload.appointment_date
 
-    doctor = db.query(Doctor).filter(Doctor.id == doctor_id).first()
-    hospital = db.query(Hospital).filter(Hospital.id == hospital_id).first()
-    if not doctor or not hospital:
-        raise HTTPException(status_code=400, detail="Doctor or Hospital not found")
-
-    doctor_data = {k: v for k, v in doctor.__dict__.items() if not k.startswith('_')}
-    hospital_data = {k: v for k, v in hospital.__dict__.items() if not k.startswith('_')}
+    # Reuse prefetched data if available (from /generate/details), otherwise query
+    if _prefetched_doctor and _prefetched_hospital:
+        doctor_data = _prefetched_doctor
+        hospital_data = _prefetched_hospital
+    else:
+        doctor = db.query(Doctor).filter(Doctor.id == doctor_id).first()
+        hospital = db.query(Hospital).filter(Hospital.id == hospital_id).first()
+        if not doctor or not hospital:
+            raise HTTPException(status_code=400, detail="Doctor or Hospital not found")
+        doctor_data = {k: v for k, v in doctor.__dict__.items() if not k.startswith('_')}
+        hospital_data = {k: v for k, v in hospital.__dict__.items() if not k.startswith('_')}
     
     tz_minutes = _tz_offset_for(doctor_data, hospital_data)
     now_local = _to_local_clock(datetime.utcnow(), tz_minutes)
@@ -568,29 +653,22 @@ async def generate_smart_token(
             print(f"  - Result: First token of the day, setting to 0")
         else:
             # Alpha-weighted ETA Formula: α * AI_ETA + (1-α) * (patients_ahead * rolling_avg)
-            # alpha = 0.7 (trust factor for AI model)
             alpha = 0.7
-            
-            # Count patients currently ahead
-            patients_ahead = db.query(Token).filter(
-                Token.doctor_id == doctor_id,
-                Token.status.in_(["pending", "waiting", "confirmed", "called", "in_consultation"]),
-                func.date(Token.appointment_date) == target_date
-            ).count()
 
             # Ensure AI engine is loaded
             if not ai_engine.model:
                 ai_engine.load()
             
-            # Common metrics for AI and historical average
-            doc_history = get_doctor_history(doctor_id, db)
-            q_velocity = calculate_queue_velocity(doctor_id, db)
-            last_duration = get_last_patient_duration(doctor_id, db)
-            avg_5 = avg_last_5(doctor_id, db)
-            avg_30 = avg_last_30(doctor_id, db)
-            doctors_avail = count_available_doctors(db)
-            hour_hist = get_hour_history(db)
-            weekday_hist = get_weekday_history(db)
+            # Batch-compute all AI metrics in ~4 queries instead of 8+
+            ai_metrics = _compute_ai_metrics_batch(doctor_id, db)
+            doc_history = ai_metrics["doc_history"]
+            q_velocity = ai_metrics["q_velocity"]
+            last_duration = ai_metrics["last_duration"]
+            avg_5 = ai_metrics["avg_5"]
+            avg_30 = ai_metrics["avg_30"]
+            doctors_avail = ai_metrics["doctors_avail"]
+            hour_hist = ai_metrics["hour_hist"]
+            weekday_hist = ai_metrics["weekday_hist"]
             
             # Calculate rolling_service_time from recent averages
             metrics = [m for m in [avg_5, avg_30, last_duration] if m > 0]
@@ -624,9 +702,6 @@ async def generate_smart_token(
             }
             
             try:
-                # --- TRACE LOGGING (STEP 3) ---
-                print(f"➡️ Generating token: Calculating AI_ETA for index {patients_ahead}")
-                
                 ai_predicted_wait = ai_engine.predict_duration(ai_input)
                 
                 # Formula: α * AI_ETA + (1-α) * (patients_ahead * rolling_avg)
@@ -637,7 +712,6 @@ async def generate_smart_token(
                 
                 estimated_wait_time = int(round(final_eta))
             except Exception as e:
-                # --- SILENT FALLBACK CHECK (STEP 4) ---
                 print(f"AI PREDICTION FAILED for generating token: {e}")
                 estimated_wait_time = int(round(patients_ahead * rolling_service_time))
             
