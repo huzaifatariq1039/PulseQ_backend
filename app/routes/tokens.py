@@ -655,9 +655,34 @@ async def generate_smart_token(
     # Fetch full user details from DB to get name and phone
     patient_user = db.query(User).filter(User.id == current_user.user_id).first()
     
+    # Calculate patient age from date_of_birth
+    patient_age = None
+    if patient_user and patient_user.date_of_birth:
+        try:
+            dob = datetime.strptime(patient_user.date_of_birth, "%Y-%m-%d")
+            patient_age = (datetime.utcnow() - dob).days // 365
+        except Exception:
+            pass
+
+    # Get patient gender from user profile
+    patient_gender = getattr(patient_user, 'gender', None) if patient_user else None
+
+    # Determine department: use payload value, fallback to doctor's specialization
+    department = payload.department or doctor_data.get("specialization")
+
+    # Generate display_code (e.g., A-001, A-002)
+    doc_name = doctor_data.get("name", "T")
+    if doc_name.lower().startswith("dr"):
+        clean_name = doc_name[2:].replace(".", "").strip()
+        doc_initial = clean_name[0].upper() if clean_name else "D"
+    else:
+        doc_initial = doc_name.strip()[0].upper() if doc_name.strip() else "T"
+    display_code = f"{doc_initial}-{token_number:03d}"
+
     token_doc = {
         "id": token_id,
         "token_number": token_number,
+        "display_code": display_code,
         "patient_id": current_user.user_id,
         "doctor_id": doctor_id,
         "hospital_id": hospital_id,
@@ -667,9 +692,15 @@ async def generate_smart_token(
         "status": TokenStatus.PENDING,
         "payment_status": PaymentStatus.PENDING,
         "doctor_name": doctor_data.get("name"),
+        "doctor_specialization": doctor_data.get("specialization"),
+        "doctor_avatar_initials": doctor_data.get("avatar_initials"),
         "hospital_name": hospital_data.get("name"),
         "patient_name": patient_user.name if patient_user else "Patient",
         "patient_phone": patient_user.phone if patient_user else None,
+        "patient_age": patient_age,
+        "patient_gender": patient_gender,
+        "department": department,
+        "reason_for_visit": department,
         "consultation_fee": pricing.get("consultation_fee"),
         "session_fee": pricing.get("session_fee"),
         "total_fee": pricing.get("total_amount"),

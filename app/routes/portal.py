@@ -365,8 +365,8 @@ async def receptionist_dashboard(
                 dob = datetime.strptime(user.date_of_birth, "%Y-%m-%d")
                 age = f"{(datetime.utcnow() - dob).days // 365}y"
             except Exception: pass
-        # Assume not available, default to Male to match dummy UI till DB adds it
-        return age, "Male"
+        gender = getattr(user, 'gender', None) or "Unknown"
+        return age, gender
 
     upcoming = []
     for t in active:
@@ -523,6 +523,20 @@ async def receptionist_create_walkin_token(
     ).count()
     estimated_wait_time = max(0, patients_ahead * 15)
     
+    # Calculate patient_age as integer from the age string or dob
+    patient_age_int = None
+    if age:
+        try:
+            patient_age_int = int(age)
+        except Exception:
+            pass
+    elif user.date_of_birth:
+        try:
+            dob = datetime.strptime(user.date_of_birth, "%Y-%m-%d")
+            patient_age_int = (datetime.utcnow() - dob).days // 365
+        except Exception:
+            pass
+
     new_token = Token(
         id=token_id,
         patient_id=user.id,
@@ -535,8 +549,13 @@ async def receptionist_create_walkin_token(
         appointment_date=datetime.utcnow(),
         status="pending",
         patient_name=patient_name,
+        patient_phone=phone,
+        patient_age=patient_age_int,
+        patient_gender=gender,
         doctor_name=doctor.name,
-        department=reason,
+        doctor_specialization=doctor.specialization,
+        department=doctor.specialization,
+        reason_for_visit=reason,
         hospital_name=hospital_name_str,
         consultation_fee=doc_fee,
         total_fee=total_fee,
