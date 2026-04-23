@@ -498,21 +498,28 @@ async def cancel_token_logic(
     except Exception as e:
         print(f"[ERROR] Recalculation failed after cancel: {e}")
 
-    await create_activity_log(
-        current_user.user_id,
-        ActivityType.TOKEN_CANCELLED,
-        f"Cancelled SmartToken #{token.token_number}",
-        {"token_id": token_id, "refund_id": refund_id},
-        db=db
-    )
+    try:
+        await create_activity_log(
+            current_user.user_id,
+            ActivityType.TOKEN_CANCELLED,
+            f"Cancelled SmartToken #{token.token_number}",
+            {"token_id": token_id, "refund_id": refund_id},
+            db=db
+        )
+    except Exception as e:
+        print(f"[ERROR] Activity log creation failed after cancel: {e}")
 
-    doctor = db.query(Doctor).filter(Doctor.id == token.doctor_id).first()
-    doctor_data = {k: v for k, v in doctor.__dict__.items() if not k.startswith('_')} if doctor else {}
-    tz_minutes = _tz_offset_for(doctor_data)
-    day_local = _local_day_for(token.appointment_date, tz_minutes)
-    
-    q = _queue_object_for(db, token.doctor_id, token.hospital_id, day_local)
-    
+    # Build response even if downstream lookups fail
+    try:
+        doctor = db.query(Doctor).filter(Doctor.id == token.doctor_id).first()
+        doctor_data = {k: v for k, v in doctor.__dict__.items() if not k.startswith('_')} if doctor else {}
+        tz_minutes = _tz_offset_for(doctor_data)
+        day_local = _local_day_for(token.appointment_date, tz_minutes)
+        q = _queue_object_for(db, token.doctor_id, token.hospital_id, day_local)
+    except Exception as e:
+        print(f"[ERROR] Queue lookup failed after cancel: {e}")
+        q = {}
+
     refund_info_dict = {
         "original_amount": refund_calc.get("original_amount", 0.0),
         "processing_fee_percentage": refund_calc.get("processing_fee_percentage", 5.0),
