@@ -365,13 +365,14 @@ async def cancel_token_logic(
     except Exception:
         reason_enum = CancellationReason.OTHER
     
-    refund_calc = RefundService.calculate_refund(TOKEN_FEE, reason_enum)
+    refund_calc = RefundService.calculate_refund(TOKEN_FEE, reason_enum, db=db)
     refund_id = RefundService.create_refund_record(
         token_id=token_id,
         user_id=token.patient_id,
         refund_calculation=refund_calc,
         refund_method=cancellation.refund_method or RefundMethod.SMARTTOKEN_WALLET,
         cancellation_reason=reason_enum,
+        db=db,
     )
 
     token.status = TokenStatus.CANCELLED
