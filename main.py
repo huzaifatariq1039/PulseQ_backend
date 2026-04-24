@@ -39,6 +39,7 @@ from app.routes import reception
 from app.routes.whatsapp_webhook import router as whatsapp_webhook_router
 from app.routes.pharmacy import public_router as pharmacy_public_router
 from app.routes.pharmacy import router as pharmacy_portal_router
+from app.routes.token_alias import token_alias_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -167,6 +168,9 @@ app.include_router(tokens_listing.router, prefix="/api/v1/patient/tokens/list", 
 app.include_router(tokens_idempotent.router, prefix="/api/v1/patient/tokens/secure", tags=["Token Management"])
 app.include_router(payments.router, prefix="/api/v1/patient/payments", tags=["Payment Services"])
 app.include_router(queue.router, prefix="/api/v1/patient/queue", tags=["Queue Services"])
+
+# Frontend Compatibility: Alias for /api/v1/patients/token/generate
+app.include_router(token_alias_router, prefix="/api/v1/patients", tags=["Token Management (Frontend Alias)"])
 
 # 4. Staff & Provider Services
 app.include_router(consultation.router, prefix="/api/v1/staff/consultation", tags=["Staff Portal"])
