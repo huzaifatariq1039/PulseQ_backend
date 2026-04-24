@@ -39,7 +39,7 @@ from app.routes.ai import (
 )
 from app.services.ai_engine import ai_engine
 
-router = APIRouter(prefix="/tokens", tags=["SmartTokens"])
+router = APIRouter(tags=["SmartTokens"])
 logger = logging.getLogger(__name__)
 
 # -------------------- Helpers --------------------
