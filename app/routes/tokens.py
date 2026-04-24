@@ -324,7 +324,7 @@ async def cancel_token_logic(
         "message": "Token cancelled successfully",
         "token_id": token_id,
         "refund_id": refund_id,
-        "refund_amount": refund_calc.refund_amount,
+        "refund_amount": refund_calc["refund_amount"],
         "reason": reason_enum.value,
         "queue": q
     }
