@@ -737,19 +737,22 @@ async def generate_smart_token(
     patient_user = db.query(User).filter(User.id == current_user.user_id).first()
     
     # Calculate patient age from date_of_birth
-    patient_age = None
-    if patient_user and patient_user.date_of_birth:
+    patient_age = payload.patient_age
+    if not patient_age and patient_user and patient_user.date_of_birth:
         try:
             dob = datetime.strptime(patient_user.date_of_birth, "%Y-%m-%d")
             patient_age = (datetime.utcnow() - dob).days // 365
         except Exception:
             pass
 
-    # Get patient gender from user profile
-    patient_gender = getattr(patient_user, 'gender', None) if patient_user else None
+    # Get patient gender from payload, fallback to user profile
+    patient_gender = payload.patient_gender
+    if not patient_gender and patient_user:
+        patient_gender = getattr(patient_user, 'gender', None)
 
-    # Determine department: use payload value, fallback to doctor's specialization
+    # Determine department and reason for visit
     department = payload.department or doctor_data.get("specialization")
+    reason_for_visit = payload.reason_for_visit or department
 
     # Generate display_code (e.g., A-001, A-002)
     doc_name = doctor_data.get("name", "T")
@@ -781,7 +784,7 @@ async def generate_smart_token(
         "patient_age": patient_age,
         "patient_gender": patient_gender,
         "department": department,
-        "reason_for_visit": department,
+        "reason_for_visit": reason_for_visit,
         "consultation_fee": pricing.get("consultation_fee"),
         "session_fee": pricing.get("session_fee"),
         "total_fee": pricing.get("total_amount"),
@@ -1062,6 +1065,23 @@ async def create_token(
     # Generate patient MRN if not exists
     mrn = get_or_create_patient_mrn(db, current_user.user_id, spec.hospital_id)
 
+    patient_user = db.query(User).filter(User.id == current_user.user_id).first()
+    
+    patient_age = spec.patient_age
+    if not patient_age and patient_user and patient_user.date_of_birth:
+        try:
+            dob = datetime.strptime(patient_user.date_of_birth, "%Y-%m-%d")
+            patient_age = (datetime.utcnow() - dob).days // 365
+        except Exception:
+            pass
+
+    patient_gender = spec.patient_gender
+    if not patient_gender and patient_user:
+        patient_gender = getattr(patient_user, 'gender', None)
+
+    department = spec.department or doctor_data.get("specialization")
+    reason_for_visit = spec.reason_for_visit or department
+
     token_doc = {
         "id": token_id,
         "patient_id": current_user.user_id,
@@ -1075,11 +1095,11 @@ async def create_token(
         "payment_status": PaymentStatus.PENDING,
         "doctor_name": doctor_data.get("name"),
         "hospital_name": hospital.name,
-        "patient_name": getattr(current_user, "name", None),
-        "patient_phone": getattr(current_user, "phone", None),
-        "patient_age": spec.patient_age,
-        "patient_gender": spec.patient_gender,
-        "reason_for_visit": spec.reason_for_visit,
+        "patient_name": patient_user.name if patient_user else "Patient",
+        "patient_phone": patient_user.phone if patient_user else None,
+        "patient_age": patient_age,
+        "patient_gender": patient_gender,
+        "reason_for_visit": reason_for_visit,
         "created_at": datetime.utcnow(),
         "updated_at": datetime.utcnow(),
     }
