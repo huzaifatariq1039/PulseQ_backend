@@ -67,10 +67,8 @@ async def doctor_current_patient(
     current_user=Depends(get_current_active_user),
     hospital_id: Optional[str] = Query(None),
 ) -> Dict[str, Any]:
-    try:
-        role = get_user_role(current_user.user_id)
-    except Exception:
-        role = None
+    # Get role from current_user JWT token (already validated by require_roles)
+    role = str(current_user.role or "").lower()
     
     # Allow admin and patient roles without restriction
     # For doctor role, verify they're accessing their own consultations
@@ -131,10 +129,8 @@ async def consultation_start(
             detail=f"Missing required fields: {', '.join(missing)}. Please provide both token_id and doctor_id in the request body."
         )
 
-    try:
-        role = get_user_role(current_user.user_id)
-    except Exception:
-        role = None
+    # Get role from current_user JWT token (already validated by require_roles)
+    role = str(current_user.role or "").lower()
     
     # Allow admin and patient roles without restriction
     # For doctor role, verify they're accessing their own consultations
@@ -229,10 +225,8 @@ async def consultation_end(
             detail=f"Missing required fields: {', '.join(missing)}. Please provide both token_id and doctor_id in the request body."
         )
 
-    try:
-        role = get_user_role(current_user.user_id)
-    except Exception:
-        role = None
+    # Get role from current_user JWT token (already validated by require_roles)
+    role = str(current_user.role or "").lower()
     
     # Allow admin and patient roles without restriction
     # For doctor role, verify they're accessing their own consultations
