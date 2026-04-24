@@ -320,12 +320,20 @@ async def cancel_token_logic(
 
     q = _queue_object_for(db, token.doctor_id, token.hospital_id, day_local)
 
+    # Return structure matching CancellationResponse model
     return {
         "message": "Token cancelled successfully",
         "token_id": token_id,
+        "cancellation_reason": reason_enum,
+        "refund_info": {
+            "original_amount": refund_calc["original_amount"],
+            "processing_fee_percentage": refund_calc["processing_fee_percentage"],
+            "processing_fee_amount": refund_calc["processing_fee_amount"],
+            "refund_amount": refund_calc["refund_amount"],
+            "refund_method": cancellation.refund_method,
+            "processing_time_days": refund_calc["processing_time"]
+        },
         "refund_id": refund_id,
-        "refund_amount": refund_calc["refund_amount"],
-        "reason": reason_enum.value,
         "queue": q
     }
 
