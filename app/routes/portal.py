@@ -355,24 +355,55 @@ async def receptionist_dashboard(
     
     now_serving = next((t for t in active if t.status in ("in_consultation", "called")), active[0] if active else None)
 
-    def _get_age_and_gender(patient_id):
+    def _get_age_and_gender(patient_id, token_obj):
+        # First try to get from token (walk-in tokens have this data)
+        if token_obj:
+            token_age = getattr(token_obj, 'patient_age', None)
+            token_gender = getattr(token_obj, 'patient_gender', None)
+            
+            # If token has age, use it
+            if token_age is not None:
+                try:
+                    age_val = int(token_age)
+                    age = f"{age_val}y"
+                except Exception:
+                    age = "N/A"
+            else:
+                age = "N/A"
+            
+            # If token has gender, use it
+            if token_gender:
+                gender = str(token_gender).capitalize()
+            else:
+                gender = "Unknown"
+            
+            # Return token data if available
+            if age != "N/A" or gender != "Unknown":
+                return age, gender
+        
+        # Fallback to User table if token doesn't have the data
         if not patient_id: return "N/A", "Unknown"
         user = db.query(User).filter(User.id == patient_id).first()
         if not user: return "N/A", "Unknown"
+        
         age = "N/A"
         if user.date_of_birth:
             try:
                 dob = datetime.strptime(user.date_of_birth, "%Y-%m-%d")
                 age = f"{(datetime.utcnow() - dob).days // 365}y"
             except Exception: pass
+        
         gender = getattr(user, 'gender', None) or "Unknown"
+        if gender and gender != "Unknown":
+            gender = str(gender).capitalize()
+        
         return age, gender
 
     upcoming = []
     for t in active:
         if now_serving and t.id == now_serving.id:
             continue
-        age, gender = _get_age_and_gender(t.patient_id)
+        age, gender = _get_age_and_gender(t.patient_id, t)
         
         upcoming.append({
             "token_id": t.id,
@@ -403,7 +434,7 @@ async def receptionist_dashboard(
 
     now_serving_age, now_serving_gender = "N/A", "Unknown"
     if now_serving:
-         now_serving_age, now_serving_gender = _get_age_and_gender(now_serving.patient_id)
+         now_serving_age, now_serving_gender = _get_age_and_gender(now_serving.patient_id, now_serving)
 
     return ok(
         data={
