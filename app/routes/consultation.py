@@ -71,9 +71,28 @@ async def doctor_current_patient(
         role = get_user_role(current_user.user_id)
     except Exception:
         role = None
+    
+    # Allow admin and patient roles without restriction
+    # For doctor role, verify they're accessing their own consultations
+    if role == "admin" or role == "patient":
+        # Admins and patients can access any consultation
+        pass
+    elif role == "doctor":
+        # Doctors can only start/end their own consultations
+        # Check if the doctor_id in payload matches their user_id OR their doctor profile id
+        doctor_profile = db.query(Doctor).filter(Doctor.user_id == current_user.user_id).first()
+        doctor_profile_id = doctor_profile.id if doctor_profile else None
         
-    if role not in ("admin", "patient") and str(current_user.user_id) != str(doctor_id):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+        if str(current_user.user_id) != str(doctor_id) and str(doctor_profile_id) != str(doctor_id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, 
+                detail="Access denied: You can only access your own consultations"
+            )
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail=f"Access denied: Invalid role '{role}'. Required: doctor, admin, or patient"
+        )
 
     _auto_skip_called_tokens(db, hospital_id=hospital_id, doctor_id=doctor_id)
 
@@ -116,9 +135,28 @@ async def consultation_start(
         role = get_user_role(current_user.user_id)
     except Exception:
         role = None
+    
+    # Allow admin and patient roles without restriction
+    # For doctor role, verify they're accessing their own consultations
+    if role == "admin" or role == "patient":
+        # Admins and patients can access any consultation
+        pass
+    elif role == "doctor":
+        # Doctors can only start/end their own consultations
+        # Check if the doctor_id in payload matches their user_id OR their doctor profile id
+        doctor_profile = db.query(Doctor).filter(Doctor.user_id == current_user.user_id).first()
+        doctor_profile_id = doctor_profile.id if doctor_profile else None
         
-    if role not in ("admin", "patient") and str(current_user.user_id) != str(doctor_id):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+        if str(current_user.user_id) != str(doctor_id) and str(doctor_profile_id) != str(doctor_id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, 
+                detail="Access denied: You can only access your own consultations"
+            )
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail=f"Access denied: Invalid role '{role}'. Required: doctor, admin, or patient"
+        )
 
     _auto_skip_called_tokens(db, doctor_id=doctor_id)
 
@@ -195,9 +233,28 @@ async def consultation_end(
         role = get_user_role(current_user.user_id)
     except Exception:
         role = None
+    
+    # Allow admin and patient roles without restriction
+    # For doctor role, verify they're accessing their own consultations
+    if role == "admin" or role == "patient":
+        # Admins and patients can access any consultation
+        pass
+    elif role == "doctor":
+        # Doctors can only start/end their own consultations
+        # Check if the doctor_id in payload matches their user_id OR their doctor profile id
+        doctor_profile = db.query(Doctor).filter(Doctor.user_id == current_user.user_id).first()
+        doctor_profile_id = doctor_profile.id if doctor_profile else None
         
-    if role not in ("admin", "patient") and str(current_user.user_id) != str(doctor_id):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+        if str(current_user.user_id) != str(doctor_id) and str(doctor_profile_id) != str(doctor_id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, 
+                detail="Access denied: You can only access your own consultations"
+            )
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail=f"Access denied: Invalid role '{role}'. Required: doctor, admin, or patient"
+        )
 
     doctor = db.query(Doctor).filter(Doctor.id == doctor_id).first()
     if not doctor:
