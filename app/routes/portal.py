@@ -180,9 +180,15 @@ async def doctor_dashboard(
     doctor_header = {
         "id": doctor.id if doctor else current.user_id,
         "name": doctor.name if doctor else user_name,
-        "department": doctor.specialization if doctor else None,
-        "room": getattr(doctor, "room", None) if doctor else None,
-        "status": doctor.status.value if doctor and hasattr(doctor.status, 'value') else str(getattr(doctor, 'status', '')).lower(),
+        "department": doctor.specialization if doctor and doctor.specialization else "General Medicine",
+        "room": getattr(doctor, "room_number", None) or getattr(doctor, "room", None) or "Not Assigned",
+        "status": (doctor.status if doctor and doctor.status else "available").lower() if isinstance(doctor.status, str) else (doctor.status.value if doctor and hasattr(doctor.status, 'value') else "available"),
+        "email": doctor.email if doctor and doctor.email else None,
+        "consultation_fee": doctor.consultation_fee if doctor else None,
+        "session_fee": doctor.session_fee if doctor else None,
+        "available_days": doctor.available_days if doctor else [],
+        "start_time": doctor.start_time if doctor else None,
+        "end_time": doctor.end_time if doctor else None,
     }
 
     # Today's tokens
