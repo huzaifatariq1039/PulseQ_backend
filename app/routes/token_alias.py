@@ -109,13 +109,13 @@ async def token_cancel_alias(
         raise HTTPException(status_code=400, detail="token_id is required")
     
     # Parse cancellation request
-    reason = payload.get("reason", "other")
+    reason = payload.get("reason", "other_reason")
     refund_method = payload.get("refund_method", "smarttoken_wallet")
     
     try:
-        reason_enum = CancellationReason(reason.lower()) if reason else CancellationReason.OTHER
+        reason_enum = CancellationReason(reason.lower()) if reason else CancellationReason.OTHER_REASON
     except Exception:
-        reason_enum = CancellationReason.OTHER
+        reason_enum = CancellationReason.OTHER_REASON
     
     try:
         refund_method_enum = RefundMethod(refund_method.lower()) if refund_method else RefundMethod.SMARTTOKEN_WALLET
