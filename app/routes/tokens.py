@@ -268,11 +268,21 @@ async def cancel_token_logic(
     db: Session,
     current_user: Any
 ):
+    logger.info(f"Attempting to cancel token {token_id} for user {current_user.user_id}")
+    
     token = db.query(Token).filter(Token.id == token_id).first()
     if not token:
+        logger.error(f"Token {token_id} not found")
         raise HTTPException(status_code=404, detail="Token not found")
     if token.patient_id != current_user.user_id:
+        logger.error(f"Access denied: Token {token_id} does not belong to user {current_user.user_id}")
         raise HTTPException(status_code=403, detail="Access denied")
+
+    # Check if token is already cancelled or completed
+    status_val = str(token.status.value if hasattr(token.status, 'value') else token.status).lower()
+    if status_val in ["cancelled", "completed"]:
+        logger.error(f"Token {token_id} is already {status_val}")
+        raise HTTPException(status_code=400, detail=f"Token is already {status_val}")
 
     try:
         reason_enum = cancellation.reason if isinstance(cancellation.reason, CancellationReason) else CancellationReason(str(cancellation.reason or "other").lower())
@@ -289,14 +299,17 @@ async def cancel_token_logic(
     )
 
     token.status = TokenStatus.CANCELLED
+    token.cancelled_at = datetime.utcnow()
     token.updated_at = datetime.utcnow()
     db.commit()
+    
+    logger.info(f"Token {token_id} cancelled successfully with refund {refund_id}")
 
     await create_activity_log(
         current_user.user_id,
         ActivityType.TOKEN_CANCELLED,
         f"Cancelled SmartToken #{token.token_number}",
-        {"token_id": token_id, "refund_id": refund_id},
+        {"token_id": token_id, "refund_id": refund_id, "reason": reason_enum.value},
         db=db
     )
 
@@ -311,6 +324,8 @@ async def cancel_token_logic(
         "message": "Token cancelled successfully",
         "token_id": token_id,
         "refund_id": refund_id,
+        "refund_amount": refund_calc.refund_amount,
+        "reason": reason_enum.value,
         "queue": q
     }
 
@@ -359,6 +374,20 @@ async def get_my_active_token_details(
     if not token:
         raise HTTPException(status_code=404, detail="No active token found")
 
+    # If patient_name or patient_phone is null, fetch from User table
+    if not token.patient_name or not token.patient_phone:
+        user = db.query(User).filter(User.id == current_user.user_id).first()
+        if user:
+            if not token.patient_name:
+                token.patient_name = user.name
+            if not token.patient_phone:
+                token.patient_phone = user.phone
+            # Update the token in DB to avoid future lookups
+            try:
+                db.commit()
+            except Exception:
+                db.rollback()
+
     # Get doctor and hospital info
     doctor = db.query(Doctor).filter(Doctor.id == token.doctor_id).first()
     hospital = db.query(Hospital).filter(Hospital.id == token.hospital_id).first()
@@ -386,6 +415,20 @@ async def get_my_active_token(
 
     if not token:
         raise HTTPException(status_code=404, detail="No active token found")
+
+    # If patient_name or patient_phone is null, fetch from User table
+    if not token.patient_name or not token.patient_phone:
+        user = db.query(User).filter(User.id == current_user.user_id).first()
+        if user:
+            if not token.patient_name:
+                token.patient_name = user.name
+            if not token.patient_phone:
+                token.patient_phone = user.phone
+            # Update the token in DB to avoid future lookups
+            try:
+                db.commit()
+            except Exception:
+                db.rollback()
 
     return _to_smart_token_response(token)
 
@@ -584,6 +627,11 @@ async def generate_smart_token(
         estimated_wait_time = calc_ahead_fallback * 15
 
     # ✅ Fixed: token_doc now includes patient_age, patient_gender, reason_for_visit, display_code
+    # Fetch user info from database to get name and phone
+    user = db.query(User).filter(User.id == current_user.user_id).first()
+    patient_name = user.name if user else None
+    patient_phone = user.phone if user else None
+    
     token_doc = {
         "id": token_id,
         "token_number": token_number,
@@ -600,8 +648,8 @@ async def generate_smart_token(
         "doctor_specialization": doctor_data.get("specialization"),
         "doctor_avatar_initials": doctor_data.get("avatar_initials"),
         "hospital_name": hospital_data.get("name"),
-        "patient_name": getattr(current_user, "name", None),
-        "patient_phone": getattr(current_user, "phone", None),
+        "patient_name": patient_name,
+        "patient_phone": patient_phone,
         "department": doctor_data.get("specialization"),
         "patient_age": payload.patient_age,
         "patient_gender": payload.patient_gender,
@@ -673,16 +721,27 @@ async def generate_token_alias(
     return await generate_token_by_selection(payload, db, current_user)
 
 
-@router.post("/cancel", response_model=CancellationResponse)
+@router.post("/cancel")
 async def cancel_token_alias(
     payload: dict,
     db: Session = Depends(get_db),
     current_user = Depends(get_current_active_user)
 ):
+    """Cancel a token by token_id. Expects {"token_id": "...", "reason": "...", "refund_method": "..."}"""
     token_id = payload.get("token_id")
     if not token_id:
         raise HTTPException(status_code=400, detail="token_id is required")
-    return await cancel_token_endpoint(token_id, payload, db, current_user)
+    
+    result = await cancel_token_endpoint(token_id, payload, db, current_user)
+    
+    # Return a more frontend-friendly response
+    return {
+        "success": True,
+        "message": result.message if hasattr(result, 'message') else result.get("message", "Token cancelled successfully"),
+        "token_id": result.token_id if hasattr(result, 'token_id') else result.get("token_id"),
+        "refund_id": result.refund_id if hasattr(result, 'refund_id') else result.get("refund_id"),
+        "data": result
+    }
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
@@ -713,6 +772,11 @@ async def create_token(
 
     token_id = str(uuid.uuid4())
     mrn = get_or_create_patient_mrn(db, current_user.user_id, spec.hospital_id)
+    
+    # Fetch user info from database to get name and phone
+    user = db.query(User).filter(User.id == current_user.user_id).first()
+    patient_name = user.name if user else None
+    patient_phone = user.phone if user else None
 
     token_doc = {
         "id": token_id,
@@ -728,8 +792,8 @@ async def create_token(
         "doctor_name": doctor_data.get("name"),
         "doctor_specialization": doctor_data.get("specialization"),
         "hospital_name": hospital.name,
-        "patient_name": getattr(current_user, "name", None),
-        "patient_phone": getattr(current_user, "phone", None),
+        "patient_name": patient_name,
+        "patient_phone": patient_phone,
         "department": doctor_data.get("specialization"),
         # ✅ Fixed: also save patient fields in create_token
         "patient_age": spec.patient_age,
