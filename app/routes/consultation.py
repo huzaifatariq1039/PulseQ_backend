@@ -100,8 +100,17 @@ async def consultation_start(
 ) -> Dict[str, Any]:
     token_id = str((payload or {}).get("token_id") or "").strip()
     doctor_id = str((payload or {}).get("doctor_id") or "").strip()
+    
     if not token_id or not doctor_id:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="token_id and doctor_id are required")
+        missing = []
+        if not token_id:
+            missing.append("token_id")
+        if not doctor_id:
+            missing.append("doctor_id")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, 
+            detail=f"Missing required fields: {', '.join(missing)}. Please provide both token_id and doctor_id in the request body."
+        )
 
     try:
         role = get_user_role(current_user.user_id)
@@ -170,8 +179,17 @@ async def consultation_end(
 ) -> Dict[str, Any]:
     token_id = str((payload or {}).get("token_id") or "").strip()
     doctor_id = str((payload or {}).get("doctor_id") or "").strip()
+    
     if not token_id or not doctor_id:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="token_id and doctor_id are required")
+        missing = []
+        if not token_id:
+            missing.append("token_id")
+        if not doctor_id:
+            missing.append("doctor_id")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, 
+            detail=f"Missing required fields: {', '.join(missing)}. Please provide both token_id and doctor_id in the request body."
+        )
 
     try:
         role = get_user_role(current_user.user_id)
