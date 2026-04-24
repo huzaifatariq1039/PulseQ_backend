@@ -349,8 +349,29 @@ async def get_my_active_token_details(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_active_user)
 ):
-    active = await get_my_active_token(db=db, current_user=current_user)
-    return await get_appointment_details(token_id=active.id, db=db, current_user=current_user)
+    """Get the most recent active token with full appointment details including doctor, hospital, and queue status."""
+    # Query for the most recent active token
+    token = db.query(Token).filter(
+        Token.patient_id == current_user.user_id,
+        Token.status.notin_(["cancelled", "completed"])
+    ).order_by(Token.created_at.desc()).first()
+
+    if not token:
+        raise HTTPException(status_code=404, detail="No active token found")
+
+    # Get doctor and hospital info
+    doctor = db.query(Doctor).filter(Doctor.id == token.doctor_id).first()
+    hospital = db.query(Hospital).filter(Hospital.id == token.hospital_id).first()
+
+    # Get queue status
+    queue = SmartTokenService.get_queue_status(token.doctor_id, token.token_number, token.appointment_date)
+
+    return {
+        "token": _to_smart_token_response(token),
+        "doctor": {k: v for k, v in doctor.__dict__.items() if not k.startswith('_')} if doctor else {},
+        "hospital": {k: v for k, v in hospital.__dict__.items() if not k.startswith('_')} if hospital else {},
+        "queue": queue
+    }
 
 
 @router.get("/my-active", response_model=SmartTokenResponse)
