@@ -489,6 +489,10 @@ class SmartTokenGenerateRequest(BaseModel):
     hospital_id: str
     appointment_date: Optional[datetime] = None
     department: Optional[str] = None
+    patient_age: Optional[int] = None
+    patient_gender: Optional[str] = None
+    reason_for_visit: Optional[str] = None
+    notes: Optional[str] = None
 
 class SmartTokenResponse(BaseModel):
     id: str
@@ -525,6 +529,7 @@ class SmartTokenResponse(BaseModel):
     patient_age: Optional[int] = None
     patient_gender: Optional[str] = None
     reason_for_visit: Optional[str] = None
+    notes: Optional[str] = None
     # Nested patient object for frontend convenience
     patient: Optional[Dict[str, Any]] = None
     queue_opt_in: bool = False
