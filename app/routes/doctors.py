@@ -211,7 +211,7 @@ async def get_doctor_details_alias(
     return await get_doctor(doctor_id, db)
 
 
-@router.patch("/{doctor_id}", dependencies=[Depends(require_roles("admin"))])
+@router.patch("/{doctor_id}", dependencies=[Depends(require_roles("receptionist", "admin"))])
 async def receptionist_update_doctor(
     doctor_id: str,
     payload: Dict[str, Any],

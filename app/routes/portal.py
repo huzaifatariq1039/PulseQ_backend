@@ -633,4 +633,95 @@ async def receptionist_skip_token(
     
     return ok(message="Token skipped")
 
+
+@router.put("/receptionist/tokens/{token_id}", dependencies=[Depends(require_roles("receptionist", "admin"))])
+async def receptionist_update_token(
+    token_id: str,
+    payload: Dict[str, Any],
+    db: Session = Depends(get_db),
+    current: TokenData = Depends(get_current_active_user),
+) -> Dict[str, Any]:
+    """Update token details (receptionist can edit patient info, appointment time, etc.)"""
+    token = db.query(Token).filter(Token.id == token_id).first()
+    if not token:
+        raise HTTPException(status_code=404, detail="Token not found")
+    
+    # Prevent editing cancelled or completed tokens
+    if token.status in ["cancelled", "completed"]:
+        raise HTTPException(status_code=400, detail=f"Cannot edit token with status: {token.status}")
+    
+    # Update allowed fields
+    updatable_fields = [
+        "patient_name", "patient_phone", "patient_age", "patient_gender",
+        "reason_for_visit", "appointment_date", "department"
+    ]
+    
+    updated_fields = []
+    for field in updatable_fields:
+        if field in payload:
+            setattr(token, field, payload[field])
+            updated_fields.append(field)
+    
+    # Handle age to DOB conversion if age is provided
+    if "patient_age" in payload:
+        try:
+            age = int(payload["patient_age"])
+            # Update patient_age as integer
+            token.patient_age = age
+        except (ValueError, TypeError):
+            pass
+    
+    token.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(token)
+    
+    return ok(
+        data={
+            "token_id": token.id,
+            "display_code": token.display_code,
+            "patient_name": token.patient_name,
+            "patient_age": token.patient_age,
+            "patient_gender": token.patient_gender,
+            "status": token.status,
+            "updated_fields": updated_fields
+        },
+        message="Token updated successfully"
+    )
+
+
+@router.delete("/receptionist/tokens/{token_id}", dependencies=[Depends(require_roles("receptionist", "admin"))])
+async def receptionist_delete_token(
+    token_id: str,
+    db: Session = Depends(get_db),
+    current: TokenData = Depends(get_current_active_user),
+) -> Dict[str, Any]:
+    """Delete/cancel a token (receptionist can delete tokens)"""
+    token = db.query(Token).filter(Token.id == token_id).first()
+    if not token:
+        raise HTTPException(status_code=404, detail="Token not found")
+    
+    # Prevent deleting completed tokens
+    if token.status == "completed":
+        raise HTTPException(status_code=400, detail="Cannot delete completed token")
+    
+    # If token is already cancelled, just confirm
+    if token.status == "cancelled":
+        return ok(message="Token is already cancelled")
+    
+    # Cancel the token
+    token.status = "cancelled"
+    token.cancelled_at = datetime.utcnow()
+    token.updated_at = datetime.utcnow()
+    db.commit()
+    
+    return ok(
+        data={
+            "token_id": token.id,
+            "display_code": token.display_code,
+            "status": "cancelled",
+            "cancelled_at": token.cancelled_at
+        },
+        message="Token cancelled/deleted successfully"
+    )
+
 # -------------------- Utility --------------------
