@@ -562,7 +562,7 @@ async def generate_smart_token(
         calc_ahead_fallback = max(patients_ahead, 1)
         estimated_wait_time = calc_ahead_fallback * 15
 
-    # ✅ Fixed: token_doc now includes patient_age, patient_gender, reason_for_visit
+    # ✅ Fixed: token_doc now includes patient_age, patient_gender, reason_for_visit, display_code
     token_doc = {
         "id": token_id,
         "token_number": token_number,
@@ -571,6 +571,7 @@ async def generate_smart_token(
         "hospital_id": hospital_id,
         "mrn": mrn,
         "hex_code": f"{token_id[:7]}{token_number:03d}",
+        "display_code": f"{doctor_data.get('hex_code', 'A')}-{token_number:03d}",
         "appointment_date": appointment_date,
         "status": TokenStatus.PENDING,
         "payment_status": PaymentStatus.PENDING,
@@ -616,7 +617,7 @@ async def generate_smart_token(
     return response_obj
 
 
-@router.post("/generate/by-selection")
+@router.post("/generate")
 async def generate_token_by_selection(
     payload: Dict[str, Any] = Body(...),
     db: Session = Depends(get_db),
@@ -638,6 +639,17 @@ async def generate_token_by_selection(
         db=db,
         current_user=current_user
     )
+
+
+# Alias for frontend compatibility - old path: /api/v1/patients/token/generate
+@router.post("/patients/token/generate")
+async def generate_token_alias(
+    payload: Dict[str, Any] = Body(...),
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_active_user),
+):
+    """Alias endpoint for frontend compatibility"""
+    return await generate_token_by_selection(payload, db, current_user)
 
 
 @router.post("/cancel", response_model=CancellationResponse)
