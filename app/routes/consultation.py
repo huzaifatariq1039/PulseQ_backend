@@ -293,11 +293,8 @@ async def consultation_end(
     next_token_data = None
     if next_token_obj:
         next_token_obj.status = "called"
+        next_token_obj.called_at = now
         next_token_obj.updated_at = now
-        
-        # Safely set attributes if they exist in the model
-        if hasattr(next_token_obj, "called_at"):
-            setattr(next_token_obj, "called_at", now)
         
         db.commit()
         next_token_data = {k: v for k, v in next_token_obj.__dict__.items() if not k.startswith('_')}
