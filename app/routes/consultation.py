@@ -92,7 +92,7 @@ async def doctor_current_patient(
     return ok(data={"token": token_data})
 
 
-@router.post("/consultation/start", dependencies=[Depends(require_roles("doctor", "admin", "patient"))])
+@router.post("/start", dependencies=[Depends(require_roles("doctor", "admin", "patient"))])
 async def consultation_start(
     payload: Dict[str, Any],
     db: Session = Depends(get_db),
@@ -162,7 +162,7 @@ async def consultation_start(
     return ok(data={"token_id": token_id, "doctor_id": doctor_id, "status": "in_consultation"}, message="Consultation started")
 
 
-@router.post("/consultation/end", dependencies=[Depends(require_roles("doctor", "admin", "patient"))])
+@router.post("/end", dependencies=[Depends(require_roles("doctor", "admin", "patient"))])
 async def consultation_end(
     payload: Dict[str, Any],
     db: Session = Depends(get_db),

@@ -379,12 +379,12 @@ def _normalize_time_to_hhmm(s: Optional[str]) -> Optional[str]:
     except Exception:
         return None
 
-@router.post("", dependencies=[Depends(require_roles("admin"))])
+@router.post("", dependencies=[Depends(require_roles("receptionist", "admin"))])
 async def create_doctor(
     doctor: DoctorCreate,
     db: Session = Depends(get_db)
 ):
-    """Create a new doctor (Admin only).
+    """Create a new doctor (Receptionist/Admin).
     
     This also creates a corresponding User record for doctor portal login.
     """
@@ -396,17 +396,7 @@ async def create_doctor(
             detail=f"User with email {doctor.email} already exists"
         )
 
-    # 2. Check if doctor with same name and hospital already exists
-    existing_doctor = db.query(Doctor).filter(
-        Doctor.name == doctor.name,
-        Doctor.hospital_id == doctor.hospital_id
-    ).first()
-    
-    if existing_doctor:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Doctor with this name already exists in this hospital"
-        )
+
 
     import uuid
     user_id = str(uuid.uuid4())

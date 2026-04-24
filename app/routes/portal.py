@@ -212,12 +212,24 @@ async def doctor_dashboard(
     waiting_tokens = [t for t in active_tokens if t.status in ("pending", "confirmed", "waiting") and t.token_number > curr_num]
 
     def _patient_row(t: Token) -> Dict[str, Any]:
+        # Calculate age from patient_age field or date_of_birth
+        age_display = "N/A"
+        if t.patient_age is not None:
+            try:
+                age_val = int(t.patient_age)
+                age_display = f"{age_val}y"
+            except (ValueError, TypeError):
+                age_display = "N/A"
+        
         return {
             "token_id": t.id,
             "token_number": t.display_code or str(t.token_number),
             "mrn": t.mrn,
-            "patient_name": t.patient_name,
-            "phone": getattr(t, 'patient_phone', None), # Assuming fields exist in Token model or joined User
+            "patient_name": t.patient_name or "Unknown",
+            "patient_age": age_display,
+            "patient_gender": t.patient_gender or "Unknown",
+            "phone": getattr(t, 'patient_phone', None) or "N/A",
+            "reason_for_visit": getattr(t, 'reason_for_visit', None) or "General Consultation",
             "status": t.status.value if hasattr(t.status, 'value') else str(t.status).lower(),
             "payment": "Paid" if t.payment_status == "paid" else "Unpaid",
             "source": "walk_in" if getattr(t, 'is_walk_in', False) else "online",
@@ -634,7 +646,7 @@ async def receptionist_skip_token(
     return ok(message="Token skipped")
 
 
-@router.put("/receptionist/tokens/{token_id}", dependencies=[Depends(require_roles("receptionist", "admin"))])
+@router.patch("/receptionist/tokens/{token_id}", dependencies=[Depends(require_roles("receptionist", "admin"))])
 async def receptionist_update_token(
     token_id: str,
     payload: Dict[str, Any],
@@ -652,7 +664,7 @@ async def receptionist_update_token(
     
     # Update allowed fields
     updatable_fields = [
-        "patient_name", "patient_phone", "patient_age", "patient_gender",
+        "patient_name", "patient_phone", "patient_gender",
         "reason_for_visit", "appointment_date", "department"
     ]
     
@@ -665,10 +677,18 @@ async def receptionist_update_token(
     # Handle age to DOB conversion if age is provided
     if "patient_age" in payload:
         try:
-            age = int(payload["patient_age"])
+            age_str = str(payload["patient_age"]).strip()
+            # Remove 'y' suffix if present (e.g., "0y", "25y")
+            if age_str.endswith('y'):
+                age_str = age_str[:-1]
+            
+            age = int(age_str)
             # Update patient_age as integer
             token.patient_age = age
+            if "patient_age" not in updated_fields:
+                updated_fields.append("patient_age")
         except (ValueError, TypeError):
+            # If age can't be parsed, skip it
             pass
     
     token.updated_at = datetime.utcnow()
