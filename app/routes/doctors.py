@@ -832,6 +832,42 @@ async def get_available_slots(
 
     return {"doctor_id": doctor_id, "day": day, "slot_minutes": slot_minutes, "slots": out}
 
+@router.get("/{doctor_id}/details")
+async def get_doctor_details(
+    doctor_id: str,
+    db: Session = Depends(get_db)
+):
+    doctor = db.query(Doctor).filter(Doctor.id == doctor_id).first()
+    if not doctor:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Doctor not found"
+        )
+    
+    return {
+        "id": doctor.id,
+        "name": doctor.name,
+        "specialization": doctor.specialization,
+        "subcategory": doctor.subcategory,
+        "hospital_id": doctor.hospital_id,
+        "consultation_fee": doctor.consultation_fee,
+        "session_fee": doctor.session_fee,
+        "status": doctor.status,
+        "available_days": doctor.available_days or [],
+        "start_time": doctor.start_time,
+        "end_time": doctor.end_time,
+        "avatar_initials": doctor.avatar_initials,
+        "rating": doctor.rating,
+        "review_count": doctor.review_count,
+        "email": doctor.email if hasattr(doctor, 'email') else None,
+        "created_at": doctor.created_at,
+        "updated_at": doctor.updated_at,
+        "qualifications": doctor.qualifications if hasattr(doctor, 'qualifications') else None,
+        "experience": doctor.experience_years if hasattr(doctor, 'experience_years') else None,
+        "languages": doctor.languages if hasattr(doctor, 'languages') else [],
+        "about": doctor.about if hasattr(doctor, 'about') else None,
+        "room_number": doctor.room_number if hasattr(doctor, 'room_number') else None,
+    }
 @router.get("/", response_model=List[DoctorResponse])
 async def list_doctors(
     hospital_id: Optional[str] = Query(None, description="Filter by hospital ID"),
