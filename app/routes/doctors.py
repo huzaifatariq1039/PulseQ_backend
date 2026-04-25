@@ -9,8 +9,10 @@ from app.db_models import Doctor, Hospital, User, Department
 from app.security import get_current_active_user, require_roles, get_password_hash
 from datetime import datetime
 import random
+import logging
 
 router = APIRouter()
+logger = logging.getLogger("performance.doctors")
 
 
 @router.patch("/status", dependencies=[Depends(require_roles("receptionist", "admin", "patient"))])
