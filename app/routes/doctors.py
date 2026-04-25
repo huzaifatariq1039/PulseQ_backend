@@ -214,7 +214,6 @@ async def receptionist_manage_doctors(
         dep = str(department).strip()
         if dep:
             query = query.filter(
-                Doctor.department.ilike(f"%{dep}%") | 
                 Doctor.specialization.ilike(f"%{dep}%")
             )
     
@@ -459,7 +458,7 @@ async def delete_department(
     return ok(message="Department deleted successfully")
 
 
-@router.put("/{doctor_id}", dependencies=[Depends(require_roles("receptionist", "admin"))])
+@router.patch("/{doctor_id}", dependencies=[Depends(require_roles("receptionist", "admin"))])
 async def receptionist_update_doctor(
     doctor_id: str,
     payload: Dict[str, Any],
@@ -562,11 +561,20 @@ async def receptionist_update_doctor(
             "has_session": merged.get("has_session"),
             "session_fee": merged.get("session_fee"),
             "pricing_type": merged.get("pricing_type"),
-            "department": merged.get("department") or merged.get("specialization"),
             "specialization": merged.get("specialization") or merged.get("department"),
             "updated_at": merged.get("updated_at"),
         }
     )
+    
+    # Remove 'department' from persist as Doctor DB model only has 'specialization'
+    persist.pop("department", None)
+    persist.pop("room", None)  # Room field doesn't exist in DB model
+    persist.pop("qualifications", None)  # Qualifications field doesn't exist in DB model
+    persist.pop("qualification", None)  # Qualifications field doesn't exist in DB model
+    persist.pop("degrees", None)  # Degrees field doesn't exist in DB model
+    persist.pop("experience_years", None)  # Experience years field doesn't exist in DB model
+    persist.pop("phone", None)  # Phone field doesn't exist in DB model
+    persist.pop("email", None)  # Email field exists but may not be intended to update here
     
     # Update doctor in PostgreSQL
     for key, value in persist.items():
@@ -745,6 +753,11 @@ async def delete_doctor(
     doctor_name = doctor.name
     doctor_specialization = doctor.specialization
     
+    # Delete all tokens associated with this doctor (historical data is preserved in token snapshots)
+    tokens_to_delete = db.query(Token).filter(Token.doctor_id == doctor_id).all()
+    for token in tokens_to_delete:
+        db.delete(token)
+    
     # Delete the doctor
     db.delete(doctor)
     db.commit()
@@ -755,7 +768,8 @@ async def delete_doctor(
         "success": True,
         "message": f"Doctor {doctor_name} ({doctor_specialization}) has been deleted successfully",
         "deleted_doctor_id": doctor_id,
-        "deleted_doctor_name": doctor_name
+        "deleted_doctor_name": doctor_name,
+        "deleted_tokens_count": len(tokens_to_delete)
     }
 
 
@@ -1385,32 +1399,58 @@ async def get_doctors_by_main_category(
     }
 
 @router.get("/{doctor_id}/queue", response_model=QueueStatus)
-async def get_doctor_queue_status(doctor_id: str):
+async def get_doctor_queue_status(doctor_id: str, db: Session = Depends(get_db)):
     """Get current queue status for a doctor"""
-    return await get_doctor_queue(doctor_id)
-
-async def get_doctor_queue(doctor_id: str) -> QueueStatus:
-    """Get or create queue information for a doctor"""
-    db = get_db()
-    
-    queue_ref = db.collection("queues").where("doctor_id", "==", doctor_id).limit(1).stream()
-    queue_docs = list(queue_ref)
-    
-    if queue_docs:
-        queue_data = queue_docs[0].to_dict()
-        return QueueStatus(
-            doctor_id=doctor_id,
-            current_token=queue_data.get("current_token", 0),
-            waiting_patients=queue_data.get("waiting_patients", 0),
-            estimated_wait_time_minutes=queue_data.get("estimated_wait_time_minutes", 0)
+    # Verify doctor exists
+    doctor = db.query(Doctor).filter(Doctor.id == doctor_id).first()
+    if not doctor:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Doctor not found"
         )
     
-    waiting_patients = random.randint(5, 25)
-    estimated_wait_time = waiting_patients * 3  
+    # Get queue from database
+    queue = db.query(DBQueue).filter(DBQueue.doctor_id == doctor_id).first()
+    
+    if queue:
+        return QueueStatus(
+            doctor_id=doctor_id,
+            current_token=int(getattr(queue, "current_token", 0) or 0),
+            pending_patients=int(getattr(queue, "waiting_patients", 0) or 0),
+            in_progress_patients=0,  # Can be calculated from tokens if needed
+            completed_patients=0,  # Can be calculated from tokens if needed
+            estimated_wait_time=int(getattr(queue, "estimated_wait_time_minutes", 0) or 0),
+            people_ahead=int(getattr(queue, "waiting_patients", 0) or 0),
+            total_queue=int(getattr(queue, "waiting_patients", 0) or 0),
+            total_patients=int(getattr(queue, "waiting_patients", 0) or 0)
+        )
+    
+    # If no queue exists, calculate from tokens
+    pending_tokens = db.query(Token).filter(
+        Token.doctor_id == doctor_id,
+        Token.status.in_(["pending", "waiting", "confirmed"])
+    ).count()
+    
+    in_progress_tokens = db.query(Token).filter(
+        Token.doctor_id == doctor_id,
+        Token.status.in_(["called", "in_consultation"])
+    ).count()
+    
+    completed_tokens = db.query(Token).filter(
+        Token.doctor_id == doctor_id,
+        Token.status.in_(["completed", "cancelled"])
+    ).count()
+    
+    total_in_queue = pending_tokens + in_progress_tokens
     
     return QueueStatus(
         doctor_id=doctor_id,
-        current_token=random.randint(1, 10),
-        waiting_patients=waiting_patients,
-        estimated_wait_time_minutes=estimated_wait_time
+        current_token=0,
+        pending_patients=pending_tokens,
+        in_progress_patients=in_progress_tokens,
+        completed_patients=completed_tokens,
+        estimated_wait_time=pending_tokens * 3,  # Estimate 3 minutes per patient
+        people_ahead=pending_tokens,
+        total_queue=total_in_queue,
+        total_patients=total_in_queue
     )

@@ -143,24 +143,86 @@ async def get_completed_consultations(
     page: Optional[int] = Query(1, ge=1),
     page_size: Optional[int] = Query(20, ge=1, le=500),
 ):
-    """Get completed tokens for the current doctor/admin."""
+    """Get completed tokens for the current doctor/admin with statistics."""
     # Find clinical doctor profile if applicable
     doctor = db.query(Doctor).filter(Doctor.user_id == current.user_id).first()
     target_doctor_id = doctor.id if doctor else current.user_id
     
-    query = db.query(Token).filter(
+    # Base query for completed tokens
+    base_query = db.query(Token).filter(
         Token.doctor_id == target_doctor_id,
         Token.status == "completed"
     )
     
-    total = query.count()
+    # Calculate statistics
+    now = datetime.utcnow()
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    
+    # Total completed
+    total_completed = base_query.count()
+    
+    # Completed today
+    completed_today = base_query.filter(
+        Token.completed_at >= today_start
+    ).count() if hasattr(Token, 'completed_at') else base_query.filter(
+        Token.updated_at >= today_start
+    ).count()
+    
+    # Completed this month
+    completed_this_month = base_query.filter(
+        Token.completed_at >= month_start
+    ).count() if hasattr(Token, 'completed_at') else base_query.filter(
+        Token.updated_at >= month_start
+    ).count()
+    
+    # Average consultation time (in minutes)
+    avg_consultation_time = 0
+    if hasattr(Token, 'started_at') and hasattr(Token, 'completed_at'):
+        # Get tokens with both started_at and completed_at
+        tokens_with_times = base_query.filter(
+            Token.started_at.isnot(None),
+            Token.completed_at.isnot(None)
+        ).all()
+        
+        if tokens_with_times:
+            total_minutes = 0
+            count = 0
+            for token in tokens_with_times:
+                if token.started_at and token.completed_at:
+                    duration = (token.completed_at - token.started_at).total_seconds() / 60
+                    if duration > 0:  # Only count positive durations
+                        total_minutes += duration
+                        count += 1
+            
+            if count > 0:
+                avg_consultation_time = round(total_minutes / count, 2)
+    
+    # Get paginated tokens
+    total = base_query.count()
     size = _parse_positive_int(page_size, 20)
     skip = (page - 1) * size
     
-    tokens = query.order_by(Token.completed_at.desc() if hasattr(Token, 'completed_at') else Token.updated_at.desc()).offset(skip).limit(size).all()
+    tokens = base_query.order_by(
+        Token.completed_at.desc() if hasattr(Token, 'completed_at') else Token.updated_at.desc()
+    ).offset(skip).limit(size).all()
+    
     items = [{k: v for k, v in t.__dict__.items() if not k.startswith('_')} for t in tokens]
     
-    return ok(data=items, meta={"page": page, "page_size": size, "total": total})
+    return ok(
+        data=items,
+        meta={
+            "page": page,
+            "page_size": size,
+            "total": total
+        },
+        statistics={
+            "completed_today": completed_today,
+            "completed_this_month": completed_this_month,
+            "total_completed": total_completed,
+            "average_consultation_time_minutes": avg_consultation_time
+        }
+    )
 
 
 @router.get("/doctor/dashboard", dependencies=[Depends(require_roles("doctor", "patient", "admin"))])
