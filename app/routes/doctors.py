@@ -842,6 +842,8 @@ async def list_doctors(
             "avatar_initials": doctor.avatar_initials,
             "rating": doctor.rating,
             "review_count": doctor.review_count,
+            "created_at": doctor.created_at,
+            "updated_at": doctor.updated_at,
         }
         results.append(DoctorResponse(**doctor_data))
     
@@ -958,6 +960,8 @@ async def get_doctors_by_hospital(
             "avatar_initials": doctor.avatar_initials,
             "rating": doctor.rating,
             "review_count": doctor.review_count,
+            "created_at": doctor.created_at,
+            "updated_at": doctor.updated_at,
         }
         
         doctor_response = DoctorResponse(**doctor_data)
@@ -1045,6 +1049,8 @@ async def search_doctors(
             "avatar_initials": doctor.avatar_initials,
             "rating": doctor.rating,
             "review_count": doctor.review_count,
+            "created_at": doctor.created_at,
+            "updated_at": doctor.updated_at,
         }
         
         doctor_response = DoctorResponse(**doctor_data)
@@ -1358,6 +1364,8 @@ async def get_doctors_by_main_category(
             "avatar_initials": doctor.avatar_initials,
             "rating": doctor.rating,
             "review_count": doctor.review_count,
+            "created_at": doctor.created_at,
+            "updated_at": doctor.updated_at,
         }
         
         doctor_response = DoctorResponse(**doctor_data)
