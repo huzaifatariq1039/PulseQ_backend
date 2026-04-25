@@ -38,6 +38,7 @@ from app.routes.ai import (
     get_weekday_history, get_doctor_history
 )
 from app.services.ai_engine import ai_engine
+from app.services.whatsapp_service import send_queue_message
 
 router = APIRouter(tags=["SmartTokens"])
 logger = logging.getLogger(__name__)
@@ -305,6 +306,20 @@ async def cancel_token_logic(
     
     logger.info(f"Token {token_id} cancelled successfully with refund {refund_id}")
 
+    # Cancel any scheduled reminder jobs
+    try:
+        from app.services.app_scheduler import get_scheduler
+        sch = get_scheduler()
+        if sch:
+            for job_id in [f"confirm_reminder:{token_id}", f"confirm_final:{token_id}"]:
+                try:
+                    sch.remove_job(job_id)
+                    logger.info(f"Cancelled scheduled job {job_id} after token cancellation")
+                except Exception:
+                    pass  # Job might not exist or already executed
+    except Exception as e:
+        logger.error(f"Failed to cancel reminder jobs for token {token_id}: {e}")
+
     await create_activity_log(
         current_user.user_id,
         ActivityType.TOKEN_CANCELLED,
@@ -312,6 +327,19 @@ async def cancel_token_logic(
         {"token_id": token_id, "refund_id": refund_id, "reason": reason_enum.value},
         db=db
     )
+
+    # Send WhatsApp cancellation message
+    if token.patient_phone:
+        try:
+            from app.services.whatsapp_service import send_template_message
+            await send_template_message(
+                phone=token.patient_phone,
+                template_name="cancelled",
+                params=[token.patient_name or "Patient"]
+            )
+            logger.info(f"WhatsApp cancellation message sent to {token.patient_phone} for token {token_id}")
+        except Exception as e:
+            logger.error(f"Failed to send WhatsApp cancellation message for token {token_id}: {e}")
 
     doctor = db.query(Doctor).filter(Doctor.id == token.doctor_id).first()
     doctor_data = {k: v for k, v in doctor.__dict__.items() if not k.startswith('_')} if doctor else {}
@@ -690,6 +718,33 @@ async def generate_smart_token(
         {"token_id": token_id},
         db=db
     )
+
+    # Send immediate WhatsApp confirmation message after token booking
+    if patient_phone:
+        try:
+            send_queue_message(
+                phone=patient_phone,
+                name=patient_name or "Patient",
+                position=token_number,
+                wait_time=estimated_wait_time,
+                doctor_name=doctor_data.get("name", "N/A"),
+                hospital_name=hospital_data.get("name", "PulseQ Clinic"),
+                room_number="Room 1"  # Default room number
+            )
+            logger.info(f"WhatsApp confirmation sent to {patient_phone} for token {token_id}")
+            
+            # Schedule 15-minute reminder if user doesn't reply YES
+            try:
+                schedule_confirmation_checks(
+                    token_id=token_id,
+                    first_delay_minutes=15,  # Reminder after 15 minutes
+                    second_delay_minutes=15  # Final check after another 15 minutes
+                )
+                logger.info(f"Confirmation reminder scheduled for token {token_id}")
+            except Exception as e:
+                logger.error(f"Failed to schedule confirmation reminder for token {token_id}: {e}")
+        except Exception as e:
+            logger.error(f"Failed to send WhatsApp confirmation for token {token_id}: {e}")
 
     return response_obj
 

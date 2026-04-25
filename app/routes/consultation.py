@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from typing import Any, Dict, Optional, List
 from datetime import datetime, timedelta
+import logging
 
 from app.security import get_current_active_user
 from app.database import get_db
@@ -16,6 +17,8 @@ from app.templates import TEMPLATES
 
 
 router = APIRouter()
+
+logger = logging.getLogger(__name__)
 
 
 def _to_dt(v: Any) -> Optional[datetime]:
@@ -280,6 +283,19 @@ async def consultation_end(
     doctor.updated_at = now
     
     db.commit()
+
+    # Send WhatsApp thank you message after consultation completion
+    if token.patient_phone:
+        try:
+            from app.services.whatsapp_service import send_template_message
+            await send_template_message(
+                phone=token.patient_phone,
+                template_name="template",  # Thank you template
+                params=[]
+            )
+            logger.info(f"WhatsApp thank you message sent to {token.patient_phone} for completed token {token_id}")
+        except Exception as e:
+            logger.error(f"Failed to send WhatsApp thank you message for token {token_id}: {e}")
 
     # Auto-call next token logic
     today = now.date()

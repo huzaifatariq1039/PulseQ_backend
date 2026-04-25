@@ -133,7 +133,23 @@ async def twilio_whatsapp_webhook(
         token.confirmed = True
         token.confirmed_at = now
         token.updated_at = now
+        token.confirmation_status = "confirmed"
         db.commit()
+        
+        # Cancel scheduled reminder jobs since user confirmed
+        try:
+            from app.services.app_scheduler import get_scheduler
+            sch = get_scheduler()
+            if sch:
+                # Remove reminder and final jobs for this token
+                for job_id in [f"confirm_reminder:{token.id}", f"confirm_final:{token.id}"]:
+                    try:
+                        sch.remove_job(job_id)
+                        logger.info(f"Cancelled scheduled job {job_id} after YES reply")
+                    except Exception:
+                        pass  # Job might not exist or already executed
+        except Exception as e:
+            logger.error(f"Failed to cancel reminder jobs for token {token.id}: {e}")
         
         # Send professional Queue Update template after YES
         try:
@@ -158,9 +174,10 @@ async def twilio_whatsapp_webhook(
                     str(patients_ahead), 
                     f"{token.estimated_wait_time or 0} mins", 
                     token.hospital_name or "Clinic", 
-                    token.token_number
+                    str(token.token_number)
                 ]
             )
+            logger.info(f"Queue update sent to {phone} after YES confirmation")
             return Response(content=str(MessagingResponse()), media_type="application/xml")
         except Exception as e:
             logger.error(f"Failed to send queue_update template: {e}")
