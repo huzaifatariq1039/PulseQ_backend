@@ -5,7 +5,7 @@ from app.database import get_db
 from app.utils.responses import ok
 from sqlalchemy import func
 from sqlalchemy.orm import Session
-from app.db_models import Doctor, Hospital, User
+from app.db_models import Doctor, Hospital, User, Department
 from app.security import get_current_active_user, require_roles, get_password_hash
 from datetime import datetime
 import random
