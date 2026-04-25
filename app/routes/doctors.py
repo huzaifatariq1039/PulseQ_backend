@@ -1227,22 +1227,27 @@ async def get_doctor(
             detail="Doctor not found"
         )
     
-    return DoctorResponse(
-        id=doctor.id,
-        name=doctor.name,
-        specialization=doctor.specialization,
-        subcategory=doctor.subcategory,
-        hospital_id=doctor.hospital_id,
-        consultation_fee=doctor.consultation_fee,
-        session_fee=doctor.session_fee,
-        status=doctor.status,
-        available_days=doctor.available_days or [],
-        start_time=doctor.start_time,
-        end_time=doctor.end_time,
-        avatar_initials=doctor.avatar_initials,
-        rating=doctor.rating,
-        review_count=doctor.review_count,
-    )
+    doctor_data = {
+        "id": doctor.id,
+        "name": doctor.name,
+        "specialization": doctor.specialization,
+        "subcategory": doctor.subcategory,
+        "hospital_id": doctor.hospital_id,
+        "email": doctor.email,
+        "consultation_fee": doctor.consultation_fee,
+        "session_fee": doctor.session_fee,
+        "status": doctor.status,
+        "available_days": doctor.available_days or [],
+        "start_time": doctor.start_time,
+        "end_time": doctor.end_time,
+        "avatar_initials": doctor.avatar_initials,
+        "rating": doctor.rating,
+        "review_count": doctor.review_count,
+        "created_at": doctor.created_at,
+        "updated_at": doctor.updated_at,
+    }
+    
+    return DoctorResponse(**doctor_data)
 
 
 @router.get("/{doctor_id}/availability")
