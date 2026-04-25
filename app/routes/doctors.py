@@ -5,6 +5,7 @@ from app.database import get_db, get_db_session
 from sqlalchemy.orm import Session
 from app.db_models import Doctor, Hospital, User, Queue as DBQueue, Department, Token
 from app.security import get_current_active_user, require_roles
+from app.utils.responses import ok
 from datetime import datetime, timezone
 import random
 import logging
