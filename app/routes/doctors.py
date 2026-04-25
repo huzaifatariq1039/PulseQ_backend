@@ -10,7 +10,7 @@ import random
 import logging
 from app.services.cache_service import CacheService, cached
 
-router = APIRouter(prefix="/doctors", tags=["Doctors"])
+router = APIRouter(tags=["Doctors"])
 logger = logging.getLogger("performance.doctors")
 
 
