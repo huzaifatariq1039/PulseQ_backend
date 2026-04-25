@@ -856,7 +856,7 @@ async def get_doctor_details(
         "available_days": doctor.available_days or [],
         "start_time": doctor.start_time,
         "end_time": doctor.end_time,
-        "department": doctor.department, 
+        "department": doctor.specialization, 
         "avatar_initials": doctor.avatar_initials,
         "rating": doctor.rating,
         "review_count": doctor.review_count,
