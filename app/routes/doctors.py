@@ -3,7 +3,7 @@ from typing import List, Optional, Dict, Any
 from app.models import DoctorCreate, DoctorResponse, DoctorSearchResponse, DoctorWithQueue, QueueStatus
 from app.database import get_db, get_db_session
 from sqlalchemy.orm import Session
-from app.db_models import Doctor, Hospital, User, Queue as DBQueue, Department, Token
+from app.db_models import Doctor, Hospital, User, Queue as DBQueue, Department, Token, Refund
 from app.security import get_current_active_user, require_roles
 from app.utils.responses import ok
 from datetime import datetime, timezone
@@ -755,6 +755,15 @@ async def delete_doctor(
     
     # Delete all tokens associated with this doctor (historical data is preserved in token snapshots)
     tokens_to_delete = db.query(Token).filter(Token.doctor_id == doctor_id).all()
+    
+    # Delete refunds associated with these tokens first (to avoid foreign key violation)
+    token_ids = [token.id for token in tokens_to_delete]
+    if token_ids:
+        refunds_to_delete = db.query(Refund).filter(Refund.token_id.in_(token_ids)).all()
+        for refund in refunds_to_delete:
+            db.delete(refund)
+    
+    # Delete tokens
     for token in tokens_to_delete:
         db.delete(token)
     
@@ -769,7 +778,8 @@ async def delete_doctor(
         "message": f"Doctor {doctor_name} ({doctor_specialization}) has been deleted successfully",
         "deleted_doctor_id": doctor_id,
         "deleted_doctor_name": doctor_name,
-        "deleted_tokens_count": len(tokens_to_delete)
+        "deleted_tokens_count": len(tokens_to_delete),
+        "deleted_refunds_count": len(refunds_to_delete) if token_ids else 0
     }
 
 

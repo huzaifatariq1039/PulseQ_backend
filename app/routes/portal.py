@@ -210,17 +210,19 @@ async def get_completed_consultations(
     items = [{k: v for k, v in t.__dict__.items() if not k.startswith('_')} for t in tokens]
     
     return ok(
-        data=items,
+        data={
+            "tokens": items,
+            "statistics": {
+                "completed_today": completed_today,
+                "completed_this_month": completed_this_month,
+                "total_completed": total_completed,
+                "average_consultation_time_minutes": avg_consultation_time
+            }
+        },
         meta={
             "page": page,
             "page_size": size,
             "total": total
-        },
-        statistics={
-            "completed_today": completed_today,
-            "completed_this_month": completed_this_month,
-            "total_completed": total_completed,
-            "average_consultation_time_minutes": avg_consultation_time
         }
     )
 
