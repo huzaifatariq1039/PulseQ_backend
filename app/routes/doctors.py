@@ -734,60 +734,71 @@ async def delete_doctor(
     current_user=Depends(get_current_active_user),
 ) -> Dict[str, Any]:
     """Delete a doctor (Admin/Receptionist only)"""
-    # Find the doctor
-    doctor = db.query(Doctor).filter(Doctor.id == doctor_id).first()
-    if not doctor:
+    try:
+        doctor = db.query(Doctor).filter(Doctor.id == doctor_id).first()
+        if not doctor:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Doctor not found"
+            )
+        
+        from sqlalchemy import func
+        active_tokens = db.query(Token).filter(
+            Token.doctor_id == doctor_id,
+            Token.status.in_(["pending", "waiting", "confirmed", "called", "in_consultation"])
+        ).count()
+        
+        if active_tokens > 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Cannot delete doctor. They have {active_tokens} active token(s). Please cancel or complete them first."
+            )
+        
+        doctor_name = doctor.name
+        doctor_specialization = doctor.specialization
+        
+        token_ids = db.query(Token.id).filter(Token.doctor_id == doctor_id).all()
+        token_ids = [t[0] for t in token_ids]
+        
+        refunds_deleted_count = 0
+        tokens_deleted_count = 0
+        
+        if token_ids:
+            refunds_deleted_count = db.query(Refund).filter(
+                Refund.token_id.in_(token_ids)
+            ).delete(synchronize_session=False)
+            db.flush()
+        
+        if token_ids:
+            tokens_deleted_count = db.query(Token).filter(
+                Token.doctor_id == doctor_id
+            ).delete(synchronize_session=False)
+            db.flush()
+        
+        db.delete(doctor)
+        db.commit()
+        
+        logger.info(f"User {current_user.user_id} deleted doctor: {doctor_id} ({doctor_name}) - Deleted {tokens_deleted_count} tokens and {refunds_deleted_count} refunds")
+        
+        return {
+            "success": True,
+            "message": f"Doctor {doctor_name} ({doctor_specialization}) has been deleted successfully",
+            "deleted_doctor_id": doctor_id,
+            "deleted_doctor_name": doctor_name,
+            "deleted_tokens_count": tokens_deleted_count,
+            "deleted_refunds_count": refunds_deleted_count
+        }
+    
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error deleting doctor {doctor_id}: {str(e)}", exc_info=True)
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Doctor not found"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete doctor: {str(e)}"
         )
-    
-    # Check if doctor has active tokens/appointments
-    from sqlalchemy import func
-    active_tokens = db.query(Token).filter(
-        Token.doctor_id == doctor_id,
-        Token.status.in_(["pending", "waiting", "confirmed", "called", "in_consultation"])
-    ).count()
-    
-    if active_tokens > 0:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Cannot delete doctor. They have {active_tokens} active token(s). Please cancel or complete them first."
-        )
-    
-    # Get doctor info for response
-    doctor_name = doctor.name
-    doctor_specialization = doctor.specialization
-    
-    # Delete all tokens associated with this doctor (historical data is preserved in token snapshots)
-    tokens_to_delete = db.query(Token).filter(Token.doctor_id == doctor_id).all()
-    
-    # Delete refunds associated with these tokens first (to avoid foreign key violation)
-    token_ids = [token.id for token in tokens_to_delete]
-    if token_ids:
-        refunds_to_delete = db.query(Refund).filter(Refund.token_id.in_(token_ids)).all()
-        for refund in refunds_to_delete:
-            db.delete(refund)
-    
-    # Delete tokens
-    for token in tokens_to_delete:
-        db.delete(token)
-    
-    # Delete the doctor
-    db.delete(doctor)
-    db.commit()
-    
-    logger.info(f"User {current_user.user_id} deleted doctor: {doctor_id} ({doctor_name})")
-    
-    return {
-        "success": True,
-        "message": f"Doctor {doctor_name} ({doctor_specialization}) has been deleted successfully",
-        "deleted_doctor_id": doctor_id,
-        "deleted_doctor_name": doctor_name,
-        "deleted_tokens_count": len(tokens_to_delete),
-        "deleted_refunds_count": len(refunds_to_delete) if token_ids else 0
-    }
-
 
 @router.get("/{doctor_id}/available-slots")
 async def get_available_slots(
