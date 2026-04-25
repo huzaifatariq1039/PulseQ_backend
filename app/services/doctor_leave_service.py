@@ -2,12 +2,12 @@ import asyncio
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
-import os
-
 from fastapi import HTTPException, status
+from sqlalchemy.orm import Session
+from sqlalchemy import or_
 
-from app.database import get_db
-from app.config import COLLECTIONS
+from app.database import get_db_session
+from app.db_models import Doctor, Token, Queue, User
 from app.services.notification_service import NotificationService
 from app.services.whatsapp_service import send_template_message
 from app.templates import TEMPLATES
@@ -19,7 +19,7 @@ class DoctorLeaveService:
     """Emergency doctor leave handling.
 
     Responsibilities:
-    - Pause doctor queue (advanced queue docs + doctor doc)
+    - Pause doctor queue (doctor status + queue docs)
     - Update affected active tokens (waiting/pending/confirmed)
     - Send WhatsApp to affected patients
     - Broadcast real-time WebSocket updates
@@ -51,44 +51,29 @@ class DoctorLeaveService:
         return "cancel"
 
     @staticmethod
-    def _queue_pause_payload(reason: str) -> Dict[str, Any]:
-        now = datetime.utcnow()
-        return {
-            "status": "on_leave",
-            # Support both naming conventions to keep frontend integrations stable.
-            "paused": True,
-            "queue_paused": True,
-            "queue_pause_reason": reason,
-            "updated_at": now,
-        }
-
-    @staticmethod
     def _pick_alternate_doctor(
         *,
+        db: Session,
         hospital_id: str,
         current_doctor_id: str,
         current_dept_norm: str,
     ) -> Tuple[Optional[str], Optional[str]]:
         """Best-effort alternate doctor suggestion in same hospital + department match."""
-        db = get_db()
         if not hospital_id:
             return None, None
 
-        docs = list(
-            db.collection(COLLECTIONS["DOCTORS"]).where("hospital_id", "==", hospital_id).limit(2000).stream()
-        )
-        for d in docs:
-            data = d.to_dict() or {}
-            did = str(data.get("id") or "").strip() or getattr(d, "id", None)
-            if not did or str(did) == str(current_doctor_id):
-                continue
+        doctors = db.query(Doctor).filter(
+            Doctor.hospital_id == hospital_id,
+            Doctor.id != current_doctor_id
+        ).limit(2000).all()
 
-            status_val = DoctorLeaveService._normalize_status(data.get("status")).lower()
+        for doctor in doctors:
+            status_val = DoctorLeaveService._normalize_status(doctor.status).lower()
             if status_val not in {"available", "active", ""}:
                 continue
 
-            dep_norm = str(data.get("specialization") or data.get("department") or "").strip().lower()
-            sub_norm = str(data.get("subcategory") or "").strip().lower()
+            dep_norm = str(doctor.specialization or "").strip().lower()
+            sub_norm = str(doctor.subcategory or "").strip().lower()
             merged = " ".join([dep_norm, sub_norm]).strip()
 
             if not merged:
@@ -96,13 +81,13 @@ class DoctorLeaveService:
 
             # Simple match: exact department or shared keyword
             if merged == current_dept_norm or current_dept_norm in merged or merged in current_dept_norm:
-                return str(did), str(data.get("name") or "").strip() or None
+                return str(doctor.id), str(doctor.name or "").strip() or None
 
             # Token overlap fallback
             cur_words = {w for w in current_dept_norm.replace(",", " ").split() if w}
             dep_words = {w for w in merged.replace(",", " ").split() if w}
             if cur_words and (cur_words & dep_words):
-                return str(did), str(data.get("name") or "").strip() or None
+                return str(doctor.id), str(doctor.name or "").strip() or None
 
         return None, None
 
@@ -114,7 +99,7 @@ class DoctorLeaveService:
         alternate_doctor_id: Optional[str] = None,
         reason: Optional[str] = None,
     ) -> Dict[str, Any]:
-        db = get_db()
+        db = get_db_session()
         now = datetime.utcnow()
 
         doctor_id = str(doctor_id).strip()
@@ -124,57 +109,60 @@ class DoctorLeaveService:
         leave_action_norm = DoctorLeaveService._normalize_leave_action(leave_action)
         pause_reason = reason or "doctor_on_leave"
 
-        dref = db.collection(COLLECTIONS["DOCTORS"]).document(doctor_id)
-        dsnap = dref.get()
-        if not getattr(dsnap, "exists", False):
+        # Get doctor from database
+        doctor = db.query(Doctor).filter(Doctor.id == doctor_id).first()
+        if not doctor:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Doctor not found")
-        doctor_data = dsnap.to_dict() or {}
-        doctor_name = doctor_data.get("name") or "Doctor"
-        hospital_id = str(doctor_data.get("hospital_id") or "").strip()
+        
+        doctor_name = doctor.name or "Doctor"
+        hospital_id = str(doctor.hospital_id or "").strip()
 
         dept_text = " ".join(
             [
-                str(doctor_data.get("specialization") or ""),
-                str(doctor_data.get("subcategory") or ""),
-                str(doctor_data.get("department") or ""),
+                str(doctor.specialization or ""),
+                str(doctor.subcategory or ""),
             ]
         ).strip().lower()
 
-        # 1) Pause queue state
-        dref.set(DoctorLeaveService._queue_pause_payload(pause_reason), merge=True)
+        # 1) Pause doctor status
+        doctor.status = "on_leave"
+        doctor.updated_at = now
+        db.commit()
 
-        # 2) Pause advanced queue docs (queues collection) for null estimated_wait_time
+        # 2) Pause queue docs (queues table) for null estimated_wait_time
         try:
-            qref = db.collection(COLLECTIONS["QUEUES"]).where("doctor_id", "==", doctor_id)
-            for qdoc in qref.stream():
-                qdoc_ref = qdoc.reference if hasattr(qdoc, "reference") else None
-                q_updates = {
-                    "paused": True,
-                    "queue_paused": True,
-                    "queue_pause_reason": pause_reason,
-                    "estimated_wait_time": None,
-                    "updated_at": now,
-                }
-                if qdoc_ref:
-                    qdoc_ref.set(q_updates, merge=True)
-                else:
-                    # Fallback for mocks
-                    db.collection(COLLECTIONS["QUEUES"]).document(getattr(qdoc, "id", "")).set(q_updates, merge=True)
+            queues = db.query(Queue).filter(Queue.doctor_id == doctor_id).all()
+            for queue in queues:
+                queue.paused = True
+                queue.queue_paused = True
+                queue.queue_pause_reason = pause_reason
+                queue.estimated_wait_time_minutes = None
+                queue.updated_at = now
+            db.commit()
         except Exception:
+            db.rollback()
             # Best-effort: never block status update for queue doc issues
             pass
 
         # 3) Fetch active tokens waiting/confirmed
-        tokens_ref = db.collection(COLLECTIONS["TOKENS"]).where("doctor_id", "==", doctor_id)
-        token_docs = list(tokens_ref.limit(5000).stream())
+        active_statuses = DoctorLeaveService._active_token_statuses()
+        tokens = db.query(Token).filter(
+            Token.doctor_id == doctor_id,
+            Token.status.in_(active_statuses)
+        ).limit(5000).all()
 
-        affected_tokens: List[Dict[str, Any]] = []
-        for tdoc in token_docs:
-            t = tdoc.to_dict() or {}
-            status_val = DoctorLeaveService._normalize_status(t.get("status"))
-            if status_val in DoctorLeaveService._active_token_statuses():
-                t["id"] = t.get("id") or getattr(tdoc, "id", None)
-                affected_tokens.append(t)
+        affected_tokens = []
+        for token in tokens:
+            affected_tokens.append({
+                "id": token.id,
+                "patient_id": token.patient_id,
+                "patient_phone": token.patient_phone,
+                "patient_name": token.patient_name,
+                "display_code": token.display_code,
+                "hex_code": token.hex_code,
+                "token_number": token.token_number,
+                "status": token.status,
+            })
 
         affected_token_ids = [str(t.get("id") or "").strip() for t in affected_tokens if t.get("id")]
 
@@ -184,15 +172,15 @@ class DoctorLeaveService:
             chosen_alt_name = None
             if chosen_alt_id:
                 try:
-                    asnap = db.collection(COLLECTIONS["DOCTORS"]).document(chosen_alt_id).get()
-                    if getattr(asnap, "exists", False):
-                        ad = asnap.to_dict() or {}
-                        chosen_alt_name = ad.get("name")
+                    alt_doctor = db.query(Doctor).filter(Doctor.id == chosen_alt_id).first()
+                    if alt_doctor:
+                        chosen_alt_name = alt_doctor.name
                 except Exception:
                     chosen_alt_id = None
 
             if not chosen_alt_id:
                 chosen_alt_id, chosen_alt_name = DoctorLeaveService._pick_alternate_doctor(
+                    db=db,
                     hospital_id=hospital_id,
                     current_doctor_id=doctor_id,
                     current_dept_norm=dept_text,
@@ -208,42 +196,39 @@ class DoctorLeaveService:
             if not tid:
                 continue
 
-            current_status = DoctorLeaveService._normalize_status(t.get("status"))
-            token_update: Dict[str, Any] = {
-                "doctor_unavailable": True,
-                "doctor_unavailable_reason": pause_reason,
-                "queue_position": 0,
-                "estimated_wait_time": None,
-                "updated_at": now,
-            }
+            token = db.query(Token).filter(Token.id == tid).first()
+            if not token:
+                continue
+
+            current_status = DoctorLeaveService._normalize_status(token.status)
+            
+            # Update token fields
+            token.doctor_unavailable = True
+            token.doctor_unavailable_reason = pause_reason
+            token.queue_position = 0
+            token.estimated_wait_time = None
+            token.updated_at = now
 
             # Use required options A/B/C
             if leave_action_norm == "cancel":
-                token_update.update(
-                    {
-                        "status": "cancelled",
-                        "cancellation_reason": "medical_emergency",
-                        "cancelled_at": now,
-                        "leave_action": "cancelled_due_to_doctor_on_leave",
-                    }
-                )
+                token.status = "cancelled"
+                token.cancellation_reason = "medical_emergency"
+                token.cancelled_at = now
+                token.leave_action = "cancelled_due_to_doctor_on_leave"
             elif leave_action_norm in {"rescheduled", "suggest_alternate"}:
-                token_update.update(
-                    {
-                        "status": "rescheduled",
-                        "leave_action": "rescheduled_due_to_doctor_on_leave",
-                        "rescheduled_at": now,
-                    }
-                )
+                token.status = "rescheduled"
+                token.leave_action = "rescheduled_due_to_doctor_on_leave"
+                token.rescheduled_at = now
                 if chosen_alt_id:
-                    token_update["suggested_doctor_id"] = chosen_alt_id
+                    token.suggested_doctor_id = chosen_alt_id
                 if chosen_alt_name:
-                    token_update["suggested_doctor_name"] = chosen_alt_name
+                    token.suggested_doctor_name = chosen_alt_name
 
             # Persist token updates
             try:
-                db.collection(COLLECTIONS["TOKENS"]).document(tid).set(token_update, merge=True)
+                db.commit()
             except Exception:
+                db.rollback()
                 continue
 
             # 5) Send WhatsApp to affected patients (best-effort)
@@ -251,12 +236,11 @@ class DoctorLeaveService:
                 phone = (t.get("patient_phone") or "").strip()
                 patient_name = str(t.get("patient_name") or "").strip()
                 if not phone and t.get("patient_id"):
-                    pu_ref = db.collection(COLLECTIONS["USERS"]).document(str(t.get("patient_id")))
-                    pu_snap = pu_ref.get()
-                    pu = pu_snap.to_dict() if getattr(pu_snap, "exists", False) else {}
-                    phone = (pu.get("phone") or pu.get("mobile") or "").strip()
-                    if not patient_name:
-                        patient_name = str(pu.get("name") or pu.get("full_name") or "").strip()
+                    user = db.query(User).filter(User.id == str(t.get("patient_id"))).first()
+                    if user:
+                        phone = (user.phone or "").strip()
+                        if not patient_name:
+                            patient_name = str(user.name or "").strip()
 
                 if not phone:
                     continue
@@ -316,28 +300,6 @@ class DoctorLeaveService:
                 if send_task is None:
                     send_task = asyncio.create_task(NotificationService.send_whatsapp_message(phone, msg))
 
-                # Persist notification record for patient portal inbox (best-effort)
-                try:
-                    pid = t.get("patient_id")
-                    if pid:
-                        nref = db.collection("notifications").document()
-                        nref.set(
-                            {
-                                "id": nref.id,
-                                "token_id": tid,
-                                "user_id": str(pid),
-                                "phone_number": phone,
-                                "message": msg,
-                                "notification_types": ["whatsapp"],
-                                "sent_at": now,
-                                "status": "sent",
-                                "is_read": False,
-                                "read_at": None,
-                            }
-                        )
-                except Exception:
-                    pass
-
                 async_notifications.append(send_task)
             except Exception:
                 continue
@@ -369,6 +331,8 @@ class DoctorLeaveService:
         except Exception:
             pass
 
+        db.close()
+
         return {
             "success": True,
             "doctor_id": doctor_id,
@@ -378,4 +342,3 @@ class DoctorLeaveService:
             "affected_tokens_count": len(affected_tokens),
             "affected_token_ids": affected_token_ids,
         }
-

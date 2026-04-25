@@ -179,6 +179,14 @@ class Token(Base):
     completed_at = Column(DateTime(timezone=True), nullable=True)
     duration_minutes = Column(Float, nullable=True)
 
+    # Doctor leave management fields
+    doctor_unavailable = Column(Boolean, default=False)
+    doctor_unavailable_reason = Column(String(255), nullable=True)
+    leave_action = Column(String(100), nullable=True)
+    suggested_doctor_id = Column(String, nullable=True)
+    suggested_doctor_name = Column(String(100), nullable=True)
+    rescheduled_at = Column(DateTime(timezone=True), nullable=True)
+
     # Relationships
     patient = relationship("User", back_populates="tokens")
     doctor = relationship("Doctor", back_populates="tokens")
@@ -238,6 +246,10 @@ class Queue(Base):
     estimated_wait_time_minutes = Column(Integer, nullable=True)
     people_ahead = Column(Integer, default=0)
     total_queue = Column(Integer, default=0)
+    # Queue pause fields for doctor leave management
+    paused = Column(Boolean, default=False)
+    queue_paused = Column(Boolean, default=False)
+    queue_pause_reason = Column(String(255), nullable=True)
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
 

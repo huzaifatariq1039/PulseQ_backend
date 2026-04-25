@@ -108,12 +108,15 @@ def _create_token_response(user: UserDB):
     # Convert role to string if it's an Enum
     user_role = user.role.value if hasattr(user.role, 'value') else str(user.role)
     
-    # Create tokens
+    # Get hospital_id from user record
+    user_hospital_id = getattr(user, 'hospital_id', None)
+    
+    # Create tokens with hospital_id in payload
     access_token = create_access_token(
-        data={"sub": str(user.id), "role": user_role},
+        data={"sub": str(user.id), "role": user_role, "hospital_id": user_hospital_id},
         expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     )
-    refresh_token = create_refresh_token(data={"sub": str(user.id)})
+    refresh_token = create_refresh_token(data={"sub": str(user.id), "hospital_id": user_hospital_id})
     
     return Token(
         access_token=access_token,
