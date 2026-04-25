@@ -273,7 +273,7 @@ async def receptionist_list_departments(
     current_user=Depends(get_current_active_user),
     hospital_id: Optional[str] = Query(None, description="Optional hospital scope"),
 ) -> Dict[str, Any]:
-    # Departments table may not exist in PostgreSQL, fallback to extracting from doctors
+    # Extract unique departments/specializations from doctors
     out: List[str] = []
     
     # Extract unique departments from doctors
@@ -284,7 +284,8 @@ async def receptionist_list_departments(
     doctors = query.all()
     names = []
     for doctor in doctors:
-        dept = str(doctor.department or doctor.specialization or "").strip()
+        # Doctor model has 'specialization' field, not 'department'
+        dept = str(doctor.specialization or "").strip()
         if dept:
             names.append(dept)
     
