@@ -250,16 +250,22 @@ async def receptionist_manage_doctors(
                 "id": it.get("id"),
                 "name": it.get("name"),
                 "department": dept,
+                "specialization": it.get("specialization"),
                 "qualifications": it.get("specialization") or it.get("subcategory") or dept,
                 "fee": fee_val,
                 "consultation_fee": fee_val,
                 "session_fee": it.get("session_fee"),
+                "email": it.get("email"),
+                "rating": it.get("rating"),
+                "review_count": it.get("review_count"),
                 "start_time": it.get("start_time"),
                 "end_time": it.get("end_time"),
                 "available_days": it.get("available_days") or [],
                 "timings": timings,
                 "status": str(it.get("status") or "available").lower(),
                 "hospital_id": it.get("hospital_id"),
+                "created_at": it.get("created_at"),
+                "updated_at": it.get("updated_at"),
             }
         )
 
