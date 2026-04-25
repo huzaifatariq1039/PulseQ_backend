@@ -663,7 +663,11 @@ async def create_doctor(
 
     # Keep Firestore documents compatible with both field names.
     # Your DB uses `department`, but much of the code historically uses `specialization`.
-    doctor_data["department"] = doctor_data.get("specialization")
+    # Map department to specialization for DB compatibility
+    if "department" in doctor_data and "specialization" not in doctor_data:
+        doctor_data["specialization"] = doctor_data["department"]
+    # Remove 'department' key as Doctor DB model only has 'specialization'
+    doctor_data.pop("department", None)
 
     # ---------------- Session-based pricing rules (doctor creation validation) ----------------
     dept_text = (
