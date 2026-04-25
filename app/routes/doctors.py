@@ -176,33 +176,6 @@ async def receptionist_manage_doctors(
     return ok(data=out, meta={"page": page, "page_size": page_size, "total": total})
 
 
-@router.get("/departments")
-async def list_departments(
-    db: Session = Depends(get_db),
-    hospital_id: Optional[str] = Query(None, description="Optional hospital scope"),
-):
-    # Departments table may not exist in PostgreSQL, fallback to extracting from doctors
-    out: List[str] = []
-    
-    # Extract unique departments from doctors
-    query = db.query(Doctor)
-    if hospital_id:
-        query = query.filter(Doctor.hospital_id == hospital_id)
-    
-    doctors = query.all()
-    names = []
-    for doctor in doctors:
-        # Use getattr safely as Doctor model uses 'specialization' but some code expects 'department'
-        dept = str(getattr(doctor, 'department', getattr(doctor, 'specialization', "")) or "").strip()
-        if dept:
-            names.append(dept)
-    
-    out = sorted(set(names), key=lambda x: x.lower())
-
-    return ok(data=out)
-
-# ==================== DEPARTMENT MANAGEMENT (Admin) ====================
-
 @router.post("/departments", dependencies=[Depends(require_roles("admin"))])
 async def create_department(
     payload: Dict[str, Any],
@@ -357,6 +330,33 @@ async def delete_department(
     logger.info(f"Admin {current_user.user_id} deleted department: {department_id}")
     
     return ok(message="Department deleted successfully")
+
+@router.get("/departments")
+async def list_departments(
+    db: Session = Depends(get_db),
+    hospital_id: Optional[str] = Query(None, description="Optional hospital scope"),
+):
+    # Departments table may not exist in PostgreSQL, fallback to extracting from doctors
+    out: List[str] = []
+    
+    # Extract unique departments from doctors
+    query = db.query(Doctor)
+    if hospital_id:
+        query = query.filter(Doctor.hospital_id == hospital_id)
+    
+    doctors = query.all()
+    names = []
+    for doctor in doctors:
+        # Use getattr safely as Doctor model uses 'specialization' but some code expects 'department'
+        dept = str(getattr(doctor, 'department', getattr(doctor, 'specialization', "")) or "").strip()
+        if dept:
+            names.append(dept)
+    
+    out = sorted(set(names), key=lambda x: x.lower())
+
+    return ok(data=out)
+
+# ==================== DEPARTMENT MANAGEMENT (Admin) ====================
 
 
 
