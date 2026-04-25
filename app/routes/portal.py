@@ -13,8 +13,11 @@ from app.services.token_service import SmartTokenService
 from app.routes.pharmacy import router as pharmacy_router
 from app.utils.mrn import get_or_create_patient_mrn
 import uuid
+import logging
 
 router = APIRouter()
+
+logger = logging.getLogger(__name__)
 
 # Include Pharmacy portal endpoints under the centralized portal router
 router.include_router(pharmacy_router)
@@ -652,6 +655,71 @@ async def receptionist_skip_token(
     return ok(message="Token skipped")
 
 
+@router.post("/doctor/tokens/{token_id}/skip", dependencies=[Depends(require_roles("doctor", "admin"))])
+async def doctor_skip_token(
+    token_id: str,
+    db: Session = Depends(get_db),
+    current: TokenData = Depends(get_current_active_user),
+) -> Dict[str, Any]:
+    """Skip a token from doctor portal"""
+    token = db.query(Token).filter(Token.id == token_id).first()
+    if not token:
+        raise HTTPException(status_code=404, detail="Token not found")
+    
+    # Verify doctor owns this token
+    doctor_profile = db.query(Doctor).filter(Doctor.user_id == current.user_id).first()
+    doctor_profile_id = doctor_profile.id if doctor_profile else None
+    
+    if str(current.user_id) != str(token.doctor_id) and str(doctor_profile_id) != str(token.doctor_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: You can only skip your own tokens"
+        )
+    
+    # Check if token can be skipped
+    st = str(token.status).lower()
+    if st in ["completed", "cancelled", "skipped"]:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Token cannot be skipped. Current status: {st}"
+        )
+    
+    now = datetime.utcnow()
+    token.status = "skipped"
+    token.updated_at = now
+    
+    db.commit()
+    
+    logger.info(f"Doctor {current.user_id} skipped token {token_id} via portal")
+    
+    # Auto-call next token
+    today = now.date()
+    next_token_obj = db.query(Token).filter(
+        Token.doctor_id == token.doctor_id,
+        Token.status.in_(["pending", "waiting", "confirmed"]),
+        func.date(Token.appointment_date) == today,
+        Token.token_number > token.token_number
+    ).order_by(Token.token_number.asc()).first()
+    
+    next_token_data = None
+    if next_token_obj:
+        next_token_obj.status = "called"
+        next_token_obj.called_at = now
+        next_token_obj.updated_at = now
+        
+        db.commit()
+        next_token_data = {k: v for k, v in next_token_obj.__dict__.items() if not k.startswith('_')}
+    
+    return ok(
+        data={
+            "token_id": token_id,
+            "status": "skipped",
+            "next_called_token": next_token_data
+        },
+        message="Token skipped successfully"
+    )
+
+
 @router.patch("/receptionist/tokens/{token_id}", dependencies=[Depends(require_roles("receptionist", "admin"))])
 async def receptionist_update_token(
     token_id: str,
@@ -659,7 +727,7 @@ async def receptionist_update_token(
     db: Session = Depends(get_db),
     current: TokenData = Depends(get_current_active_user),
 ) -> Dict[str, Any]:
-    """Update token details (receptionist can edit patient info, appointment time, etc.)"""
+    """Update token details (receptionist can edit patient info, appointment time, status, etc.)"""
     token = db.query(Token).filter(Token.id == token_id).first()
     if not token:
         raise HTTPException(status_code=404, detail="Token not found")
@@ -668,7 +736,50 @@ async def receptionist_update_token(
     if token.status in ["cancelled", "completed"]:
         raise HTTPException(status_code=400, detail=f"Cannot edit token with status: {token.status}")
     
-    # Update allowed fields
+    # Special handling for status update (re-add skipped patient)
+    if "status" in payload:
+        new_status = str(payload["status"]).strip().lower()
+        valid_statuses = ["pending", "waiting", "confirmed", "called", "skipped"]
+        
+        if new_status not in valid_statuses:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Invalid status. Must be one of: {', '.join(valid_statuses)}"
+            )
+        
+        # Allow re-adding skipped patients
+        if token.status == "skipped" and new_status in ["waiting", "confirmed", "pending"]:
+            token.status = new_status
+            token.updated_at = datetime.utcnow()
+            db.commit()
+            
+            logger.info(f"Receptionist {current.user_id} re-added skipped token {token_id} with status: {new_status}")
+            
+            return ok(
+                data={
+                    "token_id": token.id,
+                    "display_code": token.display_code,
+                    "patient_name": token.patient_name,
+                    "status": token.status,
+                    "previous_status": "skipped"
+                },
+                message=f"Token re-added successfully with status: {new_status}"
+            )
+        
+        # For other status updates, just update if valid
+        token.status = new_status
+        token.updated_at = datetime.utcnow()
+        db.commit()
+        
+        return ok(
+            data={
+                "token_id": token.id,
+                "status": token.status
+            },
+            message="Token status updated successfully"
+        )
+    
+    # Update allowed fields (if status is not being updated)
     updatable_fields = [
         "patient_name", "patient_phone", "patient_gender",
         "reason_for_visit", "appointment_date", "department"

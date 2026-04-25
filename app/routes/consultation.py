@@ -329,3 +329,80 @@ async def consultation_end(
         },
         message="Consultation completed",
     )
+
+
+@router.post("/skip/{token_id}", dependencies=[Depends(require_roles("doctor", "admin"))])
+async def consultation_skip_token(
+    token_id: str,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_active_user)
+) -> Dict[str, Any]:
+    """Skip a token from consultation or queue (doctor only)"""
+    token = db.query(Token).filter(Token.id == token_id).first()
+    if not token:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Token not found")
+
+    # Get role from current_user JWT token
+    role = str(current_user.role or "").lower()
+    
+    # For doctor role, verify they're accessing their own consultations
+    if role == "doctor":
+        doctor_profile = db.query(Doctor).filter(Doctor.user_id == current_user.user_id).first()
+        doctor_profile_id = doctor_profile.id if doctor_profile else None
+        
+        if str(current_user.user_id) != str(token.doctor_id) and str(doctor_profile_id) != str(token.doctor_id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, 
+                detail="Access denied: You can only skip your own tokens"
+            )
+
+    # Check if token can be skipped
+    st = str(token.status).lower()
+    if st in ["completed", "cancelled", "skipped"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, 
+            detail=f"Token cannot be skipped. Current status: {st}"
+        )
+
+    now = datetime.utcnow()
+    token.status = "skipped"
+    token.skipped_at = now if hasattr(token, "skipped_at") else None
+    token.updated_at = now
+    
+    db.commit()
+
+    try:
+        log_action(current_user.user_id, role, action="SKIP", token_id=token_id)
+    except Exception:
+        pass
+
+    logger.info(f"Doctor {current_user.user_id} skipped token {token_id}")
+
+    # Auto-call next token logic
+    doctor_id = token.doctor_id
+    today = now.date()
+    next_token_obj = db.query(Token).filter(
+        Token.doctor_id == doctor_id,
+        Token.status.in_(["pending", "waiting", "confirmed"]),
+        func.date(Token.appointment_date) == today,
+        Token.token_number > token.token_number
+    ).order_by(Token.token_number.asc()).first()
+
+    next_token_data = None
+    if next_token_obj:
+        next_token_obj.status = "called"
+        next_token_obj.called_at = now
+        next_token_obj.updated_at = now
+        
+        db.commit()
+        next_token_data = {k: v for k, v in next_token_obj.__dict__.items() if not k.startswith('_')}
+
+    return ok(
+        data={
+            "token_id": token_id,
+            "doctor_id": doctor_id,
+            "status": "skipped",
+            "next_called_token": next_token_data,
+        },
+        message="Token skipped successfully",
+    )

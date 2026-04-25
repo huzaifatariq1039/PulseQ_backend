@@ -201,6 +201,164 @@ async def list_departments(
 
     return ok(data=out)
 
+# ==================== DEPARTMENT MANAGEMENT (Admin) ====================
+
+@router.post("/departments", dependencies=[Depends(require_roles("admin"))])
+async def create_department(
+    payload: Dict[str, Any],
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_active_user),
+) -> Dict[str, Any]:
+    """Create a new department (Admin only)"""
+    import uuid
+    
+    name = str(payload.get("name") or "").strip()
+    hospital_id = str(payload.get("hospital_id") or "").strip()
+    
+    if not name:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Department name is required")
+    if not hospital_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Hospital ID is required")
+    
+    hospital = db.query(Hospital).filter(Hospital.id == hospital_id).first()
+    if not hospital:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Hospital not found")
+    
+    existing = db.query(Department).filter(
+        Department.name == name,
+        Department.hospital_id == hospital_id
+    ).first()
+    
+    if existing:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Department already exists")
+    
+    department_id = str(uuid.uuid4())
+    new_department = Department(
+        id=department_id,
+        name=name,
+        hospital_id=hospital_id,
+        created_at=datetime.utcnow()
+    )
+    
+    db.add(new_department)
+    db.commit()
+    db.refresh(new_department)
+    
+    logger.info(f"Admin {current_user.user_id} created department: {name}")
+    
+    return ok(
+        data={
+            "id": new_department.id,
+            "name": new_department.name,
+            "hospital_id": new_department.hospital_id,
+            "created_at": new_department.created_at
+        },
+        message="Department created successfully"
+    )
+
+
+@router.get("/departments/list", dependencies=[Depends(require_roles("admin", "receptionist"))])
+async def get_departments_list(
+    db: Session = Depends(get_db),
+    hospital_id: Optional[str] = Query(None, description="Filter by hospital"),
+) -> Dict[str, Any]:
+    """Get all departments (Admin/Receptionist)"""
+    query = db.query(Department)
+    
+    if hospital_id:
+        query = query.filter(Department.hospital_id == hospital_id)
+    
+    departments = query.order_by(Department.name.asc()).all()
+    
+    return ok(
+        data=[
+            {
+                "id": dept.id,
+                "name": dept.name,
+                "hospital_id": dept.hospital_id,
+                "created_at": dept.created_at
+            }
+            for dept in departments
+        ]
+    )
+
+
+@router.put("/departments/{department_id}", dependencies=[Depends(require_roles("admin"))])
+@router.patch("/departments/{department_id}", dependencies=[Depends(require_roles("admin"))])
+async def update_department(
+    department_id: str,
+    payload: Dict[str, Any],
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_active_user),
+) -> Dict[str, Any]:
+    """Update department details - Edit button"""
+    department = db.query(Department).filter(Department.id == department_id).first()
+    if not department:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Department not found")
+    
+    if "name" in payload:
+        new_name = str(payload["name"]).strip()
+        if not new_name:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Department name cannot be empty")
+        department.name = new_name
+    
+    if "description" in payload:
+        department.description = str(payload["description"]).strip()
+    
+    if "hospital_id" in payload:
+        new_hospital_id = str(payload["hospital_id"]).strip()
+        if new_hospital_id:
+            hospital = db.query(Hospital).filter(Hospital.id == new_hospital_id).first()
+            if not hospital:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Hospital not found")
+            department.hospital_id = new_hospital_id
+    
+    db.commit()
+    db.refresh(department)
+    
+    logger.info(f"Admin {current_user.user_id} updated department: {department_id}")
+    
+    return ok(
+        data={
+            "id": department.id,
+            "name": department.name,
+            "hospital_id": department.hospital_id,
+            "created_at": department.created_at
+        },
+        message="Department updated successfully"
+    )
+
+
+@router.delete("/departments/{department_id}", dependencies=[Depends(require_roles("admin"))])
+async def delete_department(
+    department_id: str,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_active_user),
+) -> Dict[str, Any]:
+    """Delete a department - Delete button"""
+    department = db.query(Department).filter(Department.id == department_id).first()
+    if not department:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Department not found")
+    
+    doctors_count = db.query(Doctor).filter(
+        Doctor.specialization == department.name,
+        Doctor.hospital_id == department.hospital_id
+    ).count()
+    
+    if doctors_count > 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot delete department. {doctors_count} doctor(s) are assigned"
+        )
+    
+    db.delete(department)
+    db.commit()
+    
+    logger.info(f"Admin {current_user.user_id} deleted department: {department_id}")
+    
+    return ok(message="Department deleted successfully")
+
+
 
 @router.get("/{doctor_id}/details")
 async def get_doctor_details_alias(
