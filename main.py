@@ -159,6 +159,10 @@ app.include_router(hospitals.router, prefix="/api/v1/public/hospitals", tags=["P
 app.include_router(doctors.router, prefix="/api/v1/public/doctors", tags=["Public Discovery"])
 app.include_router(pharmacy_public_router, prefix="/api/v1/public/pharmacy", tags=["Public Discovery"])
 
+# 2b. Staff Doctor Management (Admin/Receptionist)
+app.include_router(doctors.router, prefix="/api/v1/staff/doctors", tags=["Staff Portal - Doctor Management"])
+app.include_router(doctors.router, prefix="/api/v1/doctors", tags=["Doctor Management (Legacy Alias)"])
+
 # 3. Patient Services
 app.include_router(dashboard.router, prefix="/api/v1/patient/dashboard", tags=["Patient Portal"])
 app.include_router(profile.router, prefix="/api/v1/patient/profile", tags=["Patient Portal"])
