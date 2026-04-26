@@ -25,6 +25,9 @@ class PharmacyLoginRequest(BaseModel):
     email: str = Field(..., description="Pharmacy user email")
     password: str
 
+class UpdateHospitalIdRequest(BaseModel):
+    hospital_id: str = Field(..., description="Hospital ID to associate with user")
+
 # ---------------- Phone normalization helpers ----------------
 def _normalize_phone(phone: str) -> str:
     """Return a canonical, comparison-friendly phone string."""
@@ -557,5 +560,64 @@ async def check_availability(email: str = None, phone: str = None):
             result["phone"] = phone
         
         return result
+    finally:
+        db.close()
+
+
+@router.patch("/update-hospital", response_model=UserResponse)
+async def update_user_hospital(
+    request: UpdateHospitalIdRequest,
+    current_user: TokenData = Depends(get_current_active_user)
+):
+    """Update the hospital_id for the current user.
+    
+    This allows admin/receptionist/pharmacy users to associate themselves with a hospital.
+    """
+    db = get_db_session()
+    try:
+        # Validate hospital exists
+        from app.db_models import Hospital
+        hospital = db.query(Hospital).filter(Hospital.id == request.hospital_id).first()
+        if not hospital:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Hospital with id '{request.hospital_id}' not found"
+            )
+        
+        # Update user's hospital_id
+        user = db.query(UserDB).filter(UserDB.id == current_user.user_id).first()
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+        
+        user.hospital_id = request.hospital_id
+        user.updated_at = datetime.utcnow()
+        
+        db.commit()
+        db.refresh(user)
+        
+        return UserResponse(
+            id=user.id,
+            name=user.name,
+            email=user.email,
+            phone=user.phone,
+            role=UserRole(user.role) if user.role else UserRole.PATIENT,
+            hospital_id=user.hospital_id,
+            location_access=user.location_access,
+            date_of_birth=user.date_of_birth,
+            address=user.address,
+            created_at=user.created_at,
+            updated_at=user.updated_at
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update hospital: {str(e)}"
+        )
     finally:
         db.close()
