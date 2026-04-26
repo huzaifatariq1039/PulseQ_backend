@@ -488,8 +488,7 @@ async def create_doctor(
 # FIX 3: Static paths before dynamic /{doctor_id} — on BOTH routers
  
 @public_router.get("/", response_model=List[DoctorResponse])
-@router.get("/", response_model=List[DoctorResponse])
-async def list_doctors(
+async def list_doctors_public(
     hospital_id: Optional[str] = Query(None),
     specialization: Optional[str] = Query(None),
     subcategory: Optional[str] = Query(None),
@@ -523,6 +522,23 @@ async def list_doctors(
             updated_at=doctor.updated_at,
         ))
     return results
+
+
+@router.get("/", response_model=List[DoctorResponse])
+async def list_doctors_staff(
+    hospital_id: Optional[str] = Query(None),
+    specialization: Optional[str] = Query(None),
+    subcategory: Optional[str] = Query(None),
+    limit: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
+    return await list_doctors_public(
+        hospital_id=hospital_id,
+        specialization=specialization,
+        subcategory=subcategory,
+        limit=limit,
+        db=db,
+    )
  
  
 @public_router.get("/categories")
