@@ -4,7 +4,7 @@ from app.models import DoctorCreate, DoctorResponse, DoctorSearchResponse, Docto
 from app.database import get_db, get_db_session
 from sqlalchemy.orm import Session
 from app.db_models import Doctor, Hospital, User, Queue as DBQueue, Department, Token, Refund
-from app.security import get_current_active_user, require_roles
+from app.security import get_current_active_user, require_roles, get_password_hash
 from app.utils.responses import ok
 from datetime import datetime, timezone
 import random
@@ -429,7 +429,10 @@ async def create_doctor(
  
     import uuid
     doctor_data = doctor.dict()
- 
+        
+    # Extract password before processing (it's for User account, not Doctor model)
+    doctor_password = doctor_data.pop("password", None)
+    
     norm_start = _normalize_time_to_hhmm(doctor_data.get("start_time"))
     norm_end = _normalize_time_to_hhmm(doctor_data.get("end_time"))
     if norm_start:
@@ -496,11 +499,43 @@ async def create_doctor(
             doctor_data["avatar_initials"] = f"{name_parts[0][0]}{name_parts[1][0]}".upper()
         else:
             doctor_data["avatar_initials"] = doctor.name[:2].upper()
- 
+    
+    # Create User account for the doctor if email and password are provided
+    user_id = None
+    if doctor.email and doctor_password:
+        # Check if user with this email already exists
+        existing_user = db.query(User).filter(User.email == doctor.email).first()
+        if existing_user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"User with email {doctor.email} already exists",
+            )
+            
+        # Create User account
+        user_id = str(uuid.uuid4())
+        new_user = User(
+            id=user_id,
+            name=doctor.name,
+            email=doctor.email,
+            password_hash=get_password_hash(doctor_password),
+            role="doctor",
+            hospital_id=doctor.hospital_id,
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow(),
+        )
+        db.add(new_user)
+        db.flush()  # Flush to get the user_id without committing
+        logger.info(f"Created user account for doctor: {doctor.email}")
+    
+    # Create Doctor record
+    doctor_data["user_id"] = user_id  # Link to User account
+        
     new_doctor = Doctor(**doctor_data)
     db.add(new_doctor)
     db.commit()
     db.refresh(new_doctor)
+        
+    logger.info(f"Admin {current_user.user_id} created doctor: {doctor.name} (user_id={user_id})")
     return DoctorResponse(**doctor_data)
  
  
