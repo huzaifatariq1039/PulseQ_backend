@@ -273,7 +273,7 @@ async def receptionist_manage_doctors(
     return {"success": True, "data": out, "meta": {"page": page, "page_size": page_size, "total": total}}
  
  
-@router.get("/departments", dependencies=[Depends(require_roles("receptionist", "admin"))])
+@router.get("/departments", dependencies=[Depends(require_roles("receptionist", "admin", "patient"))])
 async def receptionist_list_departments(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_active_user),
