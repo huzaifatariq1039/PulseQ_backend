@@ -142,7 +142,7 @@ app.include_router(whatsapp_webhook_router, prefix="/api/v1/webhooks", tags=["In
  
 # 2. Public Discovery (Patient/Guest)
 app.include_router(hospitals.router, prefix="/api/v1/public/hospitals", tags=["Public Discovery"])
-app.include_router(doctors.router, prefix="/api/v1/public/doctors", tags=["Public Discovery"])
+app.include_router(doctors.public_router, prefix="/api/v1/public/doctors", tags=["Public Discovery"])
 app.include_router(pharmacy_public_router, prefix="/api/v1/public/pharmacy", tags=["Public Discovery"])
  
 # 2b. Staff Doctor Management (Admin/Receptionist)
