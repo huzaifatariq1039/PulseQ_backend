@@ -280,7 +280,11 @@ class DoctorBase(BaseModel):
         - psychology
         - psychiatry
         - physiotherapist / physiotherapy / physio
-        then the doctor supports session-based fees.
+        then the doctor MAY support session-based fees (optional).
+        
+        NOTE: session_fee is now OPTIONAL. Doctors in these departments can:
+        - Have session_fee > 0: Charges per session (session_based pricing)
+        - Have session_fee = 0 or None: Uses standard consultation_fee
         """
         dept_text = f"{self.specialization or ''} {self.subcategory or ''}".lower().strip()
         inferred = any(
@@ -294,16 +298,19 @@ class DoctorBase(BaseModel):
             )
         )
 
-        # If session-based, infer has_session and pricing_type.
-        # NOTE: We do not hard-fail here when session_fee is missing because
-        # existing Firestore documents may not have the new field yet.
-        # Enforcement is done in token-creation and admin create/update routes.
+        # If session-based department, check if session_fee is provided
         if inferred:
-            self.has_session = True
-            self.pricing_type = "session_based"
-            if self.session_fee is not None and self.session_fee <= 0:
-                raise ValueError("session_fee must be > 0 when provided")
+            if self.session_fee is not None and self.session_fee > 0:
+                # Doctor charges per session
+                self.has_session = True
+                self.pricing_type = "session_based"
+            else:
+                # Doctor uses standard consultation fee
+                self.has_session = False
+                self.pricing_type = "standard"
+                self.session_fee = None
         else:
+            # Non-session departments: always standard pricing
             self.has_session = False
             self.session_fee = None
             self.pricing_type = "standard"

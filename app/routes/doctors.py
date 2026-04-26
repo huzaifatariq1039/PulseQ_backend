@@ -440,32 +440,52 @@ async def create_doctor(
     doctor_data["id"] = str(uuid.uuid4())
     doctor_data["created_at"] = datetime.utcnow()
     doctor_data["updated_at"] = datetime.utcnow()
- 
+    
+    # Handle department/specialization alias
     if "department" in doctor_data and "specialization" not in doctor_data:
         doctor_data["specialization"] = doctor_data["department"]
     doctor_data.pop("department", None)
- 
+    
+    # Handle fee/consultation_fee alias (frontend may send 'fee')
+    if "fee" in doctor_data:
+        if "consultation_fee" not in doctor_data or doctor_data["consultation_fee"] is None:
+            doctor_data["consultation_fee"] = doctor_data["fee"]
+        doctor_data.pop("fee", None)
+    
+    # Remove frontend-only fields that don't exist in DB model
+    doctor_data.pop("per_session_fee", None)  # 'per_session_fee' is alias for 'session_fee'
+    
     dept_text = (
         f"{doctor_data.get('specialization') or ''} "
         f"{doctor_data.get('subcategory') or ''}"
     ).lower().strip()
+    
+    # Check if department supports session-based pricing
+    # NOTE: This is optional - doctors in these departments MAY have session_fee, but it's not required
     inferred_has_session = any(
         kw in dept_text for kw in ("psychology", "psychiatry", "physiotherapist", "physiotherapy", "physio")
     )
+    
     if inferred_has_session:
+        # Session-based departments: session_fee is OPTIONAL
+        # If provided, must be > 0. If not provided or 0, doctor uses standard consultation_fee
         try:
             session_fee_val = float(doctor_data.get("session_fee") or 0)
         except Exception:
             session_fee_val = 0
-        if session_fee_val <= 0:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="session_fee is required and must be > 0 for Psychology/Psychiatry/Physiotherapy departments",
-            )
-        doctor_data["has_session"] = True
-        doctor_data["pricing_type"] = "session_based"
-        doctor_data["session_fee"] = session_fee_val
+        
+        if session_fee_val > 0:
+            # Doctor charges per session
+            doctor_data["has_session"] = True
+            doctor_data["pricing_type"] = "session_based"
+            doctor_data["session_fee"] = session_fee_val
+        else:
+            # Doctor uses standard consultation fee (no session pricing)
+            doctor_data["has_session"] = False
+            doctor_data["pricing_type"] = "standard"
+            doctor_data["session_fee"] = None
     else:
+        # Non-session departments: always standard pricing
         doctor_data["has_session"] = False
         doctor_data["pricing_type"] = "standard"
         doctor_data["session_fee"] = None
