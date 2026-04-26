@@ -503,6 +503,21 @@ async def create_doctor(
     # Create User account for the doctor if email and password are provided
     user_id = None
     if doctor.email and doctor_password:
+        # Validate hospital_id before creating user
+        if not doctor.hospital_id or doctor.hospital_id.strip() == "":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="hospital_id is required and cannot be empty",
+            )
+        
+        # Check if hospital exists
+        hospital = db.query(Hospital).filter(Hospital.id == doctor.hospital_id).first()
+        if not hospital:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Hospital with id '{doctor.hospital_id}' not found",
+            )
+        
         # Check if user with this email already exists
         existing_user = db.query(User).filter(User.email == doctor.email).first()
         if existing_user:
@@ -528,6 +543,13 @@ async def create_doctor(
         logger.info(f"Created user account for doctor: {doctor.email}")
     
     # Create Doctor record
+    # Validate hospital_id for doctor record
+    if not doctor_data.get("hospital_id") or doctor_data["hospital_id"].strip() == "":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="hospital_id is required for doctor",
+        )
+    
     doctor_data["user_id"] = user_id  # Link to User account
         
     new_doctor = Doctor(**doctor_data)
