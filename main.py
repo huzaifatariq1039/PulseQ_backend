@@ -20,7 +20,12 @@ from app.services.app_scheduler import start_scheduler, shutdown_scheduler
 from app.services.sync_service import sync_pos_to_postgres
 from app.middleware.performance import PerformanceMiddleware
  
+<<<<<<< HEAD
 from app.routes import auth, hospitals, doctors, tokens, dashboard
+=======
+from app.routes import auth, hospitals, tokens, dashboard
+from app.routes.doctors import public_router as doctors_public_router, router as doctors_router
+>>>>>>> d68630e (Fix doctor route split for public and staff endpoints)
 from app.routes import realtime, portal
 from app.routes import consultation
 from app.routes import pos
@@ -142,12 +147,20 @@ app.include_router(whatsapp_webhook_router, prefix="/api/v1/webhooks", tags=["In
  
 # 2. Public Discovery (Patient/Guest)
 app.include_router(hospitals.router, prefix="/api/v1/public/hospitals", tags=["Public Discovery"])
+<<<<<<< HEAD
 app.include_router(doctors.public_router, prefix="/api/v1/public/doctors", tags=["Public Discovery"])
 app.include_router(pharmacy_public_router, prefix="/api/v1/public/pharmacy", tags=["Public Discovery"])
  
 # 2b. Staff Doctor Management (Admin/Receptionist)
 app.include_router(doctors.router, prefix="/api/v1/staff/doctors", tags=["Staff Portal - Doctor Management"])
 app.include_router(doctors.router, prefix="/api/v1/doctors", tags=["Doctor Management (Legacy Alias)"])
+=======
+app.include_router(doctors_public_router, prefix="/api/v1/public/doctors", tags=["Public Discovery"])
+app.include_router(pharmacy_public_router, prefix="/api/v1/public/pharmacy", tags=["Public Discovery"])
+ 
+# 2b. Staff Doctor Management (Admin/Receptionist)
+app.include_router(doctors_router, prefix="/api/v1/doctors", tags=["Doctor Management"])
+>>>>>>> d68630e (Fix doctor route split for public and staff endpoints)
  
 # 3. Patient Services
 app.include_router(dashboard.router, prefix="/api/v1/patient/dashboard", tags=["Patient Portal"])
@@ -236,4 +249,8 @@ async def validation_exception_handler(request, exc: RequestValidationError):
  
 @app.exception_handler(404)
 async def not_found_handler(request, exc):
+<<<<<<< HEAD
     return fail(message="Endpoint not found", status_code=status.HTTP_404_NOT_FOUND)
+=======
+    return fail(message="Endpoint not found", status_code=status.HTTP_404_NOT_FOUND)
+>>>>>>> d68630e (Fix doctor route split for public and staff endpoints)
