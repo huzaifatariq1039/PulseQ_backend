@@ -103,7 +103,11 @@ async def reception_queue(
 ) -> Dict[str, Any]:
     """Receptionist Queue View from PostgreSQL"""
     today = datetime.utcnow().date()
-    query = db.query(Token).filter(Token.hospital_id == hospital_id, func.date(Token.appointment_date) == today)
+    query = db.query(Token).filter(
+    Token.hospital_id == hospital_id, 
+    func.date(Token.appointment_date) == today,
+    Token.status.in_(["pending", "in_progress", "waiting"])  # 👈 exclude completed/deleted
+)
     if doctor_id:
         query = query.filter(Token.doctor_id == doctor_id)
 
