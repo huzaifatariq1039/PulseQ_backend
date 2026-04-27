@@ -1,7 +1,6 @@
 from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from app.security import require_roles, get_current_active_user
-from app.models import Patient  
+from app.security import require_roles, get_current_active_user 
 from app.models import TokenData
 from app.database import get_db
 from sqlalchemy.orm import Session
@@ -233,14 +232,14 @@ async def get_completed_consultations(
     
     items = []
     for t in tokens:
-        patient = db.query(Patient).filter(Patient.id == t.patient_id).first()
-        doctor_obj = db.query(Doctor).filter(Doctor.id == t.doctor_id).first()
+      patient = db.query(User).filter(User.id == t.patient_id).first()  # ✅ User instead of Patient
+      doctor_obj = db.query(Doctor).filter(Doctor.id == t.doctor_id).first()
     
-    duration = None
-    if t.started_at and t.completed_at:
+      duration = None  # ✅ inside the loop now
+      if t.started_at and t.completed_at:
         duration = round((t.completed_at - t.started_at).total_seconds() / 60, 2)
     
-    items.append({
+      items.append({  # ✅ inside the loop now
         "token_number": t.token_number,
         "mrn": patient.mrn if patient else None,
         "patient_name": patient.name if patient else None,
@@ -251,24 +250,6 @@ async def get_completed_consultations(
         "duration": duration,
         "status": t.status,
     })
-    
-    return ok(
-        data={
-            "tokens": items,
-            "statistics": {
-                "completed_today": completed_today,
-                "completed_this_month": completed_this_month,
-                "total_completed": total_completed,
-                "average_consultation_time_minutes": avg_consultation_time
-            }
-        },
-        meta={
-            "page": page,
-            "page_size": size,
-            "total": total
-        }
-    )
-
 
 @router.get("/doctor/dashboard", dependencies=[Depends(require_roles("doctor", "patient", "admin"))])
 async def doctor_dashboard(
