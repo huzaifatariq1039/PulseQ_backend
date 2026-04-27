@@ -182,7 +182,7 @@ class SmartTokenService:
             # Future appointment
             if target_date > today:
                 return {
-                    "current_token": 0,
+                    "current_token_serving": 0,
                     "total_queue": 0,
                     "people_ahead": 0,
                     "queue_position": 0,
@@ -200,7 +200,7 @@ class SmartTokenService:
                 )
             ).order_by(Token.token_number.asc()).first()
 
-            current_token = int(called_token.token_number) if called_token else 0
+            current_token_serving = int(called_token.token_number) if called_token else 0
 
             # Get all WAITING tokens
             waiting_tokens = db.query(Token).filter(
@@ -228,13 +228,13 @@ class SmartTokenService:
                         break
 
             if doctor_unavailable:
-                current_token = 0
+                current_token_serving = 0
                 people_ahead = 0
                 queue_position = 0
                 estimated_wait_time = None
 
             return {
-                "current_token": current_token,
+                "current_token_serving": current_token_serving,
                 "total_queue": total_queue,
                 "people_ahead": people_ahead,
                 "queue_position": queue_position,
