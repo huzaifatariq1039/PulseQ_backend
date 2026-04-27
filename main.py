@@ -42,7 +42,7 @@ from app.routes.token_alias import token_alias_router
 # FIX 2: Compute cors_origins BEFORE lifespan so the startup log doesn't crash
 _origins_env = os.getenv("ALLOWED_ORIGINS", "")
 _allowed_origins = [o.strip() for o in _origins_env.split(",") if o.strip()]
-_default_origins = [o for o in [WEB_BASE_URL, MOBILE_BASE_URL, "http://localhost:4200", "https://pulseq-3l03vs19z-aimens-projects-ff0f0a5e.vercel.app/"] if o]
+_default_origins = [o for o in [WEB_BASE_URL, MOBILE_BASE_URL, "http://localhost:4200", "https://pulseq-3l03vs19z-aimens-projects-ff0f0a5e.vercel.app"] if o]
 _extra = EXTRA_CORS_ORIGINS or []
 if not (_allowed_origins or _default_origins or _extra):
     _allowed_origins = ["*"]
