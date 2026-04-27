@@ -287,8 +287,11 @@ PulseQ
                 # Fallback text as per user requirement image
                 body = """
 Thankyou for visiting PulseQ.
-Did you like our service?
 
+For future appointments in {{1}} use this link:
+https://pulseq.blog/
+
+Did you like our service?
 (Reply with one of the options below)
 1. Yes, It was Great
 2. No, I didn't like it
