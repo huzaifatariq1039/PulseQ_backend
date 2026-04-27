@@ -894,13 +894,24 @@ async def get_appointment_details(
     token = db.query(Token).filter(Token.id == token_id).first()
     if not token:
         raise HTTPException(status_code=404, detail="Token not found")
-    if token.patient_id != current_user.user_id:
+
+    # ✅ Allow patient (own token), doctor, receptionist, or admin
+    user_role = str(getattr(current_user, "role", "")).lower()
+    is_owner = str(token.patient_id) == str(current_user.user_id)
+    is_staff = user_role in ["doctor", "receptionist", "admin"]
+
+    if not is_owner and not is_staff:
         raise HTTPException(status_code=403, detail="Access denied")
 
     doctor = db.query(Doctor).filter(Doctor.id == token.doctor_id).first()
     hospital = db.query(Hospital).filter(Hospital.id == token.hospital_id).first()
 
-    queue = SmartTokenService.get_queue_status(token.doctor_id, token.token_number, token.appointment_date)
+    queue = SmartTokenService.get_queue_status(
+        token.doctor_id, 
+        token.token_number, 
+        token.appointment_date,
+        db=db  # pass db session to avoid creating new one
+    )
 
     return {
         "token": _to_smart_token_response(token),
@@ -908,7 +919,6 @@ async def get_appointment_details(
         "hospital": {k: v for k, v in hospital.__dict__.items() if not k.startswith('_')} if hospital else {},
         "queue": queue
     }
-
 
 @router.get("/{token_id}/queue-status")
 async def get_token_queue_status(
