@@ -626,11 +626,11 @@ async def generate_smart_token(
             func.date(Token.appointment_date) == target_date
         ).count()
 
-        if total_tokens_today == 0:
-            estimated_wait_time = 0
+        if patients_ahead == 0 and total_tokens_today == 0:
+        # First token of the day — give a base estimate
+            estimated_wait_time = 15  # base default
         else:
             calc_ahead = max(patients_ahead, 1)
-
             if not ai_engine.model:
                 ai_engine.load()
 
@@ -692,6 +692,7 @@ async def generate_smart_token(
         last_1 = get_last_patient_duration(doctor_id, db) or 15
         rolling_service_time = (0.5 * last_5) + (0.3 * last_30) + (0.2 * last_1)
         estimated_wait_time = int(calc_ahead_fallback * rolling_service_time)
+        logger.error(f"AI Wait Time Calculation failed: {e}", exc_info=True)  # 👈 add exc_info=True
 
     # ✅ Fixed: token_doc now includes patient_age, patient_gender, reason_for_visit, display_code
     # Fetch user info from database to get name and phone
