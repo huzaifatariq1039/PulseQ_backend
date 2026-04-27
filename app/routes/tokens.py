@@ -24,6 +24,7 @@ from app.security import get_current_active_user
 from app.security import require_roles
 from app.services.token_service import SmartTokenService
 from app.services.notification_service import NotificationService
+from app.services.whatsapp_service import send_template_message
 from app.services.refund_service import RefundService
 from app.services.message_scheduler import schedule_messages
 from app.services.confirmation_scheduler import schedule_confirmation_checks
@@ -31,10 +32,12 @@ from app.utils.mrn import get_or_create_patient_mrn
 from app.utils.state import is_transition_allowed
 from app.utils.responses import ok
 from app.services.fee_calculator import compute_total_amount
+
+# ✅ UPDATED IMPORT: Swapped avg_last_30 for avg_last_10 to match AI model
 from app.routes.ai import (
     get_current_hour, get_current_day, calculate_patients_ahead,
     calculate_queue_length, calculate_queue_velocity, get_last_patient_duration,
-    avg_last_5, avg_last_30, count_available_doctors, get_hour_history,
+    avg_last_5, avg_last_10, count_available_doctors, get_hour_history,
     get_weekday_history, get_doctor_history
 )
 from app.services.ai_engine import ai_engine
@@ -92,7 +95,6 @@ def _to_smart_token_response(t: Token) -> SmartTokenResponse:
         hospital_name=t.hospital_name,
         patient_name=t.patient_name,
         patient_phone=t.patient_phone,
-        # ✅ Fixed: include patient fields in response
         patient_age=t.patient_age,
         patient_gender=t.patient_gender,
         reason_for_visit=t.reason_for_visit,
@@ -367,7 +369,7 @@ async def cancel_token_logic(
 
 
 # ====================================================================================
-# ✅ ROUTES — STATIC ROUTES FIRST, DYNAMIC /{token_id} ROUTES LAST
+# ROUTES — STATIC ROUTES FIRST, DYNAMIC /{token_id} ROUTES LAST
 # ====================================================================================
 
 # -------------------- Static GET Routes --------------------
@@ -401,7 +403,6 @@ async def get_my_active_token_details(
     current_user = Depends(get_current_active_user)
 ):
     """Get the most recent active token with full appointment details including doctor, hospital, and queue status."""
-    # Query for the most recent active token
     token = db.query(Token).filter(
         Token.patient_id == current_user.user_id,
         Token.status.notin_(["cancelled", "completed"])
@@ -410,7 +411,6 @@ async def get_my_active_token_details(
     if not token:
         raise HTTPException(status_code=404, detail="No active token found")
 
-    # If patient_name or patient_phone is null, fetch from User table
     if not token.patient_name or not token.patient_phone:
         user = db.query(User).filter(User.id == current_user.user_id).first()
         if user:
@@ -418,17 +418,14 @@ async def get_my_active_token_details(
                 token.patient_name = user.name
             if not token.patient_phone:
                 token.patient_phone = user.phone
-            # Update the token in DB to avoid future lookups
             try:
                 db.commit()
             except Exception:
                 db.rollback()
 
-    # Get doctor and hospital info
     doctor = db.query(Doctor).filter(Doctor.id == token.doctor_id).first()
     hospital = db.query(Hospital).filter(Hospital.id == token.hospital_id).first()
 
-    # Get queue status
     queue = SmartTokenService.get_queue_status(token.doctor_id, token.token_number, token.appointment_date)
 
     return {
@@ -452,7 +449,6 @@ async def get_my_active_token(
     if not token:
         raise HTTPException(status_code=404, detail="No active token found")
 
-    # If patient_name or patient_phone is null, fetch from User table
     if not token.patient_name or not token.patient_phone:
         user = db.query(User).filter(User.id == current_user.user_id).first()
         if user:
@@ -460,7 +456,6 @@ async def get_my_active_token(
                 token.patient_name = user.name
             if not token.patient_phone:
                 token.patient_phone = user.phone
-            # Update the token in DB to avoid future lookups
             try:
                 db.commit()
             except Exception:
@@ -568,6 +563,9 @@ async def generate_smart_token_with_details(
     }
 
 
+# ====================================================================================
+# ✅ THE CORE UPDATED AI GENERATION ENDPOINT
+# ====================================================================================
 @router.post("/generate", response_model=SmartTokenResponse)
 async def generate_smart_token(
     payload: SmartTokenGenerateRequest,
@@ -609,93 +607,98 @@ async def generate_smart_token(
 
     mrn = get_or_create_patient_mrn(db, current_user.user_id, hospital_id)
 
-    # --- AI Estimated Wait Time Calculation ---
+    # ---------------------------------------------------------
+    # AI Estimated Wait Time Calculation (UPDATED WITH COLD START)
+    # ---------------------------------------------------------
     estimated_wait_time = 0
     target_date = appointment_date.date() if hasattr(appointment_date, 'date') else appointment_date
-    patients_ahead = 0
 
     try:
-        total_tokens_today = db.query(Token).filter(
-            Token.doctor_id == doctor_id,
-            func.date(Token.appointment_date) == target_date
-        ).count()
-
         patients_ahead = db.query(Token).filter(
             Token.doctor_id == doctor_id,
             Token.status.in_(["waiting", "confirmed", "pending", "called", "in_consultation"]),
             func.date(Token.appointment_date) == target_date
         ).count()
 
-        if patients_ahead == 0 and total_tokens_today == 0:
-        # First token of the day — give a base estimate
-            estimated_wait_time = 15  # base default
-        else:
-            calc_ahead = max(patients_ahead, 1)
-            if not ai_engine.model:
-                ai_engine.load()
-
-            ai_input = {
-                "hour_of_day": get_current_hour(),
-                "day_of_week": get_current_day(),
-                "patients_ahead_of_user": calc_ahead,
-                "patients_in_queue": calc_ahead,
-                "queue_velocity": calculate_queue_velocity(doctor_id, db),
-                "last_patient_duration": get_last_patient_duration(doctor_id, db),
-                "avg_service_time_last_5": avg_last_5(doctor_id, db),
-                "avg_service_time_last_30": avg_last_30(doctor_id, db),
-                "doctors_available": count_available_doctors(db),
-                "avg_wait_time_this_hour_past_week": get_hour_history(db),
-                "avg_wait_time_this_weekday_past_month": get_weekday_history(db),
-                "avg_service_time_doctor_history": get_doctor_history(doctor_id, db),
-                "doctor": doctor_data.get("name", "Unknown"),
-                "age": payload.patient_age or 30,
-                "disease_type": payload.department or payload.reason_for_visit or "General",
-                "clinic_type": "Specialist" if doctor_data.get("has_session") else "General"
-            }
-
-            predicted_duration = ai_engine.predict_duration(ai_input)
-            predicted_duration = max(predicted_duration, 10)
-
-            # Rolling service time using 3 sources
-            last_5 = avg_last_5(doctor_id, db) or 15
-            last_30 = avg_last_30(doctor_id, db) or 15
-            last_1 = get_last_patient_duration(doctor_id, db) or 15
-
-            # Weighted rolling average (last 5 gets most weight)
-            rolling_service_time = (0.5 * last_5) + (0.3 * last_30) + (0.2 * last_1)
-
-            # AI ETA
-            ai_eta = calc_ahead * predicted_duration
-
-            # Alpha — trust in AI (higher when more data available)
-            completed_count = db.query(Token).filter(
+        completed_today = db.query(Token).filter(
             Token.doctor_id == doctor_id,
-            Token.status == "completed"
-            ).count()
+            Token.status == "completed",
+            func.date(Token.appointment_date) == target_date
+        ).count()
 
-            if completed_count >= 30:
-                alpha = 0.7   # trust AI more when enough history
-            elif completed_count >= 10:
-                alpha = 0.5   # balanced
+        # ======================================================
+        # PHASE 1: Fast-Start Override (No patients completed today)
+        # ======================================================
+        if completed_today == 0:
+            estimated_wait_time = (patients_ahead + 1) * 5
+
+        # ======================================================
+        # PHASE 2: Live XGBoost Engine
+        # ======================================================
+        else:
+            if patients_ahead == 0:
+                estimated_wait_time = 0 
             else:
-                alpha = 0.2   # trust rolling average more when less data
+                if not ai_engine.model:
+                    ai_engine.load()
 
-            # Final ETA formula
-            eta = alpha * ai_eta + (1 - alpha) * (calc_ahead * rolling_service_time)
-            estimated_wait_time = max(int(eta), 5)  # minimum 5 minutes
+                last_5 = avg_last_5(doctor_id, db) or 5.0
+                last_10 = avg_last_10(doctor_id, db) or 5.0 
+                last_1 = get_last_patient_duration(doctor_id, db) or 5.0
+
+                ai_input: Dict[str, Any] = {
+                    "hour_of_day": get_current_hour(),
+                    "day_of_week": get_current_day(),
+                    "patients_ahead_of_user": patients_ahead,
+                    "patients_in_queue": patients_ahead + 1,
+                    "queue_length_last_10_min": 0, 
+                    "queue_velocity": calculate_queue_velocity(doctor_id, db),
+                    "last_patient_duration": last_1,
+                    "avg_service_time_last_5": last_5,
+                    "avg_service_time_last_10": last_10,
+                    "doctors_available": count_available_doctors(db),
+                    "doctor_type": "Specialist" if doctor_data.get("has_session") else "General Medicine",
+                    "clinic_type": "Specialist" if doctor_data.get("has_session") else "General Medicine",
+                    "avg_wait_time_this_hour_past_week": get_hour_history(db),
+                    "avg_wait_time_this_weekday_past_month": get_weekday_history(db),
+                    "avg_service_time_doctor_historic": get_doctor_history(doctor_id, db),
+                    "Name": current_user.name if hasattr(current_user, 'name') else "Unknown",
+                    "Doctor Name": doctor_data.get("name", "Unknown"),
+                    "Service_Duration": 0, 
+                    "Disease": payload.department or payload.reason_for_visit or "General",
+                    "Age": payload.patient_age or 30
+                }
+
+                predicted_duration = ai_engine.predict_duration(ai_input)
+                predicted_duration = max(predicted_duration, 3.5) # Prevents "Race to zero" AI collapse
+
+                rolling_service_time = (0.5 * last_5) + (0.3 * last_10) + (0.2 * last_1)
+                ai_eta = patients_ahead * predicted_duration
+
+                total_completed = db.query(Token).filter(
+                    Token.doctor_id == doctor_id,
+                    Token.status == "completed"
+                ).count()
+
+                if total_completed >= 30:
+                    alpha = 0.7   
+                elif total_completed >= 10:
+                    alpha = 0.5   
+                else:
+                    alpha = 0.2   
+
+                eta = alpha * ai_eta + (1 - alpha) * (patients_ahead * rolling_service_time)
+                estimated_wait_time = max(int(eta), 5) 
 
     except Exception as e:
-        logger.error(f"AI Wait Time Calculation failed: {e}")
-        calc_ahead_fallback = max(patients_ahead, 1)
-        last_5 = avg_last_5(doctor_id, db) or 15
-        last_30 = avg_last_30(doctor_id, db) or 15
-        last_1 = get_last_patient_duration(doctor_id, db) or 15
-        rolling_service_time = (0.5 * last_5) + (0.3 * last_30) + (0.2 * last_1)
-        estimated_wait_time = int(calc_ahead_fallback * rolling_service_time)
-        logger.error(f"AI Wait Time Calculation failed: {e}", exc_info=True)  # 👈 add exc_info=True
+        logger.error(f"AI Wait Time Calculation failed: {e}", exc_info=True)
+        # Fallback to pure heuristic math
+        last_5 = avg_last_5(doctor_id, db) or 5.0
+        estimated_wait_time = int(max(patients_ahead, 1) * last_5)
 
-    # ✅ Fixed: token_doc now includes patient_age, patient_gender, reason_for_visit, display_code
-    # Fetch user info from database to get name and phone
+    # ---------------------------------------------------------
+    # Token Creation & Saving
+    # ---------------------------------------------------------
     user = db.query(User).filter(User.id == current_user.user_id).first()
     patient_name = user.name if user else None
     patient_phone = user.phone if user else None
@@ -751,37 +754,39 @@ async def generate_smart_token(
         db=db
     )
 
-    # Send immediate WhatsApp confirmation message after token booking
+    # Send immediate WhatsApp confirmation message
     if patient_phone:
         try:
-            send_queue_message(
-                phone=patient_phone,
-                name=patient_name or "Patient",
-                position=token_number,
-                wait_time=estimated_wait_time,
-                doctor_name=doctor_data.get("name", "N/A"),
-                hospital_name=hospital_data.get("name", "PulseQ Clinic"),
-                room_number="Room 1"  # Default room number
+            await send_template_message(
+            phone=patient_phone,
+            template_name="token_number",
+            params=[
+                doctor_data.get("name", "Doctor"),
+                patient_name or "Patient",
+                hospital_data.get("name", "Clinic"),
+                "N/A",
+                str(estimated_wait_time or 0)
+            ]
             )
             logger.info(f"WhatsApp confirmation sent to {patient_phone} for token {token_id}")
-            
-            # Schedule 15-minute reminder if user doesn't reply YES
-            try:
-                schedule_confirmation_checks(
-                    token_id=token_id,
-                    first_delay_minutes=15,  # Reminder after 15 minutes
-                    second_delay_minutes=15  # Final check after another 15 minutes
-                )
-                logger.info(f"Confirmation reminder scheduled for token {token_id}")
-            except Exception as e:
-                logger.error(f"Failed to schedule confirmation reminder for token {token_id}: {e}")
         except Exception as e:
             logger.error(f"Failed to send WhatsApp confirmation for token {token_id}: {e}")
+    
+        # Schedule reminders
+        try:
+                schedule_confirmation_checks(
+                    token_id=token_id,
+                    first_delay_minutes=15,
+                    second_delay_minutes=15
+                )
+                logger.info(f"Confirmation reminder scheduled for token {token_id}")
+        except Exception as e:
+                logger.error(f"Failed to schedule confirmation reminder for token {token_id}: {e}")
 
     return response_obj
 
 
-@router.post("/generate")
+@router.post("/generate/selection")
 async def generate_token_by_selection(
     payload: Dict[str, Any] = Body(...),
     db: Session = Depends(get_db),
@@ -805,14 +810,13 @@ async def generate_token_by_selection(
     )
 
 
-# Alias for frontend compatibility - old path: /api/v1/patients/token/generate
+# Alias for frontend compatibility
 @router.post("/patients/token/generate")
 async def generate_token_alias(
     payload: Dict[str, Any] = Body(...),
     db: Session = Depends(get_db),
     current_user = Depends(get_current_active_user),
 ):
-    """Alias endpoint for frontend compatibility"""
     return await generate_token_by_selection(payload, db, current_user)
 
 
@@ -822,14 +826,12 @@ async def cancel_token_alias(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_active_user)
 ):
-    """Cancel a token by token_id. Expects {"token_id": "...", "reason": "...", "refund_method": "..."}"""
     token_id = payload.get("token_id")
     if not token_id:
         raise HTTPException(status_code=400, detail="token_id is required")
     
     result = await cancel_token_endpoint(token_id, payload, db, current_user)
     
-    # Return a more frontend-friendly response
     return {
         "success": True,
         "message": result.message if hasattr(result, 'message') else result.get("message", "Token cancelled successfully"),
@@ -845,7 +847,6 @@ async def create_token(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_active_user)
 ):
-    """Create a token atomically for a specific doctor and clinic-local date."""
     doctor = db.query(Doctor).filter(Doctor.id == spec.doctor_id).first()
     hospital = db.query(Hospital).filter(Hospital.id == spec.hospital_id).first()
     if not doctor or not hospital:
@@ -868,7 +869,6 @@ async def create_token(
     token_id = str(uuid.uuid4())
     mrn = get_or_create_patient_mrn(db, current_user.user_id, spec.hospital_id)
     
-    # Fetch user info from database to get name and phone
     user = db.query(User).filter(User.id == current_user.user_id).first()
     patient_name = user.name if user else None
     patient_phone = user.phone if user else None
@@ -890,7 +890,6 @@ async def create_token(
         "patient_name": patient_name,
         "patient_phone": patient_phone,
         "department": doctor_data.get("specialization"),
-        # ✅ Fixed: also save patient fields in create_token
         "patient_age": spec.patient_age,
         "patient_gender": spec.patient_gender,
         "reason_for_visit": spec.reason_for_visit or None,
@@ -927,7 +926,6 @@ async def get_appointment_details(
     if not token:
         raise HTTPException(status_code=404, detail="Token not found")
 
-    # ✅ Allow patient (own token), doctor, receptionist, or admin
     user_role = str(getattr(current_user, "role", "")).lower()
     is_owner = str(token.patient_id) == str(current_user.user_id)
     is_staff = user_role in ["doctor", "receptionist", "admin"]
@@ -942,7 +940,7 @@ async def get_appointment_details(
         token.doctor_id, 
         token.token_number, 
         token.appointment_date,
-        db=db  # pass db session to avoid creating new one
+        db=db 
     )
 
     return {

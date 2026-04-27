@@ -57,7 +57,6 @@ class AIEngine:
             shim.dtype = np.dtype  # type: ignore[attr-defined]
             sys.modules.setdefault("LabelEncoder", shim)
         except Exception:
-            # If sklearn isn't available yet, unpickling will raise a clearer error.
             pass
 
         with open(MODEL_PATH, "rb") as f:
@@ -74,7 +73,7 @@ class AIEngine:
             if value in encoder.classes_:
                 return encoder.transform([value])[0]
             else:
-                return 0  # default for unseen
+                return 0  # default for unseen (Prevents crashing on new hospitals!)
         return value
         
     def _encode_clinic_type(self, clinic_type):
@@ -96,20 +95,17 @@ class AIEngine:
     def predict_duration(self, data_dict):
         """
         Predict consultation duration using the trained XGBoost model.
-        
-        Args:
-            data_dict: Dictionary containing input features with any of the expected feature names
-            or their aliases defined in feature_mapping.
-            
-        Returns:
-            float: Predicted consultation duration in minutes
-            
-        Raises:
-            ValueError: If required features are missing or invalid
         """
         # Make a copy to avoid modifying the input
         features = data_dict.copy()
         
+        # =========================================================
+        # CLEANUP: Pop unused text to prevent processing errors
+        # =========================================================
+        features.pop("Name", None)
+        features.pop("Service_Duration", None)
+        features.pop("doctor_type", None) # Not in expected_features list
+
         # Apply feature name mapping
         for old_name, new_name in self.feature_mapping.items():
             if old_name in features and new_name not in features:
@@ -140,14 +136,14 @@ class AIEngine:
         # Encode clinic_type to integer before creating DataFrame
         features['clinic_type'] = self._encode_clinic_type(features['clinic_type'])
         
-        # Encode categorical features - use both possible keys for robustness
+        # Encode categorical features - gracefully handles new hospital doctors
         for feat_name, possible_enc_keys in [('Doctor Name', ['Doctor Name', 'doctor']), 
                                              ('Disease', ['Disease', 'disease_type'])]:
             if feat_name in features:
                 for enc_key in possible_enc_keys:
                     if enc_key in self.encoders:
                         features[feat_name] = self._safe_encode(enc_key, features[feat_name])
-                        break # Successfully encoded this feature, move to next feat_name
+                        break 
         
         # Ensure all expected features are present
         missing = set(self.expected_features) - set(features.keys())
@@ -159,14 +155,9 @@ class AIEngine:
             # Create dataframe with features in exact order
             df = pd.DataFrame([features])[self.expected_features]
             
-            # --- DIAGNOSTIC LOGGING (STEP 1) ---
-            print("🔥 AI MODEL predict_duration CALLED")
-            print(f"   Input Features (sample): { {k: features[k] for k in ['Age', 'Doctor Name', 'Disease', 'patients_ahead_of_user'] if k in features} }")
-            
             # Make prediction and round to nearest whole number
             if hasattr(self.model, 'predict'):
                 prediction = float(self.model.predict(df)[0])
-                print(f"   ✅ Prediction Success: {prediction}")
                 return int(round(prediction))
             else:
                 raise ValueError("Model object has no 'predict' method")
@@ -177,5 +168,5 @@ class AIEngine:
             traceback.print_exc()
             raise ValueError(f"Prediction failed: {str(e)}")
 
-
+# Instantiate the engine
 ai_engine = AIEngine()
