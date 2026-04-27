@@ -655,12 +655,43 @@ async def generate_smart_token(
 
             predicted_duration = ai_engine.predict_duration(ai_input)
             predicted_duration = max(predicted_duration, 10)
-            estimated_wait_time = int(calc_ahead * predicted_duration)
+
+            # Rolling service time using 3 sources
+            last_5 = avg_last_5(doctor_id, db) or 15
+            last_30 = avg_last_30(doctor_id, db) or 15
+            last_1 = get_last_patient_duration(doctor_id, db) or 15
+
+            # Weighted rolling average (last 5 gets most weight)
+            rolling_service_time = (0.5 * last_5) + (0.3 * last_30) + (0.2 * last_1)
+
+            # AI ETA
+            ai_eta = calc_ahead * predicted_duration
+
+            # Alpha — trust in AI (higher when more data available)
+            completed_count = db.query(Token).filter(
+            Token.doctor_id == doctor_id,
+            Token.status == "completed"
+            ).count()
+
+            if completed_count >= 30:
+                alpha = 0.7   # trust AI more when enough history
+            elif completed_count >= 10:
+                alpha = 0.5   # balanced
+            else:
+                alpha = 0.2   # trust rolling average more when less data
+
+            # Final ETA formula
+            eta = alpha * ai_eta + (1 - alpha) * (calc_ahead * rolling_service_time)
+            estimated_wait_time = max(int(eta), 5)  # minimum 5 minutes
 
     except Exception as e:
         logger.error(f"AI Wait Time Calculation failed: {e}")
         calc_ahead_fallback = max(patients_ahead, 1)
-        estimated_wait_time = calc_ahead_fallback * 15
+        last_5 = avg_last_5(doctor_id, db) or 15
+        last_30 = avg_last_30(doctor_id, db) or 15
+        last_1 = get_last_patient_duration(doctor_id, db) or 15
+        rolling_service_time = (0.5 * last_5) + (0.3 * last_30) + (0.2 * last_1)
+        estimated_wait_time = int(calc_ahead_fallback * rolling_service_time)
 
     # ✅ Fixed: token_doc now includes patient_age, patient_gender, reason_for_visit, display_code
     # Fetch user info from database to get name and phone
