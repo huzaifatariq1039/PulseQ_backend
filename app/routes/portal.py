@@ -118,22 +118,59 @@ async def get_doctor_tokens(
     page: Optional[int] = Query(1, ge=1),
     page_size: Optional[int] = Query(20, ge=1, le=500),
 ) -> Dict[str, Any]:
-    # Find clinical doctor profile
-    doctor = db.query(Doctor).filter(Doctor.user_id == current.user_id).first()
-    target_doctor_id = doctor.id if doctor else current.user_id
+    """Get doctor's tokens/patient history - Fixed to handle all doctor ID scenarios"""
     
+    # DEBUG: Log what we're working with
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"get_doctor_tokens - current.user_id: {current.user_id}, role: {current.role}")
+    
+    # Find clinical doctor profile by user_id
+    doctor = db.query(Doctor).filter(Doctor.user_id == current.user_id).first()
+    
+    # If not found by user_id, try matching by doctor.id == current.user_id (legacy)
+    if not doctor:
+        doctor = db.query(Doctor).filter(Doctor.id == current.user_id).first()
+        logger.info(f"get_doctor_tokens - Fallback match by Doctor.id: {doctor.id if doctor else 'NOT FOUND'}")
+    
+    # If still not found, use user_id as fallback
+    target_doctor_id = doctor.id if doctor else current.user_id
+    logger.info(f"get_doctor_tokens - Using target_doctor_id: {target_doctor_id}")
+    
+    # Build query - NO date filter, return ALL tokens for this doctor
     query = db.query(Token).filter(Token.doctor_id == target_doctor_id)
+    
+    # Optional status filter
     if status_filter:
         query = query.filter(Token.status == status_filter)
+        logger.info(f"get_doctor_tokens - Applied status filter: {status_filter}")
     
+    # Count total before pagination
     total = query.count()
+    logger.info(f"get_doctor_tokens - Total tokens found: {total}")
+    
     size = _parse_positive_int(page_size, 20)
     skip = (page - 1) * size
     
-    tokens = query.order_by(Token.created_at.desc()).offset(skip).limit(size).all()
+    # Order by appointment_date (most recent first) instead of created_at
+    tokens = query.order_by(Token.appointment_date.desc()).offset(skip).limit(size).all()
     items = [{k: v for k, v in t.__dict__.items() if not k.startswith('_')} for t in tokens]
     
-    return ok(data=items, meta={"page": page, "page_size": size, "total": total})
+    # Return debug info in meta (remove in production if needed)
+    return ok(
+        data=items, 
+        meta={
+            "page": page, 
+            "page_size": size, 
+            "total": total,
+            "debug": {
+                "current_user_id": str(current.user_id),
+                "doctor_profile_found": doctor is not None,
+                "doctor_id_used": str(target_doctor_id),
+                "status_filter_applied": status_filter
+            }
+        }
+    )
 
 
 @router.get("/completed-consultations", dependencies=[Depends(require_roles("doctor", "admin"))])
