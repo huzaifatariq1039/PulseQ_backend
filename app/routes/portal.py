@@ -1,6 +1,7 @@
 from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from app.security import require_roles, get_current_active_user
+from app.models import Patient  
 from app.models import TokenData
 from app.database import get_db
 from sqlalchemy.orm import Session
@@ -230,7 +231,26 @@ async def get_completed_consultations(
         Token.completed_at.desc() if hasattr(Token, 'completed_at') else Token.updated_at.desc()
     ).offset(skip).limit(size).all()
     
-    items = [{k: v for k, v in t.__dict__.items() if not k.startswith('_')} for t in tokens]
+    items = []
+    for t in tokens:
+        patient = db.query(Patient).filter(Patient.id == t.patient_id).first()
+        doctor_obj = db.query(Doctor).filter(Doctor.id == t.doctor_id).first()
+    
+    duration = None
+    if t.started_at and t.completed_at:
+        duration = round((t.completed_at - t.started_at).total_seconds() / 60, 2)
+    
+    items.append({
+        "token_number": t.token_number,
+        "mrn": patient.mrn if patient else None,
+        "patient_name": patient.name if patient else None,
+        "doctor_name": doctor_obj.name if doctor_obj else None,
+        "department": doctor_obj.specialization if doctor_obj else None,
+        "start_time": t.started_at,
+        "end_time": t.completed_at,
+        "duration": duration,
+        "status": t.status,
+    })
     
     return ok(
         data={
