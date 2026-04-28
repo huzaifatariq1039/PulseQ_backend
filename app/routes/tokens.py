@@ -719,7 +719,7 @@ async def generate_smart_token(
 
     if patient_phone:
         try:
-            await send_template_message(
+            send_template_message(
             phone=patient_phone,
             template_name="token_number",
             params=[

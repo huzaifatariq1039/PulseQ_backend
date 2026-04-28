@@ -8,9 +8,7 @@ from sqlalchemy import or_
 
 from app.database import get_db_session
 from app.db_models import Doctor, Token, Queue, User
-from app.services.notification_service import NotificationService
 from app.services.whatsapp_service import send_template_message
-from app.templates import TEMPLATES
 from app.routes.realtime import manager
 from app.config_env import WEB_BASE_URL, MOBILE_BASE_URL
 
@@ -34,8 +32,6 @@ class DoctorLeaveService:
 
     @staticmethod
     def _active_token_statuses() -> List[str]:
-        # "waiting OR confirmed" requirement, but existing code uses both
-        # "waiting" (legacy) and "pending" (current) to mean waiting.
         return ["waiting", "pending", "confirmed"]
 
     @staticmethod
@@ -47,7 +43,6 @@ class DoctorLeaveService:
             return "rescheduled"
         if a in {"suggest_alternate", "suggest-alternate", "alternate", "b"}:
             return "suggest_alternate"
-        # Default for safety: cancel so patient doesn't wait indefinitely
         return "cancel"
 
     @staticmethod
@@ -79,11 +74,9 @@ class DoctorLeaveService:
             if not merged:
                 continue
 
-            # Simple match: exact department or shared keyword
             if merged == current_dept_norm or current_dept_norm in merged or merged in current_dept_norm:
                 return str(doctor.id), str(doctor.name or "").strip() or None
 
-            # Token overlap fallback
             cur_words = {w for w in current_dept_norm.replace(",", " ").split() if w}
             dep_words = {w for w in merged.replace(",", " ").split() if w}
             if cur_words and (cur_words & dep_words):
@@ -113,7 +106,7 @@ class DoctorLeaveService:
         doctor = db.query(Doctor).filter(Doctor.id == doctor_id).first()
         if not doctor:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Doctor not found")
-        
+
         doctor_name = doctor.name or "Doctor"
         hospital_id = str(doctor.hospital_id or "").strip()
 
@@ -141,7 +134,6 @@ class DoctorLeaveService:
             db.commit()
         except Exception:
             db.rollback()
-            # Best-effort: never block status update for queue doc issues
             pass
 
         # 3) Fetch active tokens waiting/confirmed
@@ -201,7 +193,7 @@ class DoctorLeaveService:
                 continue
 
             current_status = DoctorLeaveService._normalize_status(token.status)
-            
+
             # Update token fields
             token.doctor_unavailable = True
             token.doctor_unavailable_reason = pause_reason
@@ -209,7 +201,6 @@ class DoctorLeaveService:
             token.estimated_wait_time = None
             token.updated_at = now
 
-            # Use required options A/B/C
             if leave_action_norm == "cancel":
                 token.status = "cancelled"
                 token.cancellation_reason = "medical_emergency"
@@ -245,67 +236,42 @@ class DoctorLeaveService:
                 if not phone:
                     continue
 
-                token_number = t.get("display_code") or t.get("hex_code") or t.get("token_number") or ""
-                token_number_str = str(token_number)
-
-                if leave_action_norm == "cancel":
-                    action_msg = "cancelled"
-                else:
-                    action_msg = "rescheduled"
-
-                base = (WEB_BASE_URL or MOBILE_BASE_URL or "").strip().rstrip("/")
-                rebook_link = f"{base}/rebook/{tid}" if base else ""
-
-                alt_line = ""
-                try:
-                    if chosen_alt_name:
-                        alt_line = f"New assigned doctor: Dr. {chosen_alt_name}.\n"
-                    elif chosen_alt_id:
-                        alt_line = f"New assigned doctor ID: {chosen_alt_id}.\n"
-                except Exception:
-                    alt_line = ""
-
-                msg = (
-                    f"Emergency update: Dr. {doctor_name} is unavailable due to leave.\n"
-                    f"Your token {token_number_str} has been {action_msg}.\n"
-                    f"{alt_line}"
-                    + (f"Rebook here: {rebook_link}\n" if rebook_link else "")
-                    + "Please contact reception if you need help."
-                )
-
                 new_doc_name = chosen_alt_name or ""
                 if not new_doc_name and chosen_alt_id:
                     new_doc_name = str(chosen_alt_id)
 
-                send_task = None
+                base = (WEB_BASE_URL or MOBILE_BASE_URL or "").strip().rstrip("/")
+                rebook_link = f"{base}/rebook/{tid}" if base else "https://pulseq.blog/"
+
+                # Send appointment_doctor_change template
+                # Params: 1=patient_name, 2=old_doctor, 3=new_doctor, 4=link
+                params = [
+                    patient_name or "Patient",
+                    doctor_name,
+                    new_doc_name or "",
+                    rebook_link,
+                ]
                 try:
-                    template_name = str(TEMPLATES.get("DOCTOR_CHANGED_or_cancel") or "").strip()
+                    doctor_change_task = asyncio.create_task(
+                        send_template_message(phone, "appointment_doctor_change", params)
+                    )
+                    async_notifications.append(doctor_change_task)
                 except Exception:
-                    template_name = ""
+                    pass
 
-                if template_name:
-                    # Expected body variables:
-                    # 1) patient name, 2) old doctor name, 3) new doctor name, 4) link
-                    params = [
-                        patient_name or "Patient",
-                        f"Dr. {doctor_name}",
-                        f"Dr. {new_doc_name}" if new_doc_name and not str(new_doc_name).lower().startswith("dr") else (new_doc_name or ""),
-                        rebook_link or "",
-                    ]
-                    try:
-                        send_task = asyncio.create_task(send_template_message(phone, template_name, params))
-                    except Exception:
-                        send_task = None
+                # Send THANKYOU template immediately after doctor change message
+                try:
+                    thankyou_task = asyncio.create_task(
+                        send_template_message(phone, "template", [])
+                    )
+                    async_notifications.append(thankyou_task)
+                except Exception:
+                    pass
 
-                if send_task is None:
-                    send_task = asyncio.create_task(NotificationService.send_whatsapp_message(phone, msg))
-
-                async_notifications.append(send_task)
             except Exception:
                 continue
 
         if async_notifications:
-            # Best-effort: do not fail the API due to notification issues
             await asyncio.gather(*async_notifications, return_exceptions=True)
 
         # 6) Real-time WebSocket broadcasts

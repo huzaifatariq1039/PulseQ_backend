@@ -216,6 +216,7 @@ async def consultation_end(
 ) -> Dict[str, Any]:
     token_id = str((payload or {}).get("token_id") or "").strip()
     doctor_id = str((payload or {}).get("doctor_id") or "").strip()
+    consultation_notes = str((payload or {}).get("notes") or "").strip()
     
     if not token_id or not doctor_id:
         missing = []
@@ -273,6 +274,9 @@ async def consultation_end(
     now = datetime.utcnow()
     token.status = "completed"
     token.updated_at = now
+
+    if consultation_notes:
+        token.consultation_notes = consultation_notes
     
     # Safely set attributes if they exist in the model
     for attr in ["completed_at", "end_time"]:
@@ -405,4 +409,57 @@ async def consultation_skip_token(
             "next_called_token": next_token_data,
         },
         message="Token skipped successfully",
+    )
+
+@router.post("/re-add/{token_id}", dependencies=[Depends(require_roles("doctor", "admin"))])
+async def re_add_skipped_patient(
+    token_id: str,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_active_user)
+) -> Dict[str, Any]:
+    """Re-add a skipped patient back to the queue"""
+    token = db.query(Token).filter(Token.id == token_id).first()
+    if not token:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Token not found")
+
+    # For doctor role, verify they own this token
+    role = str(current_user.role or "").lower()
+    if role == "doctor":
+        doctor_profile = db.query(Doctor).filter(Doctor.user_id == current_user.user_id).first()
+        doctor_profile_id = doctor_profile.id if doctor_profile else None
+
+        if str(current_user.user_id) != str(token.doctor_id) and str(doctor_profile_id) != str(token.doctor_id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied: You can only re-add your own tokens"
+            )
+
+    if token.status != "skipped":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Token is not skipped. Current status: {token.status}"
+        )
+
+    now = datetime.utcnow()
+    token.status = "pending"
+    token.updated_at = now
+    db.commit()
+    db.refresh(token)
+
+    logger.info(f"User {current_user.user_id} re-added skipped token {token_id}")
+
+    try:
+        log_action(current_user.user_id, role, action="RE_ADD", token_id=token_id)
+    except Exception:
+        pass
+
+    return ok(
+        data={
+            "token_id": token.id,
+            "display_code": token.display_code,
+            "patient_name": token.patient_name,
+            "status": token.status,
+            "previous_status": "skipped"
+        },
+        message="Patient re-added to queue successfully"
     )
