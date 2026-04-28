@@ -160,7 +160,7 @@ app.include_router(tokens_idempotent.router, prefix="/api/v1/patient/tokens/secu
 app.include_router(payments.router, prefix="/api/v1/patient/payments", tags=["Payment Services"])
 app.include_router(queue.router, prefix="/api/v1/patient/queue", tags=["Queue Services"])
 app.include_router(token_alias_router, prefix="/api/v1/patients", tags=["Token Management (Frontend Alias)"])
-app.include_router(ratings.router, prefix="/api/v1/patient/ratings", tags=["Ratings"])
+app.include_router(ratings.router, prefix="/api/v1/ratings")
 
 # 4. Staff & Provider Services
 app.include_router(consultation.router, prefix="/api/v1/staff/consultation", tags=["Staff Portal"])
