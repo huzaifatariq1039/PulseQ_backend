@@ -735,7 +735,7 @@ async def generate_smart_token(
             logger.error(f"Failed to send WhatsApp confirmation for token {token_id}: {e}")
     
         try:
-                schedule_confirmation_checks(
+                await schedule_confirmation_checks(
                     token_id=token_id,
                     first_delay_minutes=15,
                     second_delay_minutes=15

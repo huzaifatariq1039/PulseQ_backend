@@ -185,7 +185,8 @@ async def schedule_confirmation_checks(token_id: str, first_delay_minutes: int =
     """
     After token booking:
     - If no YES response in 15 min → send reminder_for_confirmation
-    - If still no response in next 15 min → auto cancel token
+    - If still no response in next 15 min → auto cancel token + send cancelled message
+    - After 2 min of cancellation → send thankyou message
     """
     async def _check_and_remind():
         await asyncio.sleep(first_delay_minutes * 60)
@@ -201,6 +202,8 @@ async def schedule_confirmation_checks(token_id: str, first_delay_minutes: int =
             # If still pending (no YES response) → send reminder
             if token.status == "pending":
                 phone = token.patient_phone
+                patient_name = token.patient_name or "Patient"
+
                 if phone:
                     await send_template_message(
                         phone,
@@ -215,20 +218,21 @@ async def schedule_confirmation_checks(token_id: str, first_delay_minutes: int =
                 db.refresh(token)
 
                 if token.status == "pending":
+                    # ✅ Auto cancel the token
                     token.status = "cancelled"
                     token.cancelled_at = datetime.utcnow()
                     token.updated_at = datetime.utcnow()
                     db.commit()
 
-                    # Send cancellation message
+                    # ✅ Send cancelled message
                     if phone:
                         await send_template_message(
                             phone,
                             "cancelled",
-                            [token.patient_name or "Patient"]
+                            [patient_name]
                         )
 
-                    # Recalculate queue positions
+                    # ✅ Recalculate queue so receptionist portal updates
                     try:
                         from app.services.queue_management_service import QueueManagementService
                         await QueueManagementService.recalculate_positions(
@@ -238,6 +242,16 @@ async def schedule_confirmation_checks(token_id: str, first_delay_minutes: int =
                         )
                     except Exception as e:
                         pass
+
+                    # ✅ Wait 2 minutes then send thankyou message
+                    await asyncio.sleep(2 * 60)
+
+                    if phone:
+                        await send_template_message(
+                            phone,
+                            "template",  # thankyou template
+                            []
+                        )
 
         except Exception as e:
             return
