@@ -11,7 +11,8 @@ from app.db_models import DoctorRating, Token, Doctor, User
 from app.models import RatingCreate, RatingResponse, DoctorRatingSummary
 from app.security import get_current_active_user
 router = APIRouter(
-    tags=["PATIENT PORTAL"]
+    prefix="",
+    tags=["Ratings"]
 )
 
 
@@ -45,6 +46,7 @@ def _recalculate_doctor_rating(doctor_id: str, db: Session):
 
 # ─── POST /api/ratings ────────────────────────────────────────────────────────
 
+@router.post("", response_model=RatingResponse, status_code=201)
 @router.post("/", response_model=RatingResponse, status_code=201)
 def submit_rating(
     payload: RatingCreate,
