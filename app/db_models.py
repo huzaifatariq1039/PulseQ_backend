@@ -23,14 +23,15 @@ class TokenStatus(str, enum.Enum):
     COMPLETED = "completed"
     CANCELLED = "cancelled"
     RESCHEDULED = "rescheduled"
+    SKIPPED = "skipped"
 
 
 class PaymentStatus(str, enum.Enum):
     PENDING = "pending"
+    UNPAID = "unpaid"
     PAID = "paid"
     FAILED = "failed"
     CANCELLED = "cancelled"
-
 
 class PaymentMethod(str, enum.Enum):
     ONLINE = "online"
