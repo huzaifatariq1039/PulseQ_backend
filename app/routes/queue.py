@@ -159,6 +159,19 @@ async def advance_queue(
         current_token.updated_at = datetime.utcnow()
         db.commit()
         
+        # Send thankyou message on completion
+        try:
+            from app.services.whatsapp_service import send_template_message
+            patient_phone = getattr(current_token, 'patient_phone', None)
+            if patient_phone:
+                await send_template_message(
+                    patient_phone,
+                    "template",  # thankyou template
+                    []
+                )
+        except Exception as e:
+            pass
+        
         # Notify next patient if exists
         next_token = None
         for token in tokens:
@@ -348,6 +361,18 @@ async def complete_consultation(
             pass
 
     db.commit()
+     
+    # Send thankyou message on completion
+    try:
+        from app.services.whatsapp_service import send_template_message
+        if token.patient_phone:
+            await send_template_message(
+                token.patient_phone,
+                "template",  # thankyou template
+                []
+            )
+    except Exception as e:
+        pass
 
     try:
         log_action(current_user.user_id, role, action="DONE", token_id=token_id)
