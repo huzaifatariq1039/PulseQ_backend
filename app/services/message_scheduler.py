@@ -265,3 +265,63 @@ async def schedule_confirmation_checks(token_id: str, first_delay_minutes: int =
         asyncio.create_task(_check_and_remind())
     except Exception:
         await _check_and_remind()
+
+async def schedule_skip_messages(token_id: str) -> None:
+    """
+    After a token is skipped:
+    - Wait 10 minutes
+    - If still skipped (not re-added) → send 'skipped' message
+    - Wait 2 more minutes → send 'template' (thankyou) message
+    - If re-added and completed → thankyou is handled by completion flow instead
+    """
+    async def _runner():
+        await asyncio.sleep(10 * 60)  # Wait 10 minutes
+
+        try:
+            db = next(get_db())
+            from app.db_models import Token
+
+            token = db.query(Token).filter(Token.id == token_id).first()
+            if not token:
+                return
+
+            current_status = str(token.status.value if hasattr(token.status, 'value') else token.status).lower()
+
+            # If still skipped (doctor/receptionist did NOT re-add them)
+            if current_status == "skipped":
+                phone = token.patient_phone
+                patient_name = token.patient_name or "Patient"
+                token_number = str(token.display_code or token.token_number or "")
+
+                if phone:
+                    # Send skipped message
+                    await send_template_message(
+                        phone,
+                        "skipped",
+                        [patient_name, token_number]
+                    )
+
+                    # Wait 2 more minutes then send thankyou
+                    await asyncio.sleep(2 * 60)
+
+                    await send_template_message(
+                        phone,
+                        "template",
+                        []
+                    )
+
+            # If re-added (pending/called/confirmed/in_progress) → do nothing here
+            # Thankyou will be sent when they complete their appointment via complete flow
+
+        except Exception as e:
+            return
+        finally:
+            try:
+                db.close()
+            except Exception:
+                pass
+
+    try:
+        asyncio.create_task(_runner())
+    except Exception:
+        await _runner()        

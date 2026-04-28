@@ -537,10 +537,13 @@ async def generate_smart_token(
     appointment_date = payload.appointment_date
 
     # --- RACE CONDITION FIX: Prevent double-booking ---
+
+    BLOCKING_STATUSES = ["pending", "called", "in_progress"]
+
     existing_token = db.query(Token).filter(
         Token.patient_id == current_user.user_id,
         Token.doctor_id == doctor_id,
-        Token.status.notin_(["cancelled", "completed", "TokenStatus.CANCELLED", "TokenStatus.COMPLETED"])
+        Token.status.in_(BLOCKING_STATUSES)
     ).first()
     
     if existing_token:
@@ -561,7 +564,26 @@ async def generate_smart_token(
         appointment_date = _allocate_same_day_slot(db, doctor_id, hospital_id, now_local, doctor_data)
 
     day_local = _local_day_for(appointment_date, tz_minutes)
-    token_number = _allocate_queue_token_number(db, hospital_id, doctor_id, day_local, tz_minutes)
+    utc_start_day, utc_end_day = _utc_bounds_for_local_day(day_local, tz_minutes)
+
+    # Check if this patient has a skipped token with the same doctor today
+    # If so, reuse the same token number so their number doesn't change
+    skipped_token = db.query(Token).filter(
+        Token.patient_id == current_user.user_id,
+        Token.doctor_id == doctor_id,
+        Token.status == "skipped",
+        Token.appointment_date >= utc_start_day,
+        Token.appointment_date <= utc_end_day,
+    ).order_by(Token.skipped_at.desc()).first()
+
+    if skipped_token:
+        # Reuse the skipped token's number and display code
+        token_number = skipped_token.token_number
+        logger.info(
+            f"Patient {current_user.user_id} had skipped token #{token_number} — reusing same number for new token"
+        )
+    else:
+        token_number = _allocate_queue_token_number(db, hospital_id, doctor_id, day_local, tz_minutes)
 
     token_id = str(uuid.uuid4())
     pricing = compute_total_amount(
@@ -674,7 +696,7 @@ async def generate_smart_token(
         "hospital_id": hospital_id,
         "mrn": mrn,
         "hex_code": f"{token_id[:7]}{token_number:03d}",
-        "display_code": f"{doctor_data.get('hex_code', 'A')}-{token_number:03d}",
+        "display_code": skipped_token.display_code if skipped_token else f"{doctor_data.get('hex_code', 'A')}-{token_number:03d}",
         "appointment_date": appointment_date,
         "status": status_val,
         "payment_status": payment_val,

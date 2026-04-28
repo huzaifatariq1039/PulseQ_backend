@@ -770,7 +770,15 @@ async def receptionist_skip_token(
         
     token.status = "skipped"
     token.updated_at = datetime.utcnow()
+    token.skipped_at = datetime.utcnow()
     db.commit()
+
+    try:
+        from app.services.message_scheduler import schedule_skip_messages
+        await schedule_skip_messages(token_id)
+        logger.info(f"Skip message scheduler triggered for token {token_id}")
+    except Exception as e:
+        logger.error(f"Failed to schedule skip messages for token {token_id}: {e}")
     
     return ok(message="Token skipped")
 
@@ -806,11 +814,20 @@ async def doctor_skip_token(
     
     now = datetime.utcnow()
     token.status = "skipped"
+    token.skipped_at = now
     token.updated_at = now
     
     db.commit()
     
     logger.info(f"Doctor {current.user_id} skipped token {token_id} via portal")
+
+    # Schedule: wait 10 min → if still skipped → send skipped msg → 2 min → thankyou
+    try:
+        from app.services.message_scheduler import schedule_skip_messages
+        await schedule_skip_messages(token_id)
+        logger.info(f"Skip message scheduler triggered for token {token_id}")
+    except Exception as e:
+        logger.error(f"Failed to schedule skip messages for token {token_id}: {e}")
     
     # Auto-call next token
     today = now.date()
