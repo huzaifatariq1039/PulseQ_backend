@@ -7,6 +7,7 @@ from enum import Enum
 class PaymentStatus(str, Enum):
     PENDING = "pending"
     PAID = "paid"
+    UNPAID = "unpaid"
     FAILED = "failed"
     CANCELLED = "cancelled"
 
@@ -59,10 +60,12 @@ class NotificationType(str, Enum):
 class TokenStatus(str, Enum):
     PENDING = "pending"
     CONFIRMED = "confirmed"
+    IN_QUEUE = "in_queue" 
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
     CANCELLED = "cancelled"
     RESCHEDULED = "rescheduled"
+    SKIPPED = "skipped"
 
 class CancellationReason(str, Enum):
     MEDICAL_EMERGENCY = "medical_emergency"

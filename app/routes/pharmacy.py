@@ -669,3 +669,34 @@ async def delete_item(
     db.commit()
     
     return ok(message=f"Medicine '{deleted_name}' deleted successfully", data={"deleted_id": deleted_id})
+
+@router.patch("/items/{item_id}/restore", dependencies=[Depends(require_roles("pharmacy", "admin"))])
+async def restore_item(
+    item_id: str,
+    db: Session = Depends(get_db),
+    current: TokenData = Depends(get_current_active_user),
+) -> Any:
+    med = db.query(PharmacyMedicine).filter(PharmacyMedicine.id == item_id).first()
+    if not med:
+        try:
+            med = db.query(PharmacyMedicine).filter(
+                PharmacyMedicine.product_id == int(item_id)
+            ).first()
+        except (ValueError, TypeError):
+            pass
+
+    if not med:
+        raise HTTPException(status_code=404, detail="Medicine not found")
+
+    if not med.is_deleted:
+        raise HTTPException(status_code=400, detail="Medicine is not deleted")
+
+    med.is_deleted = False
+    med.deleted_at = None
+    med.updated_at = datetime.utcnow()
+    db.commit()
+
+    return ok(
+        message=f"Medicine '{med.name}' restored successfully",
+        data={"restored_id": med.id}
+    )

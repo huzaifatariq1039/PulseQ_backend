@@ -126,7 +126,7 @@ async def reception_queue(
             if user.date_of_birth:
                 try:
                     dob = datetime.strptime(user.date_of_birth, "%Y-%m-%d")
-                    age = f"{(datetime.utcnow() - dob).days // 365}y"
+                    age = (datetime.utcnow() - dob).days // 365
                 except Exception:
                     pass
         
@@ -151,11 +151,13 @@ async def reception_queue(
             "patient_gender": gender,
             "doctor_name": t.doctor_name,
             "department": department,
-            "reason": getattr(t, 'department', None) or "",
+            "reason": getattr(t, 'reason_for_visit', None) or "",
             "consultation_fee": consultation_fee,
             "session_fee": session_fee if inferred_has_session else None,
             "total_fee": total_fee,
-            "status": str(t.status).lower()
+            "status": str(t.status).lower(),
+            "payment_status": str(t.payment_status).lower() if t.payment_status else "pending",  # ✅ add this
+            "payment_method": str(t.payment_method).lower() if t.payment_method else None,    
         })
 
     return ok(
@@ -190,6 +192,8 @@ async def reception_tokens(
             "patient_name": t.patient_name,
             "appointment_date": t.appointment_date.isoformat() if t.appointment_date else None,
             "status": str(t.status).lower(),
+            "payment_status": str(t.payment_status).lower() if t.payment_status else "pending",  # ✅ add this
+            "payment_method": str(t.payment_method).lower() if t.payment_method else None,   
         })
 
     return ok(data=items, meta={"page": page, "page_size": page_size, "total": total})

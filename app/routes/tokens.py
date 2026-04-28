@@ -79,7 +79,7 @@ def _utc_bounds_for_local_day(local_day: datetime.date, tz_minutes: int):
 def _to_smart_token_response(t: Token) -> SmartTokenResponse:
     status_val = str(t.status.value if hasattr(t.status, 'value') else t.status).lower()
     pay_status_val = str(t.payment_status.value if hasattr(t.payment_status, 'value') else t.payment_status).lower()
-    is_active = status_val not in ["cancelled", "completed"]
+    is_active = status_val not in ["cancelled", "completed", "skipped"]
 
     return SmartTokenResponse(
         id=str(t.id),
@@ -630,7 +630,7 @@ async def generate_smart_token(
                     "Name": current_user.name if hasattr(current_user, 'name') else "Unknown",
                     "Doctor Name": doctor_data.get("name", "Unknown"),
                     "Service_Duration": 0, 
-                    "Disease": payload.department or payload.reason_for_visit or "General",
+                    "Disease": payload.reason_for_visit or payload.department or "General",
                     "Age": payload.patient_age or 30
                 }
 
