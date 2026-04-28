@@ -191,7 +191,10 @@ class Token(Base):
     suggested_doctor_id = Column(String, nullable=True)
     suggested_doctor_name = Column(String(100), nullable=True)
     rescheduled_at = Column(DateTime(timezone=True), nullable=True)
-
+  
+    #Rating
+    is_rated = Column(Boolean, default=False)   # True once patient submits a rating
+    rating = Column(Integer, nullable=True)    # 1–5, copied from DoctorRating on submit
     # Relationships
     patient = relationship("User", back_populates="tokens")
     doctor = relationship("Doctor", back_populates="tokens")
@@ -403,3 +406,30 @@ class PharmacySale(Base):
     sold_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
     performed_by = Column(String, ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # Doctor Rating Model
+class DoctorRating(Base):
+    __tablename__ = "doctor_ratings"
+
+    id                      = Column(String, primary_key=True, index=True)
+    token_id                = Column(String, ForeignKey("tokens.id"), nullable=False, index=True)
+    doctor_id               = Column(String, ForeignKey("doctors.id"), nullable=False, index=True)
+    patient_id              = Column(String, ForeignKey("users.id"), nullable=False, index=True)
+    rating                  = Column(Integer, nullable=False)        # 1–5
+    review                  = Column(Text, nullable=True)
+    # Snapshots — no extra joins needed in doctor portal
+    patient_name            = Column(String(100), nullable=True)
+    patient_avatar_initials = Column(String(10), nullable=True)
+    appointment_date        = Column(DateTime(timezone=True), nullable=True)
+    created_at              = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at              = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # Relationships
+    token   = relationship("Token", backref="rating_obj")
+    doctor  = relationship("Doctor", backref="ratings")
+    patient = relationship("User", backref="given_ratings")
+
+    __table_args__ = (
+        # One rating per patient per token (appointment)
+        Index("uq_token_patient_rating", "token_id", "patient_id", unique=True),
+    )

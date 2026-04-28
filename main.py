@@ -34,6 +34,7 @@ from app.routes import profile
 from app.routes import payments
 from app.routes import queue
 from app.routes import reception
+from app.routes import ratings
 from app.routes.whatsapp_webhook import router as whatsapp_webhook_router
 from app.routes.pharmacy import public_router as pharmacy_public_router
 from app.routes.pharmacy import router as pharmacy_portal_router
@@ -159,7 +160,8 @@ app.include_router(tokens_idempotent.router, prefix="/api/v1/patient/tokens/secu
 app.include_router(payments.router, prefix="/api/v1/patient/payments", tags=["Payment Services"])
 app.include_router(queue.router, prefix="/api/v1/patient/queue", tags=["Queue Services"])
 app.include_router(token_alias_router, prefix="/api/v1/patients", tags=["Token Management (Frontend Alias)"])
- 
+app.include_router(ratings.router, prefix="/api/v1/patient/ratings", tags=["Ratings"])
+
 # 4. Staff & Provider Services
 app.include_router(consultation.router, prefix="/api/v1/staff/consultation", tags=["Staff Portal"])
 app.include_router(realtime.router, prefix="/api/v1/staff/realtime", tags=["Staff Portal"])

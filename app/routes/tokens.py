@@ -79,7 +79,9 @@ def _utc_bounds_for_local_day(local_day: datetime.date, tz_minutes: int):
 def _to_smart_token_response(t: Token) -> SmartTokenResponse:
     status_val = str(t.status.value if hasattr(t.status, 'value') else t.status).lower()
     pay_status_val = str(t.payment_status.value if hasattr(t.payment_status, 'value') else t.payment_status).lower()
-    is_active = status_val not in ["cancelled", "completed", "skipped"]
+    
+    # ✅ FIX: "skipped" is explicitly kept active so the frontend UI can display the skipped warning banner
+    is_active = status_val not in ["cancelled", "completed"]
 
     return SmartTokenResponse(
         id=str(t.id),
@@ -183,11 +185,14 @@ def _allocate_queue_token_number(db: Session, hospital_id: str, doctor_id: str, 
 def _queue_object_for(db: Session, doctor_id: str, hospital_id: str, day_local: datetime.date, my_token_no: Optional[int] = None) -> dict:
     q = db.query(DBQueue).filter(DBQueue.doctor_id == doctor_id).first()
     now_serving = int(getattr(q, "current_token", 1) or 1)
+    
+    # ✅ FIX: Explicitly exclude "skipped" so the total queue length is accurate
     total_queue = db.query(Token).filter(
         Token.doctor_id == doctor_id,
         func.date(Token.appointment_date) == day_local,
-        Token.status.notin_(["cancelled", "completed"])
+        Token.status.notin_(["cancelled", "completed", "skipped", "TokenStatus.CANCELLED", "TokenStatus.COMPLETED", "TokenStatus.SKIPPED"])
     ).count()
+    
     people_ahead = max(0, my_token_no - now_serving) if my_token_no else 0
     per_min = 9
     return {
@@ -536,19 +541,6 @@ async def generate_smart_token(
     hospital_id = payload.hospital_id
     appointment_date = payload.appointment_date
 
-    # --- RACE CONDITION FIX: Prevent double-booking ---
-
-    BLOCKING_STATUSES = ["pending", "called", "in_progress"]
-
-    existing_token = db.query(Token).filter(
-        Token.patient_id == current_user.user_id,
-        Token.doctor_id == doctor_id,
-        Token.status.in_(BLOCKING_STATUSES)
-    ).first()
-    
-    if existing_token:
-        return _to_smart_token_response(existing_token)
-
     doctor = db.query(Doctor).filter(Doctor.id == doctor_id).first()
     hospital = db.query(Hospital).filter(Hospital.id == hospital_id).first()
     if not doctor or not hospital:
@@ -564,26 +556,27 @@ async def generate_smart_token(
         appointment_date = _allocate_same_day_slot(db, doctor_id, hospital_id, now_local, doctor_data)
 
     day_local = _local_day_for(appointment_date, tz_minutes)
-    utc_start_day, utc_end_day = _utc_bounds_for_local_day(day_local, tz_minutes)
+    utc_start, utc_end = _utc_bounds_for_local_day(day_local, tz_minutes)
 
-    # Check if this patient has a skipped token with the same doctor today
-    # If so, reuse the same token number so their number doesn't change
-    skipped_token = db.query(Token).filter(
+    # --- ✅ FIX: STRICT DOUBLE BOOKING BLOCK ---
+    # Only blocks if the patient is ACTIVELY waiting/consulting TODAY.
+    # If they are "skipped" today, they are legally allowed to generate a new token and try again.
+    BLOCKING_STATUSES = ["waiting", "confirmed", "pending", "called", "in_consultation", "in_progress", "TokenStatus.PENDING", "TokenStatus.WAITING", "TokenStatus.CONFIRMED"]
+    existing_token = db.query(Token).filter(
         Token.patient_id == current_user.user_id,
         Token.doctor_id == doctor_id,
-        Token.status == "skipped",
-        Token.appointment_date >= utc_start_day,
-        Token.appointment_date <= utc_end_day,
-    ).order_by(Token.skipped_at.desc()).first()
-
-    if skipped_token:
-        # Reuse the skipped token's number and display code
-        token_number = skipped_token.token_number
-        logger.info(
-            f"Patient {current_user.user_id} had skipped token #{token_number} — reusing same number for new token"
+        Token.appointment_date >= utc_start,
+        Token.appointment_date <= utc_end,
+        Token.status.in_(BLOCKING_STATUSES)
+    ).first()
+    
+    if existing_token:
+        raise HTTPException(
+            status_code=400, 
+            detail="You already have an active appointment with this doctor."
         )
-    else:
-        token_number = _allocate_queue_token_number(db, hospital_id, doctor_id, day_local, tz_minutes)
+
+    token_number = _allocate_queue_token_number(db, hospital_id, doctor_id, day_local, tz_minutes)
 
     token_id = str(uuid.uuid4())
     pricing = compute_total_amount(
@@ -599,13 +592,12 @@ async def generate_smart_token(
     # AI Estimated Wait Time Calculation
     # ---------------------------------------------------------
     estimated_wait_time = 0
-    utc_start, utc_end = _utc_bounds_for_local_day(day_local, tz_minutes)
 
     try:
-        # Replaced func.date() with absolute UTC boundary matching
+        # "skipped" is intentionally excluded so it doesn't inflate wait times!
         patients_ahead = db.query(Token).filter(
             Token.doctor_id == doctor_id,
-            Token.status.in_(["waiting", "confirmed", "pending", "called", "in_consultation", "TokenStatus.PENDING", "TokenStatus.WAITING", "TokenStatus.CONFIRMED"]),
+            Token.status.in_(BLOCKING_STATUSES),
             Token.appointment_date >= utc_start,
             Token.appointment_date <= utc_end
         ).count()
@@ -678,13 +670,12 @@ async def generate_smart_token(
         estimated_wait_time = int(max(patients_ahead, 1) * last_5)
 
     # ---------------------------------------------------------
-    # Token Creation & Saving (UPDATED WITH ENUM VALUES)
+    # Token Creation & Saving 
     # ---------------------------------------------------------
     user = db.query(User).filter(User.id == current_user.user_id).first()
     patient_name = user.name if user else None
     patient_phone = user.phone if user else None
     
-    # Safely extract actual string values to prevent database matching errors
     status_val = TokenStatus.PENDING.value if hasattr(TokenStatus.PENDING, 'value') else "pending"
     payment_val = PaymentStatus.PENDING.value if hasattr(PaymentStatus.PENDING, 'value') else "pending"
     
@@ -696,7 +687,7 @@ async def generate_smart_token(
         "hospital_id": hospital_id,
         "mrn": mrn,
         "hex_code": f"{token_id[:7]}{token_number:03d}",
-        "display_code": skipped_token.display_code if skipped_token else f"{doctor_data.get('hex_code', 'A')}-{token_number:03d}",
+        "display_code": f"{doctor_data.get('hex_code', 'A')}-{token_number:03d}",
         "appointment_date": appointment_date,
         "status": status_val,
         "payment_status": payment_val,
@@ -757,6 +748,7 @@ async def generate_smart_token(
             logger.error(f"Failed to send WhatsApp confirmation for token {token_id}: {e}")
     
         try:
+                # Assuming schedule_confirmation_checks is an async function
                 await schedule_confirmation_checks(
                     token_id=token_id,
                     first_delay_minutes=15,
@@ -837,6 +829,23 @@ async def create_token(
     doctor_data = {k: v for k, v in doctor.__dict__.items() if not k.startswith('_')}
     tz_minutes = _tz_offset_for(doctor_data)
     day = _parse_local_date(spec.appointment_date, tz_minutes)
+    utc_start, utc_end = _utc_bounds_for_local_day(day, tz_minutes)
+
+    # --- ✅ FIX: STRICT DOUBLE BOOKING BLOCK ---
+    BLOCKING_STATUSES = ["waiting", "confirmed", "pending", "called", "in_consultation", "in_progress", "TokenStatus.PENDING", "TokenStatus.WAITING", "TokenStatus.CONFIRMED"]
+    existing_token = db.query(Token).filter(
+        Token.patient_id == current_user.user_id,
+        Token.doctor_id == spec.doctor_id,
+        Token.appointment_date >= utc_start,
+        Token.appointment_date <= utc_end,
+        Token.status.in_(BLOCKING_STATUSES)
+    ).first()
+    
+    if existing_token:
+        raise HTTPException(
+            status_code=400, 
+            detail="You already have an active appointment with this doctor."
+        )
 
     token_number = _allocate_queue_token_number(db, spec.hospital_id, spec.doctor_id, day, tz_minutes)
 
