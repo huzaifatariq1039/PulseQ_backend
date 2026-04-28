@@ -153,6 +153,9 @@ class Token(Base):
     session_fee = Column(Float, nullable=True)
     total_fee = Column(Float, nullable=True)
     department = Column(String(100), nullable=True, index=True)  # Added index for department filtering
+    # Skip message scheduling
+    pending_skip_task_id = Column(String(255), nullable=True)
+    skipped_at = Column(DateTime(timezone=True), nullable=True)
     idempotency_key = Column(String(255), nullable=True, index=True) # Added index for idempotency check
     created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True) # Added index for token history
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
@@ -167,6 +170,7 @@ class Token(Base):
     patient_age = Column(Integer, nullable=True)
     patient_gender = Column(String(20), nullable=True)
     reason_for_visit = Column(Text, nullable=True)
+    consultation_notes = Column(Text, nullable=True)
 
     # Status/Confirmation Tracking
     queue_opt_in = Column(Boolean, default=False)

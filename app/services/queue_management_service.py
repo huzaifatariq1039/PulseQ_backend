@@ -422,7 +422,7 @@ class QueueManagementService:
 
     @staticmethod
     async def _send_final_alert_for_doctor(*, doctor_id: str, hospital_id: Optional[str]) -> None:
-        """Send final_alert when queue_position==2 (1 patient ahead), once per token."""
+        """Send final_alert when queue_position==3 (1 patient ahead), once per token."""
         try:
             tpl = str(TEMPLATES.get("FINAL_CALL") or "").strip()
         except Exception:
@@ -441,7 +441,7 @@ class QueueManagementService:
 
         # IMPORTANT CONDITION: total_tokens > 1
         if len(waiting) <= 1:
-            return
+           return
 
         def _pos(dd: Dict[str, Any]) -> int:
             try:
@@ -450,9 +450,18 @@ class QueueManagementService:
                 return 10**9
 
         waiting.sort(key=_pos)
-        next_token = waiting[1]  # position 2 (1 ahead)
-        if _pos(next_token) != 2:
+
+# Send final_alert when patient has 3 or 4 patients ahead (position 4 or 5)
+        target = None
+        for entry in waiting:
+           if _pos(entry) in {4, 5}:
+               target = entry
+               break
+
+        if not target:
             return
+
+        next_token = target
 
         pid = str(next_token.get("patient_id") or "").strip()
         if not pid:

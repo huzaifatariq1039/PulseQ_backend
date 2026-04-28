@@ -147,7 +147,28 @@ async def get_doctor_tokens(
     
     # Order by appointment_date (most recent first)
     tokens = query.order_by(Token.appointment_date.desc()).offset(skip).limit(size).all()
-    items = [{k: v for k, v in t.__dict__.items() if not k.startswith('_')} for t in tokens]
+    items = []
+    for t in tokens:
+        items.append({
+          "token_id": t.id,
+          "token_number": t.display_code or str(t.token_number),
+           "patient_name": t.patient_name or "Unknown",
+           "patient_age": t.patient_age,
+           "patient_gender": t.patient_gender,
+           "patient_phone": getattr(t, 'patient_phone', None),
+           "doctor_name": t.doctor_name,
+           "appointment_date": t.appointment_date,
+           "status": str(t.status).lower(),
+           "mrn": t.mrn,
+           "department": t.department,
+           "reason_for_visit": t.reason_for_visit or "",   # fix for Problem 1
+           "notes": t.consultation_notes or "",             # fix for Problem 2
+           "started_at": t.started_at,
+           "completed_at": t.completed_at,
+           "duration": round(
+               (t.completed_at - t.started_at).total_seconds() / 60
+            ) if t.started_at and t.completed_at else 0,
+        })
     
     return ok(
         data=items, 
