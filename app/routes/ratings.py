@@ -8,7 +8,7 @@ import uuid
 
 from app.database import get_db
 from app.db_models import DoctorRating, Token, Doctor, User
-from app.schemas import RatingCreate, RatingResponse, DoctorRatingSummary
+from app.models import RatingCreate, RatingResponse, DoctorRatingSummary
 from app.security import get_current_active_user
 router = APIRouter(
     tags=["Ratings"]

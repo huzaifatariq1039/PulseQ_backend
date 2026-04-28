@@ -807,3 +807,30 @@ class TokenCreateSpec(BaseModel):
     patient_age: Optional[int] = None
     patient_gender: Optional[str] = None
     reason_for_visit: Optional[str] = None
+
+# ─── Rating Schemas ───────────────────────────────────────────────────────────
+
+class RatingCreate(BaseModel):
+    token_id: str
+    rating: int = Field(..., ge=1, le=5)
+    review: Optional[str] = None
+
+class RatingResponse(BaseModel):
+    id: str
+    token_id: str
+    doctor_id: str
+    patient_id: str
+    rating: int
+    review: Optional[str] = None
+    patient_name: Optional[str] = None
+    patient_avatar_initials: Optional[str] = None
+    appointment_date: Optional[datetime] = None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+class DoctorRatingSummary(BaseModel):
+    doctor_id: str
+    average_rating: float
+    total_reviews: int
+    ratings: List[RatingResponse] = []
