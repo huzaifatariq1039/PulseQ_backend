@@ -57,7 +57,7 @@ def submit_rating(
     if current_user.role != "patient":
         raise HTTPException(status_code=403, detail="Only patients can submit ratings")
 
-    patient_id = current_user.id
+    patient_id = current_user.user_id
 
     # 2. Fetch the token
     token = db.query(Token).filter(Token.id == payload.token_id).first()
@@ -119,7 +119,7 @@ def get_doctor_ratings(
     current_user: dict = Depends(get_current_active_user)
 ):
     role = current_user.role
-    if role not in ("doctor", "admin") and current_user.id != doctor_id:
+    if role not in ("doctor", "admin") and current_user.user_id != doctor_id:
         raise HTTPException(status_code=403, detail="Access denied")
 
     ratings = db.query(DoctorRating)\
@@ -162,6 +162,6 @@ def get_my_ratings(
         raise HTTPException(status_code=403, detail="Access denied")
 
     return db.query(DoctorRating)\
-             .filter(DoctorRating.patient_id == current_user.id)\
+             .filter(DoctorRating.patient_id == current_user.user_id)\
              .order_by(DoctorRating.created_at.desc())\
              .all()
