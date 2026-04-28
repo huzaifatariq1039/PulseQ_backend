@@ -8,7 +8,7 @@ import uuid
 import random
 import os
 import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, time
 
 from app.models import (
     SmartTokenCreate, SmartTokenResponse, PaymentCreate, PaymentResponse, 
@@ -33,7 +33,7 @@ from app.utils.state import is_transition_allowed
 from app.utils.responses import ok
 from app.services.fee_calculator import compute_total_amount
 
-# ✅ UPDATED IMPORT: Swapped avg_last_30 for avg_last_10 to match AI model
+# Use avg_last_10 to match AI model expectations
 from app.routes.ai import (
     get_current_hour, get_current_day, calculate_patients_ahead,
     calculate_queue_length, calculate_queue_velocity, get_last_patient_duration,
@@ -59,6 +59,21 @@ def _tz_offset_for(doctor_data: dict, hospital_data: dict | None = None) -> int:
     except Exception:
         pass
     return 300
+
+
+def _utc_bounds_for_local_day(local_day: datetime.date, tz_minutes: int):
+    """Calculates the absolute UTC start and end boundaries for a given local day."""
+    local_start = datetime.combine(local_day, time.min)
+    local_end = datetime.combine(local_day, time.max)
+    tz = timezone(timedelta(minutes=tz_minutes))
+    
+    local_start_aware = local_start.replace(tzinfo=tz)
+    local_end_aware = local_end.replace(tzinfo=tz)
+    
+    utc_start = local_start_aware.astimezone(timezone.utc).replace(tzinfo=None)
+    utc_end = local_end_aware.astimezone(timezone.utc).replace(tzinfo=None)
+    
+    return utc_start, utc_end
 
 
 def _to_smart_token_response(t: Token) -> SmartTokenResponse:
@@ -152,46 +167,17 @@ def _minute_for_token_number(start_hhmm: str, end_hhmm: str, token_no: int, tz_m
         return base_utc
 
 
-def _slot_hour_key(dt_utc: datetime, tz_minutes: int) -> str:
-    local = _to_local_clock(dt_utc, tz_minutes)
-    return local.strftime("%Y%m%d%H")
-
-
-def _xor_key(s1: str, s2: str) -> str:
-    import hashlib
-    h1 = int(hashlib.md5(s1.encode()).hexdigest(), 16)
-    h2 = int(hashlib.md5(s2.encode()).hexdigest(), 16)
-    return hex(h1 ^ h2)[2:]
-
-
-def _normalize_available_days(days: Optional[List[str]]) -> List[str]:
-    if not days:
-        return []
-    return [str(d).lower() for d in days]
-
-
-def _day_in_list(days: List[str], day: str) -> bool:
-    return day.lower() in days
-
-
-def _is_within_time_window(dt: datetime, start_hhmm: str, end_hhmm: str) -> bool:
-    try:
-        h_s, m_s = map(int, start_hhmm.split(":"))
-        h_e, m_e = map(int, end_hhmm.split(":"))
-        m_start = h_s * 60 + m_s
-        m_end = h_e * 60 + m_e
-        m_now = dt.hour * 60 + dt.minute
-        return m_start <= m_now <= m_end
-    except Exception:
-        return True
-
-
-def _parse_hhmm_to_minutes(hhmm: str) -> Optional[int]:
-    try:
-        h, m = map(int, hhmm.split(":"))
-        return h * 60 + m
-    except Exception:
-        return None
+def _allocate_queue_token_number(db: Session, hospital_id: str, doctor_id: str, day: datetime.date, tz_minutes: int = 300) -> int:
+    utc_start, utc_end = _utc_bounds_for_local_day(day, tz_minutes)
+    
+    last = db.query(Token).filter(
+        Token.hospital_id == hospital_id,
+        Token.doctor_id == doctor_id,
+        Token.appointment_date >= utc_start,
+        Token.appointment_date <= utc_end
+    ).order_by(Token.token_number.desc()).first()
+    
+    return (last.token_number + 1) if last else 1
 
 
 def _queue_object_for(db: Session, doctor_id: str, hospital_id: str, day_local: datetime.date, my_token_no: Optional[int] = None) -> dict:
@@ -213,10 +199,6 @@ def _queue_object_for(db: Session, doctor_id: str, hospital_id: str, day_local: 
     }
 
 
-def _recalculate_token_wait_times(db: Session, doctor_id: str, hospital_id: str, day_local: datetime.date, per_patient_minutes: int = 9):
-    pass
-
-
 async def create_activity_log(user_id: str, activity_type: ActivityType, description: str, metadata: dict = None, db: Session = None):
     if db is None:
         return
@@ -235,14 +217,6 @@ async def create_activity_log(user_id: str, activity_type: ActivityType, descrip
         logger.error(f"Failed to create activity log: {e}")
 
 
-def _count_doctor_bookings_for_date(db: Session, doctor_id: str, date_val: datetime.date) -> int:
-    return db.query(Token).filter(
-        Token.doctor_id == doctor_id,
-        func.date(Token.appointment_date) == date_val,
-        Token.status.notin_(["cancelled", "completed"])
-    ).count()
-
-
 def _allocate_same_day_slot(db: Session, doctor_id: str, hospital_id: str, now_local: datetime, doctor_data: dict) -> datetime:
     return datetime.utcnow() + timedelta(minutes=5)
 
@@ -252,15 +226,6 @@ def _coerce_status(s: str) -> str:
     if s == "inprogress":
         return "in_progress"
     return s
-
-
-def _allocate_queue_token_number(db: Session, hospital_id: str, doctor_id: str, day: datetime.date) -> int:
-    last = db.query(Token).filter(
-        Token.hospital_id == hospital_id,
-        Token.doctor_id == doctor_id,
-        func.date(Token.appointment_date) == day
-    ).order_by(Token.token_number.desc()).first()
-    return (last.token_number + 1) if last else 1
 
 
 # -------------------- Core Logic --------------------
@@ -281,7 +246,6 @@ async def cancel_token_logic(
         logger.error(f"Access denied: Token {token_id} does not belong to user {current_user.user_id}")
         raise HTTPException(status_code=403, detail="Access denied")
 
-    # Check if token is already cancelled or completed
     status_val = str(token.status.value if hasattr(token.status, 'value') else token.status).lower()
     if status_val in ["cancelled", "completed"]:
         logger.error(f"Token {token_id} is already {status_val}")
@@ -308,7 +272,6 @@ async def cancel_token_logic(
     
     logger.info(f"Token {token_id} cancelled successfully with refund {refund_id}")
 
-    # Cancel any scheduled reminder jobs
     try:
         from app.services.app_scheduler import get_scheduler
         sch = get_scheduler()
@@ -318,7 +281,7 @@ async def cancel_token_logic(
                     sch.remove_job(job_id)
                     logger.info(f"Cancelled scheduled job {job_id} after token cancellation")
                 except Exception:
-                    pass  # Job might not exist or already executed
+                    pass
     except Exception as e:
         logger.error(f"Failed to cancel reminder jobs for token {token_id}: {e}")
 
@@ -330,7 +293,6 @@ async def cancel_token_logic(
         db=db
     )
 
-    # Send WhatsApp cancellation message
     if token.patient_phone:
         try:
             from app.services.whatsapp_service import send_template_message
@@ -350,7 +312,6 @@ async def cancel_token_logic(
 
     q = _queue_object_for(db, token.doctor_id, token.hospital_id, day_local)
 
-    # Return structure matching CancellationResponse model
     return {
         "message": "Token cancelled successfully",
         "token_id": token_id,
@@ -371,8 +332,6 @@ async def cancel_token_logic(
 # ====================================================================================
 # ROUTES — STATIC ROUTES FIRST, DYNAMIC /{token_id} ROUTES LAST
 # ====================================================================================
-
-# -------------------- Static GET Routes --------------------
 
 @router.get("/generate/form-data")
 async def generate_token_form_data(
@@ -402,10 +361,9 @@ async def get_my_active_token_details(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_active_user)
 ):
-    """Get the most recent active token with full appointment details including doctor, hospital, and queue status."""
     token = db.query(Token).filter(
         Token.patient_id == current_user.user_id,
-        Token.status.notin_(["cancelled", "completed"])
+        Token.status.notin_(["cancelled", "completed", "TokenStatus.CANCELLED", "TokenStatus.COMPLETED"])
     ).order_by(Token.created_at.desc()).first()
 
     if not token:
@@ -443,7 +401,7 @@ async def get_my_active_token(
 ):
     token = db.query(Token).filter(
         Token.patient_id == current_user.user_id,
-        Token.status.notin_(["cancelled", "completed"])
+        Token.status.notin_(["cancelled", "completed", "TokenStatus.CANCELLED", "TokenStatus.COMPLETED"])
     ).order_by(Token.created_at.desc()).first()
 
     if not token:
@@ -472,7 +430,7 @@ async def get_my_tokens(
 ):
     query = db.query(Token).filter(Token.patient_id == current_user.user_id)
     if only_active:
-        query = query.filter(Token.status.notin_(["cancelled", "completed"]))
+        query = query.filter(Token.status.notin_(["cancelled", "completed", "TokenStatus.CANCELLED", "TokenStatus.COMPLETED"]))
     tokens = query.order_by(Token.created_at.desc()).all()
     return [_to_smart_token_response(t) for t in tokens]
 
@@ -486,7 +444,7 @@ async def get_my_upcoming_tokens(
     now = datetime.utcnow()
     tokens = db.query(Token).filter(
         Token.patient_id == current_user.user_id,
-        Token.status.notin_(["cancelled", "completed"]),
+        Token.status.notin_(["cancelled", "completed", "TokenStatus.CANCELLED", "TokenStatus.COMPLETED"]),
         Token.appointment_date >= now
     ).order_by(Token.appointment_date.asc()).limit(limit).all()
 
@@ -510,7 +468,7 @@ async def get_token_history(
 ):
     tokens = db.query(Token).filter(
         Token.patient_id == current_user.user_id,
-        Token.status.in_(["cancelled", "completed"])
+        Token.status.in_(["cancelled", "completed", "TokenStatus.CANCELLED", "TokenStatus.COMPLETED"])
     ).order_by(Token.created_at.desc()).all()
     return [_to_smart_token_response(t) for t in tokens]
 
@@ -524,8 +482,6 @@ async def get_hospital_tokens(
     tokens = db.query(Token).filter(Token.hospital_id == hospital_id).all()
     return [{k: v for k, v in t.__dict__.items() if not k.startswith('_')} for t in tokens]
 
-
-# -------------------- Static POST Routes --------------------
 
 @router.post("/generate/details")
 async def generate_smart_token_with_details(
@@ -564,7 +520,7 @@ async def generate_smart_token_with_details(
 
 
 # ====================================================================================
-# ✅ THE CORE UPDATED AI GENERATION ENDPOINT
+# ✅ THE CORE AI GENERATION ENDPOINT
 # ====================================================================================
 @router.post("/generate", response_model=SmartTokenResponse)
 async def generate_smart_token(
@@ -579,6 +535,16 @@ async def generate_smart_token(
     doctor_id = payload.doctor_id
     hospital_id = payload.hospital_id
     appointment_date = payload.appointment_date
+
+    # --- RACE CONDITION FIX: Prevent double-booking ---
+    existing_token = db.query(Token).filter(
+        Token.patient_id == current_user.user_id,
+        Token.doctor_id == doctor_id,
+        Token.status.notin_(["cancelled", "completed", "TokenStatus.CANCELLED", "TokenStatus.COMPLETED"])
+    ).first()
+    
+    if existing_token:
+        return _to_smart_token_response(existing_token)
 
     doctor = db.query(Doctor).filter(Doctor.id == doctor_id).first()
     hospital = db.query(Hospital).filter(Hospital.id == hospital_id).first()
@@ -595,7 +561,7 @@ async def generate_smart_token(
         appointment_date = _allocate_same_day_slot(db, doctor_id, hospital_id, now_local, doctor_data)
 
     day_local = _local_day_for(appointment_date, tz_minutes)
-    token_number = _allocate_queue_token_number(db, hospital_id, doctor_id, day_local)
+    token_number = _allocate_queue_token_number(db, hospital_id, doctor_id, day_local, tz_minutes)
 
     token_id = str(uuid.uuid4())
     pricing = compute_total_amount(
@@ -608,33 +574,32 @@ async def generate_smart_token(
     mrn = get_or_create_patient_mrn(db, current_user.user_id, hospital_id)
 
     # ---------------------------------------------------------
-    # AI Estimated Wait Time Calculation (UPDATED WITH COLD START)
+    # AI Estimated Wait Time Calculation
     # ---------------------------------------------------------
     estimated_wait_time = 0
-    target_date = appointment_date.date() if hasattr(appointment_date, 'date') else appointment_date
+    utc_start, utc_end = _utc_bounds_for_local_day(day_local, tz_minutes)
 
     try:
+        # Replaced func.date() with absolute UTC boundary matching
         patients_ahead = db.query(Token).filter(
             Token.doctor_id == doctor_id,
-            Token.status.in_(["waiting", "confirmed", "pending", "called", "in_consultation"]),
-            func.date(Token.appointment_date) == target_date
+            Token.status.in_(["waiting", "confirmed", "pending", "called", "in_consultation", "TokenStatus.PENDING", "TokenStatus.WAITING", "TokenStatus.CONFIRMED"]),
+            Token.appointment_date >= utc_start,
+            Token.appointment_date <= utc_end
         ).count()
 
         completed_today = db.query(Token).filter(
             Token.doctor_id == doctor_id,
-            Token.status == "completed",
-            func.date(Token.appointment_date) == target_date
+            Token.status.in_(["completed", "TokenStatus.COMPLETED"]),
+            Token.appointment_date >= utc_start,
+            Token.appointment_date <= utc_end
         ).count()
 
-        # ======================================================
-        # PHASE 1: Fast-Start Override (No patients completed today)
-        # ======================================================
+        # PHASE 1: Fast-Start Override
         if completed_today == 0:
             estimated_wait_time = (patients_ahead + 1) * 5
 
-        # ======================================================
         # PHASE 2: Live XGBoost Engine
-        # ======================================================
         else:
             if patients_ahead == 0:
                 estimated_wait_time = 0 
@@ -670,19 +635,14 @@ async def generate_smart_token(
                 }
 
                 predicted_duration = ai_engine.predict_duration(ai_input)
-                predicted_duration = max(predicted_duration, 3.5) # Prevents "Race to zero" AI collapse
+                predicted_duration = max(predicted_duration, 3.5) 
 
                 rolling_service_time = (0.5 * last_5) + (0.3 * last_10) + (0.2 * last_1)
                 ai_eta = patients_ahead * predicted_duration
 
-                total_completed = db.query(Token).filter(
-                    Token.doctor_id == doctor_id,
-                    Token.status == "completed"
-                ).count()
-
-                if total_completed >= 30:
+                if completed_today >= 30:
                     alpha = 0.7   
-                elif total_completed >= 10:
+                elif completed_today >= 10:
                     alpha = 0.5   
                 else:
                     alpha = 0.2   
@@ -692,16 +652,19 @@ async def generate_smart_token(
 
     except Exception as e:
         logger.error(f"AI Wait Time Calculation failed: {e}", exc_info=True)
-        # Fallback to pure heuristic math
         last_5 = avg_last_5(doctor_id, db) or 5.0
         estimated_wait_time = int(max(patients_ahead, 1) * last_5)
 
     # ---------------------------------------------------------
-    # Token Creation & Saving
+    # Token Creation & Saving (UPDATED WITH ENUM VALUES)
     # ---------------------------------------------------------
     user = db.query(User).filter(User.id == current_user.user_id).first()
     patient_name = user.name if user else None
     patient_phone = user.phone if user else None
+    
+    # Safely extract actual string values to prevent database matching errors
+    status_val = TokenStatus.PENDING.value if hasattr(TokenStatus.PENDING, 'value') else "pending"
+    payment_val = PaymentStatus.PENDING.value if hasattr(PaymentStatus.PENDING, 'value') else "pending"
     
     token_doc = {
         "id": token_id,
@@ -713,8 +676,8 @@ async def generate_smart_token(
         "hex_code": f"{token_id[:7]}{token_number:03d}",
         "display_code": f"{doctor_data.get('hex_code', 'A')}-{token_number:03d}",
         "appointment_date": appointment_date,
-        "status": TokenStatus.PENDING,
-        "payment_status": PaymentStatus.PENDING,
+        "status": status_val,
+        "payment_status": payment_val,
         "doctor_name": doctor_data.get("name"),
         "doctor_specialization": doctor_data.get("specialization"),
         "doctor_avatar_initials": doctor_data.get("avatar_initials"),
@@ -754,7 +717,6 @@ async def generate_smart_token(
         db=db
     )
 
-    # Send immediate WhatsApp confirmation message
     if patient_phone:
         try:
             await send_template_message(
@@ -772,7 +734,6 @@ async def generate_smart_token(
         except Exception as e:
             logger.error(f"Failed to send WhatsApp confirmation for token {token_id}: {e}")
     
-        # Schedule reminders
         try:
                 schedule_confirmation_checks(
                     token_id=token_id,
@@ -810,7 +771,6 @@ async def generate_token_by_selection(
     )
 
 
-# Alias for frontend compatibility
 @router.post("/patients/token/generate")
 async def generate_token_alias(
     payload: Dict[str, Any] = Body(...),
@@ -856,7 +816,7 @@ async def create_token(
     tz_minutes = _tz_offset_for(doctor_data)
     day = _parse_local_date(spec.appointment_date, tz_minutes)
 
-    token_number = _allocate_queue_token_number(db, spec.hospital_id, spec.doctor_id, day)
+    token_number = _allocate_queue_token_number(db, spec.hospital_id, spec.doctor_id, day, tz_minutes)
 
     appt_dt_utc = _minute_for_token_number(
         doctor_data.get("start_time") or "09:00",
@@ -873,6 +833,9 @@ async def create_token(
     patient_name = user.name if user else None
     patient_phone = user.phone if user else None
 
+    status_val = TokenStatus.PENDING.value if hasattr(TokenStatus.PENDING, 'value') else "pending"
+    payment_val = PaymentStatus.PENDING.value if hasattr(PaymentStatus.PENDING, 'value') else "pending"
+
     token_doc = {
         "id": token_id,
         "patient_id": current_user.user_id,
@@ -882,8 +845,8 @@ async def create_token(
         "token_number": token_number,
         "hex_code": f"{token_id[:7]}{token_number:03d}",
         "appointment_date": appt_dt_utc,
-        "status": TokenStatus.PENDING,
-        "payment_status": PaymentStatus.PENDING,
+        "status": status_val,
+        "payment_status": payment_val,
         "doctor_name": doctor_data.get("name"),
         "doctor_specialization": doctor_data.get("specialization"),
         "hospital_name": hospital.name,
