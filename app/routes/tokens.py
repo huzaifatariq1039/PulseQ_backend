@@ -726,7 +726,7 @@ async def generate_smart_token(
                 doctor_data.get("name", "Doctor"),
                 patient_name or "Patient",
                 hospital_data.get("name", "Clinic"),
-                "N/A",
+                doctor_data.get("specialization", "General"), 
                 str(estimated_wait_time or 0)
             ]
             )

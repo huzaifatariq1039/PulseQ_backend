@@ -179,3 +179,75 @@ async def schedule_messages(token: Dict[str, Any]) -> None:
             ctx,
             [str(ctx.get("patient_name") or "Patient")],
         )
+
+
+async def schedule_confirmation_checks(token_id: str, first_delay_minutes: int = 15, second_delay_minutes: int = 15) -> None:
+    """
+    After token booking:
+    - If no YES response in 15 min → send reminder_for_confirmation
+    - If still no response in next 15 min → auto cancel token
+    """
+    async def _check_and_remind():
+        await asyncio.sleep(first_delay_minutes * 60)
+
+        try:
+            db = next(get_db())
+            from app.models import Token
+
+            token = db.query(Token).filter(Token.id == token_id).first()
+            if not token:
+                return
+
+            # If still pending (no YES response) → send reminder
+            if token.status == "pending":
+                phone = token.patient_phone
+                if phone:
+                    await send_template_message(
+                        phone,
+                        "reminder_for_confirmation",
+                        []
+                    )
+
+                # Wait another 15 min then auto cancel
+                await asyncio.sleep(second_delay_minutes * 60)
+
+                # Re-fetch fresh token state
+                db.refresh(token)
+
+                if token.status == "pending":
+                    token.status = "cancelled"
+                    token.cancelled_at = datetime.utcnow()
+                    token.updated_at = datetime.utcnow()
+                    db.commit()
+
+                    # Send cancellation message
+                    if phone:
+                        await send_template_message(
+                            phone,
+                            "cancelled",
+                            [token.patient_name or "Patient"]
+                        )
+
+                    # Recalculate queue positions
+                    try:
+                        from app.services.queue_management_service import QueueManagementService
+                        await QueueManagementService.recalculate_positions(
+                            token.doctor_id,
+                            token.hospital_id,
+                            token.appointment_date
+                        )
+                    except Exception as e:
+                        pass
+
+        except Exception as e:
+            return
+        finally:
+            try:
+                db.close()
+            except Exception:
+                pass
+
+    try:
+        asyncio.create_task(_check_and_remind())
+    except Exception:
+        await _check_and_remind()

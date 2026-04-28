@@ -151,7 +151,7 @@ async def send_template_message(phone: str, template_name: str, params: list):
                         "1": str(params[0]) if params else "Doctor",
                         "2": str(params[1]) if len(params) > 1 else "Patient",
                         "3": str(params[2]) if len(params) > 2 else "Clinic",
-                        "4": str(params[3]) if len(params) > 3 else "N/A",
+                        "4": str(params[3]) if len(params) > 3 else "General",
                         "5": str(params[4]) if len(params) > 4 else "0"
                     })
                 )
@@ -161,14 +161,14 @@ async def send_template_message(phone: str, template_name: str, params: list):
                 doctor_name = str(params[0]) if params else "Doctor"
                 name = str(params[1]) if len(params) > 1 else "Patient"
                 hospital_name = str(params[2]) if len(params) > 2 else "Clinic"
-                room_number = str(params[3]) if len(params) > 3 else "N/A"
+                specialization = str(params[3]) if len(params) > 3 else "General"
                 wait_time = str(params[4]) if len(params) > 4 else "0"
                 body = f"""Apki appointment book ho chuki h!
 
 Doctor: {doctor_name}
 Patient: {name}
 Hospital: {hospital_name}
-Room Number: {room_number}
+Department: {specialization}
 Estimated Time: {wait_time} minutes
 
 Reply YES to receive live updates.
