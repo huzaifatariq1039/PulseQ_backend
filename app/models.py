@@ -548,6 +548,7 @@ class SmartTokenResponse(BaseModel):
     confirmation_status: Optional[str] = None
     confirmed_at: Optional[datetime] = None
     cancelled_at: Optional[datetime] = None
+    consultation_notes: Optional[str] = None
 
 # Payment Models
 class PaymentProcess(BaseModel):

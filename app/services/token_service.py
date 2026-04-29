@@ -196,18 +196,31 @@ class SmartTokenService:
                 and_(
                     Token.doctor_id == doctor_id,
                     func.date(Token.appointment_date) == target_date,
-                    Token.status == "called"
+                    Token.status.in_(["called", "in_progress", "in_consultation", "in_queue"])
                 )
             ).order_by(Token.token_number.asc()).first()
 
             current_token_serving = int(called_token.token_number) if called_token else 0
+            
+            # If no active token, use the last completed token number
+            # so the display shows progress instead of 0
+            if current_token_serving == 0:
+               last_completed = db.query(Token).filter(
+                   and_(
+                        Token.doctor_id == doctor_id,
+                        func.date(Token.appointment_date) == target_date,
+                        Token.status.in_(["completed"])
+                    )
+                ).order_by(Token.token_number.desc()).first()
+            current_token_serving = int(last_completed.token_number) if last_completed else 0
 
             # Get all WAITING tokens
             waiting_tokens = db.query(Token).filter(
                 and_(
                     Token.doctor_id == doctor_id,
                     func.date(Token.appointment_date) == target_date,
-                    Token.status.in_(["pending", "waiting", "confirmed"])
+                    Token.status.in_(["pending", "waiting", "confirmed",
+                                      "in_progress", "in_consultation", "called", "in_queue"])
                 )
             ).order_by(Token.token_number.asc()).all()
 

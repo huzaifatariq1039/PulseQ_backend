@@ -122,15 +122,25 @@ def get_doctor_ratings(
     if role not in ("doctor", "admin") and current_user.user_id != doctor_id:
         raise HTTPException(status_code=403, detail="Access denied")
 
+    actual_doctor_id = doctor_id
+    doctor = db.query(Doctor).filter(Doctor.id == doctor_id).first()
+    if not doctor:
+        # frontend passed user_id instead of doctor_id — look it up
+        doctor = db.query(Doctor).filter(Doctor.user_id == doctor_id).first()
+        if doctor:
+            actual_doctor_id = doctor.id
+        else:
+            raise HTTPException(status_code=404, detail="Doctor not found")
+        
     ratings = db.query(DoctorRating)\
-                .filter(DoctorRating.doctor_id == doctor_id)\
+                .filter(DoctorRating.doctor_id == actual_doctor_id)\
                 .order_by(DoctorRating.created_at.desc())\
                 .all()
 
     avg = round(sum(r.rating for r in ratings) / len(ratings), 1) if ratings else 0.0
 
     return DoctorRatingSummary(
-        doctor_id      = doctor_id,
+        doctor_id      = actual_doctor_id,
         average_rating = avg,
         total_reviews  = len(ratings),
         ratings        = ratings

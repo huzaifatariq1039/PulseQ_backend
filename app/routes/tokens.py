@@ -707,6 +707,8 @@ async def generate_smart_token(
         "estimated_wait_time": estimated_wait_time,
         "created_at": datetime.utcnow(),
         "updated_at": datetime.utcnow(),
+        "queue_position": patients_ahead + 1,
+        "total_queue": patients_ahead + 1,
     }
 
     valid_fields = {c.name for c in Token.__table__.columns}
@@ -866,6 +868,15 @@ async def create_token(
 
     status_val = TokenStatus.PENDING.value if hasattr(TokenStatus.PENDING, 'value') else "pending"
     payment_val = PaymentStatus.PENDING.value if hasattr(PaymentStatus.PENDING, 'value') else "pending"
+     
+    existing_active_count = db.query(Token).filter(
+    and_(
+        Token.doctor_id == spec.doctor_id,
+        Token.appointment_date >= utc_start,
+        Token.appointment_date <= utc_end,
+        Token.status.notin_(["completed", "cancelled"])
+    )
+    ).count()
 
     token_doc = {
         "id": token_id,
@@ -889,6 +900,8 @@ async def create_token(
         "reason_for_visit": spec.reason_for_visit or None,
         "created_at": datetime.utcnow(),
         "updated_at": datetime.utcnow(),
+        "queue_position": existing_active_count + 1,
+        "total_queue": existing_active_count + 1,
     }
 
     valid_fields = {c.name for c in Token.__table__.columns}
