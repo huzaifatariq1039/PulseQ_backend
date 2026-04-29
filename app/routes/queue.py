@@ -22,6 +22,31 @@ router = APIRouter()
 from app.services.queue_management_service import QueueManagementService
 
 
+# ─── Helper: recalculate queue_position for all active tokens of a doctor today ───────
+def _recalculate_queue_positions(doctor_id: str, db: Session):
+    """
+    After any token is completed/cancelled, recalculate queue_position
+    for all remaining active tokens so the frontend always shows correct positions.
+    """
+    today = date.today()
+    today_start = datetime.combine(today, time.min)
+    today_end   = datetime.combine(today, time.max)
+
+    remaining_tokens = db.query(Token).filter(
+        and_(
+            Token.doctor_id == doctor_id,
+            Token.appointment_date >= today_start,
+            Token.appointment_date <= today_end,
+            Token.status.notin_(["completed", "cancelled"])
+        )
+    ).order_by(Token.token_number).all()
+
+    for position, token in enumerate(remaining_tokens, start=1):
+        token.queue_position = position
+
+    db.commit()
+
+
 @router.get("/doctor/{doctor_id}", response_model=QueueResponse)
 async def get_doctor_queue_status(
     doctor_id: str,
@@ -86,6 +111,10 @@ async def test_advance_queue(
     t.status = "completed"
     t.completed_at = datetime.utcnow()
     db.commit()
+
+    # ── FIX: recalculate positions after debug advance ────────────────────────
+    _recalculate_queue_positions(doctor_id, db)
+    # ─────────────────────────────────────────────────────────────────────────
     
     return {"message": "Queue advanced", "completed_token": t.token_number, "next_token": tokens[1].token_number if len(tokens) > 1 else None}
 
@@ -158,6 +187,10 @@ async def advance_queue(
         current_token.duration_minutes = duration_minutes
         current_token.updated_at = datetime.utcnow()
         db.commit()
+
+        # ── FIX: recalculate queue_position for all remaining tokens ─────────
+        _recalculate_queue_positions(doctor_id, db)
+        # ─────────────────────────────────────────────────────────────────────
         
         # Send thankyou message on completion
         try:
@@ -313,9 +346,15 @@ async def skip_patient(
     if curr in ("completed", "cancelled"):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot skip a completed/cancelled token")
 
+    doctor_id = token.doctor_id  # save before status change
+
     token.status = TokenStatusEnum.CANCELLED  # Using CANCELLED as skipped
     token.updated_at = datetime.utcnow()
     db.commit()
+
+    # ── FIX: recalculate positions after skip ────────────────────────────────
+    _recalculate_queue_positions(doctor_id, db)
+    # ─────────────────────────────────────────────────────────────────────────
     
     try:
         log_action(current_user.user_id, role, action="SKIP", token_id=token_id)
@@ -341,6 +380,8 @@ async def complete_consultation(
     except Exception:
         role = "doctor"
 
+    doctor_id = token.doctor_id  # save before status change
+
     # Update token
     token.status = TokenStatusEnum.COMPLETED
     token.updated_at = datetime.utcnow()
@@ -361,6 +402,10 @@ async def complete_consultation(
             pass
 
     db.commit()
+
+    # ── FIX: recalculate queue_position for all remaining tokens ─────────────
+    _recalculate_queue_positions(doctor_id, db)
+    # ─────────────────────────────────────────────────────────────────────────
      
     # Send thankyou message on completion
     try:
@@ -439,6 +484,12 @@ async def get_my_queue_position(
         
         # Get doctor info
         doctor = db.query(Doctor).filter(Doctor.id == token.doctor_id).first()
+
+        # ── FIX: write queue_position back to token so it's never null ───────
+        if token.queue_position != queue_status["people_ahead"] + 1:
+            token.queue_position = queue_status["people_ahead"] + 1
+            db.commit()
+        # ─────────────────────────────────────────────────────────────────────
         
         result_tokens.append({
             "token_id": token.id,
@@ -449,6 +500,7 @@ async def get_my_queue_position(
             "people_ahead": queue_status["people_ahead"],
             "estimated_wait_time": queue_status["estimated_wait_time"],
             "total_queue": queue_status["total_queue"],
+            "queue_position": token.queue_position,  # now always has a value
             "status": token.status.value if hasattr(token.status, 'value') else token.status
         })
     
