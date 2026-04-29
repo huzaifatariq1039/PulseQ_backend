@@ -228,10 +228,15 @@ async def get_completed_consultations(
        Token.updated_at >= month_start
     ).count()
 
-    # Paginated tokens
+    # Pagination
+    size = _parse_positive_int(page_size, 20)
+    skip = (page - 1) * size
     total = db.query(Token).filter(*base_filters).count()
 
-    tokens = db.query(Token).filter(*base_filters).order_by(
+    # ✅ Fresh query — no stale filters
+    tokens = db.query(Token).filter(
+        *base_filters
+    ).order_by(
         Token.updated_at.desc()
     ).offset(skip).limit(size).all()
     

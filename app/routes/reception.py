@@ -149,16 +149,18 @@ async def reception_queue(
             "patient_name": t.patient_name,
             "patient_age": age,
             "patient_gender": gender,
+            "patient_phone": t.patient_phone,
             "doctor_name": t.doctor_name,
             "department": department,
             "reason": getattr(t, 'reason_for_visit', None) or "",
             "consultation_fee": consultation_fee,
             "session_fee": session_fee if inferred_has_session else None,
             "total_fee": total_fee,
-            "status": str(t.status).lower(),
-            "payment_status": str(t.payment_status).lower() if t.payment_status else "pending",  # ✅ add this
-            "payment_method": str(t.payment_method).lower() if t.payment_method else None,    
-        })
+            "status": t.status,
+            "payment_status": t.payment_status,
+            "payment_method": t.payment_method,
+            "payment": "PAID" if t.payment_status == "paid" else "UNPAID",  # ✅ ADD THIS
+})
 
     return ok(
         data=items,
