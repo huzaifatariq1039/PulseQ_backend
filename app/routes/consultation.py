@@ -216,7 +216,7 @@ async def consultation_end(
 ) -> Dict[str, Any]:
     token_id = str((payload or {}).get("token_id") or "").strip()
     doctor_id = str((payload or {}).get("doctor_id") or "").strip()
-    consultation_notes = str((payload or {}).get("notes") or "").strip()
+    consultation_notes = str((payload or {}).get("consultation_notes") or "").strip()
     
     if not token_id or not doctor_id:
         missing = []

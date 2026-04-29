@@ -198,7 +198,7 @@ class SmartTokenService:
                     func.date(Token.appointment_date) == target_date,
                     Token.status.in_(["called", "in_progress", "in_consultation", "in_queue"])
                 )
-            ).order_by(Token.token_number.asc()).first()
+            ).order_by(Token.token_number.desc()).first()
 
             current_token_serving = int(called_token.token_number) if called_token else 0
             

@@ -242,7 +242,7 @@ async def get_dashboard_active_overview(
         "people_ahead": people_ahead,
         "estimated_wait_time": estimated_wait_time,
         "total_patients": int(queue_status.get("total_queue") or 0),
-        "now_serving": queue_status.get("current_token"),
+        "now_serving": queue_status.get("current_token_serving"),
         # Additional UI-friendly fields (does not break existing clients)
         "your_token": {
             "label": visible,
@@ -278,7 +278,7 @@ async def get_dashboard_active_overview(
 
     # Live Status convenience: formatted now serving label
     try:
-        curr_num2 = queue_status.get("current_token")
+        curr_num2 = queue_status.get("current_token_serving")
         overview["now_serving_label"] = SmartTokenService.format_token(int(curr_num2)) if curr_num2 is not None else None
     except Exception:
         overview["now_serving_label"] = None
@@ -286,7 +286,7 @@ async def get_dashboard_active_overview(
     # Currently serving card (format A-XXX + doctor dept/room)
     currently_serving = None
     try:
-        curr_num = queue_status.get("current_token")
+        curr_num = queue_status.get("current_token_serving")
         if curr_num is not None:
             curr_label = SmartTokenService.format_token(int(curr_num))
         else:
