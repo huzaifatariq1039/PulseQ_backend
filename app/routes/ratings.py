@@ -88,7 +88,7 @@ def submit_rating(
         doctor_id               = token.doctor_id,
         patient_id              = patient_id,
         rating                  = payload.rating,
-        review                  = payload.review or getattr(payload.get("feedback"), "text", ""),
+        review                  = payload.review or payload.feedback,
         patient_name            = patient_name,
         patient_avatar_initials = _make_initials(patient_name),
         appointment_date        = token.appointment_date,

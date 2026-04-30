@@ -432,7 +432,7 @@ async def sync_medicines_from_legacy(
 async def get_all_medicines(
     db: Session = Depends(get_db),
     hospital_id: Optional[str] = Query(None, description="Filter by hospital ID"),
-    product_id: Optional[str] = Query(None),
+    product_id: Optional[int] = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(500, ge=1, le=1000),  
 ) -> Dict[str, Any]:
@@ -553,9 +553,9 @@ async def add_medicine(
             # Handle invalid expiration date
 
     existing = db.query(PharmacyMedicine).filter(
-        PharmacyMedicine.product_id == payload.product_id,
-        PharmacyMedicine.is_deleted.isnot(True)   
-)
+        PharmacyMedicine.product_id == int(payload.product_id),
+        PharmacyMedicine.is_deleted.isnot(True)
+    ).first()
     if existing:
         existing.name = payload.name
         existing.generic_name = payload.generic_name
