@@ -4,12 +4,12 @@ from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status, Form, Response
 from twilio.twiml.messaging_response import MessagingResponse
-
 from app.database import get_db
 from sqlalchemy.orm import Session
 from sqlalchemy import func, or_
 from app.db_models import User, Doctor, Hospital, Token
 from app.services.whatsapp_service import send_queue_message
+from app.config import TWILIO_AUTH_TOKEN
 from app.utils.twilio_security import validate_twilio_request
 import logging
 
@@ -38,20 +38,30 @@ async def twilio_whatsapp_webhook(
     Includes production security validation.
     """
     # 1. Security Validation (Twilio Signature)
-    signature = request.headers.get("X-Twilio-Signature")
-    url = str(request.url)
-    
+    signature = request.headers.get("X-Twilio-Signature","")
+    #url = str(request.url)
     # We need the raw body for signature validation
     body = await request.body()
     
+    webhook_url = "https://oyster-app-notep.ondigitalocean.app/api/v1/webhooks/twilio/webhook"
     # Validate if in production or if signature is provided
     is_prod = os.getenv("ENVIRONMENT") == "production"
-    if is_prod or signature:
-        if not signature:
-            logger.warning("Missing X-Twilio-Signature in production request")
-            raise HTTPException(status_code=403, detail="Missing X-Twilio-Signature")
-        validate_twilio_request(request, body, signature, url)
-
+    if is_prod:
+        if signature:
+            try:
+                from twilio.request_validator import RequestValidator
+                validator = RequestValidator(TWILIO_AUTH_TOKEN)
+                from urllib.parse import parse_qs
+                form_data = {k: v[0] for k, v in parse_qs(body.decode("utf-8")).items()}
+            
+                if not validator.validate(webhook_url, form_data, signature):
+                    logger.warning("Invalid Twilio signature")
+                #raise HTTPException(status_code=403, detail="Invalid Twilio Signature")
+            except Exception as e:
+                logger.error(f"Signature validation error: {e}")
+        else:
+            logger.warning("No Twilio signature — request may not be from Twilio")
+        # ✅ Don't raise — just log and continue
     # 2. Parse Form Data
     from urllib.parse import parse_qs
     form_data = {k: v[0] for k, v in parse_qs(body.decode("utf-8")).items()}

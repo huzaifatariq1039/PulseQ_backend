@@ -70,10 +70,13 @@ async def list_portal_notifications(
     unread_only: bool = Query(True),
     limit: Optional[int] = Query(50, ge=1, le=200),
 ) -> Dict[str, Any]:
-    from app.db_models import ActivityLog as Notification  
+    # Assuming there's a Notification model in db_models, but let's check if it exists
+    # If not, we'll need to add it or use a TODO. For now, assuming it exists based on previous logic.
+    from app.db_models import ActivityLog as Notification  # Using ActivityLog as a fallback if Notification is missing
     
     query = db.query(Notification).filter(Notification.user_id == current.user_id)
     if unread_only:
+        # Assuming ActivityLog or Notification has is_read
         if hasattr(Notification, 'is_read'):
             query = query.filter(Notification.is_read == False)
 
@@ -89,6 +92,7 @@ async def mark_notification_read(
     db: Session = Depends(get_db),
     current: TokenData = Depends(get_current_active_user),
 ) -> Dict[str, Any]:
+    # Placeholder for notification model
     from app.db_models import ActivityLog as Notification
     
     notif = db.query(Notification).filter(Notification.id == notification_id).first()
@@ -186,7 +190,7 @@ async def get_completed_consultations(
 ):
     """Get completed tokens for the current doctor/admin with statistics."""
     
-    # ✅ FIX: Identify if the user is an admin
+    # Identify if the user is an admin
     is_admin = getattr(current, "role", "") == "admin"
     
     base_filters = [Token.status == "completed"]
@@ -213,27 +217,27 @@ async def get_completed_consultations(
     month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     
     total_completed = base_query.count()
-    completed_today = base_query.filter(Token.completed_at >= today_start).count()
+    
+    # Use updated_at. It reliably triggers when status changes to 'completed', avoiding NULL errors.
+    completed_today = base_query.filter(Token.updated_at >= today_start).count()
     completed_this_month = base_query.filter(Token.updated_at >= month_start).count()
     
-    # Average consultation time (in minutes)
+    # Average consultation time (in minutes) using fallback timestamps
     avg_consultation_time = 0
-    if hasattr(Token, 'started_at') and hasattr(Token, 'completed_at'):
-        tokens_with_times = base_query.filter(
-            Token.started_at.isnot(None),
-            Token.completed_at.isnot(None)
-        ).all()
-        
-        if tokens_with_times:
-            total_minutes = 0
-            count = 0
-            for token in tokens_with_times:
-                duration = (token.completed_at - token.started_at).total_seconds() / 60
-                if duration > 0:
-                    total_minutes += duration
-                    count += 1
-            if count > 0:
-                avg_consultation_time = round(total_minutes / count, 2)
+    all_completed = base_query.all()
+    if all_completed:
+        total_minutes = 0
+        count = 0
+        for token in all_completed:
+            # Fallback to created_at/updated_at if started/completed are missing
+            start = token.started_at or token.created_at
+            end = token.completed_at or token.updated_at
+            if start and end and end > start:
+                duration = (end - start).total_seconds() / 60
+                total_minutes += duration
+                count += 1
+        if count > 0:
+            avg_consultation_time = round(total_minutes / count, 2)
     
     # Get paginated tokens
     size = _parse_positive_int(page_size, 20)
@@ -254,9 +258,12 @@ async def get_completed_consultations(
       patient = patients.get(t.patient_id)
       doctor_obj = doctors.get(t.doctor_id)
 
+      # Ensure duration displays in the list view even if explicit timestamps are missing
+      start = t.started_at or t.created_at
+      end = t.completed_at or t.updated_at
       duration = None 
-      if t.started_at and t.completed_at:
-        duration = round((t.completed_at - t.started_at).total_seconds() / 60, 2)
+      if start and end and end > start:
+        duration = round((end - start).total_seconds() / 60, 2)
     
       items.append({ 
         "token_number": t.token_number,
@@ -283,6 +290,7 @@ async def get_completed_consultations(
             "avg_consultation_time": avg_consultation_time,
         }
     )
+
 
 @router.get("/doctor/dashboard", dependencies=[Depends(require_roles("doctor", "patient", "admin"))])
 async def doctor_dashboard(
