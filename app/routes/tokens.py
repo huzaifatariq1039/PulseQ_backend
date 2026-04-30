@@ -745,7 +745,7 @@ async def generate_smart_token(
                     patient_name or "Patient",
                     hospital_data.get("name", "Clinic"),
                     doctor_data.get("specialization", "General"), 
-                    str(estimated_wait_time or 0)
+                    str(new_token.estimated_wait_time or 0)
                 ]
             )
             logger.info(f"WhatsApp confirmation sent to {patient_phone} for token {token_id}")

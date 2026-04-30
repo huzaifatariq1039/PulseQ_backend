@@ -381,7 +381,7 @@ Reply YES karein updates confirm karne ke liye aur NO karein cancel karne ke liy
                 logger.info(f"WhatsApp Reminder Confirm text sent (fallback) to {formatted_phone}: SID {message.sid}")
                 return message.sid
 
-        if template_name == "queue_update":
+        if template_name == "queue_update_alert":
             if TWILIO_QUEUE_UPDATE_SID:
                 message = client.messages.create(
                     from_=from_number,
