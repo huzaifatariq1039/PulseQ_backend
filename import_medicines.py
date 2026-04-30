@@ -119,12 +119,6 @@ def load_file(path: str, sheet: Optional[str] = None) -> pd.DataFrame:
     return df
 
 
-def fetch_existing_product_ids(session) -> Set[int]:
-    existing = session.query(PharmacyMedicine.product_id).filter(
-        PharmacyMedicine.is_deleted.isnot(True)
-    ).all()
-    return {pid[0] for pid in existing if pid[0] is not None}
-
 def row_to_model(row: pd.Series, hospital_id: Optional[str] = None) -> Optional[PharmacyMedicine]:
     if _is_empty_row(row):
         return None
@@ -164,7 +158,20 @@ def import_medicines(file_path: str, db_url: str, hospital_id: Optional[str] = N
 
     try:
         df = load_file(file_path, sheet=sheet)
-        seen_in_file: Set[int] = set()
+        
+        # =========================================================
+        # THE FIX: Pre-fetch all medicines for this hospital ONCE
+        # =========================================================
+        print(f"Pre-fetching existing inventory for hospital {hospital_id} from database...")
+        # Notice we are NOT filtering by is_deleted. We want to fetch ghosts too!
+        existing_records = session.query(PharmacyMedicine).filter(
+            PharmacyMedicine.hospital_id == hospital_id
+        ).all()
+        
+        # Turn the list into a Python Dictionary for instant O(1) lookups
+        # Format: { product_id: PharmacyMedicine_Object }
+        db_inventory_map = {med.product_id: med for med in existing_records}
+        # =========================================================
 
         imported = 0
         updated = 0
@@ -175,20 +182,12 @@ def import_medicines(file_path: str, db_url: str, hospital_id: Optional[str] = N
                 continue
 
             pid = med.product_id
-            if pid in seen_in_file:
-                print(f"Skipping duplicate product_id in file: {pid}")
-                continue
 
-            seen_in_file.add(pid)
-
-            # [FIX] Added critical hospital_id scope to backend CLI script
-            existing_med = session.query(PharmacyMedicine).filter(
-                PharmacyMedicine.product_id == pid,
-                PharmacyMedicine.hospital_id == hospital_id,
-                PharmacyMedicine.is_deleted.isnot(True)
-            ).first()
-
-            if existing_med:
+            # FAST LOCAL CHECK: Does it exist in our Python dictionary?
+            if pid in db_inventory_map:
+                existing_med = db_inventory_map[pid]
+                
+                # Update the existing object directly in memory
                 existing_med.batch_no = med.batch_no
                 existing_med.name = med.name
                 existing_med.generic_name = med.generic_name
@@ -201,24 +200,23 @@ def import_medicines(file_path: str, db_url: str, hospital_id: Optional[str] = N
                 existing_med.expiration_date = med.expiration_date
                 existing_med.category = med.category
                 existing_med.sub_category = med.sub_category
+                
+                # Revive it if it was a soft-deleted ghost!
+                existing_med.is_deleted = False 
                 existing_med.updated_at = datetime.now(timezone.utc)
+                
                 updated += 1
-                print(f"Updated product_id: {pid}")
             else:
+                # INSERT new medicine
                 session.add(med)
+                # Add it to our local dictionary so we catch duplicates inside the Excel sheet itself!
+                db_inventory_map[pid] = med 
                 imported += 1
-                print(f"Imported product_id: {pid}")
 
-            if (imported + updated) % 50 == 0:
-                try:
-                    session.commit()
-                    print(f"Processed {imported + updated} items...")
-                except Exception as commit_error:
-                    session.rollback()
-                    print(f"Commit error: {commit_error}")
-                    raise
-
+        # Push ALL changes to the database in ONE massive bulk transaction
+        print(f"Pushing {imported} new and {updated} updated records to database...")
         session.commit()
+        
         print(f"Import complete: {imported} new, {updated} updated")
         return imported + updated
 
@@ -238,6 +236,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+    # Handle postgres:// vs postgresql://
     db_url = args.db_url
     if db_url.startswith("postgres://"):
         db_url = db_url.replace("postgres://", "postgresql://", 1)
