@@ -452,11 +452,8 @@ async def get_all_medicines(
     if hospital_id:
         base = base.filter(PharmacyMedicine.hospital_id == hospital_id)
     
-    if product_id: 
-        try:
-            base = base.filter(PharmacyMedicine.product_id == int(product_id))
-        except (ValueError, TypeError):
-            pass
+    if product_id is not None:
+        base = base.filter(PharmacyMedicine.product_id == product_id)
 
     total = base.count()
     rows = base.order_by(PharmacyMedicine.name).offset((page-1)*page_size).limit(page_size).all()

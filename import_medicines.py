@@ -170,10 +170,11 @@ def import_medicines(file_path: str, db_url: str, hospital_id: Optional[str] = N
 
     try:
         df = load_file(file_path, sheet=sheet)
-        existing = fetch_existing_product_ids(session)
         seen_in_file: Set[int] = set()
 
         imported = 0
+        updated = 0
+
         for _, row in df.iterrows():
             med = row_to_model(row, hospital_id=hospital_id)
             if not med:
@@ -183,32 +184,57 @@ def import_medicines(file_path: str, db_url: str, hospital_id: Optional[str] = N
             if pid in seen_in_file:
                 print(f"Skipping duplicate product_id in file: {pid}")
                 continue
-            if pid in existing:
-                print(f"Skipping existing product_id in database: {pid}")
-                continue
 
             seen_in_file.add(pid)
-            session.add(med)
-            imported += 1
 
-            if imported % 50 == 0:
+            # ✅ Check if exists in DB
+            existing_med = session.query(PharmacyMedicine).filter(
+                PharmacyMedicine.product_id == pid,
+                PharmacyMedicine.is_deleted.isnot(True)
+            ).first()
+
+            if existing_med:
+                # ✅ UPDATE existing medicine
+                existing_med.batch_no = med.batch_no
+                existing_med.name = med.name
+                existing_med.generic_name = med.generic_name
+                existing_med.type = med.type
+                existing_med.distributor = med.distributor
+                existing_med.purchase_price = med.purchase_price
+                existing_med.selling_price = med.selling_price
+                existing_med.stock_unit = med.stock_unit
+                existing_med.quantity = med.quantity
+                existing_med.expiration_date = med.expiration_date
+                existing_med.category = med.category
+                existing_med.sub_category = med.sub_category
+                existing_med.updated_at = datetime.now(timezone.utc)
+                updated += 1
+                print(f"Updated product_id: {pid}")
+            else:
+                # ✅ INSERT new medicine
+                session.add(med)
+                imported += 1
+                print(f"Imported product_id: {pid}")
+
+            if (imported + updated) % 50 == 0:
                 try:
                     session.commit()
-                    print(f"Imported {imported} items...")
+                    print(f"Processed {imported + updated} items...")
                 except Exception as commit_error:
                     session.rollback()
-                    print(f"Commit error at {imported} items: {commit_error}")
+                    print(f"Commit error: {commit_error}")
                     raise
 
         session.commit()
-        return imported
+        print(f"Import complete: {imported} new, {updated} updated")
+        return imported + updated
+
     except Exception as e:
         session.rollback()
         print(f"Error during import: {e}")
         raise
     finally:
         session.close()
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Import medicines from CSV/Excel into PostgreSQL")
