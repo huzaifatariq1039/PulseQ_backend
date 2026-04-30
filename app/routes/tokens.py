@@ -80,11 +80,8 @@ def _to_smart_token_response(t: Token) -> SmartTokenResponse:
     status_val = str(t.status.value if hasattr(t.status, 'value') else t.status).lower()
     pay_status_val = str(t.payment_status.value if hasattr(t.payment_status, 'value') else t.payment_status).lower()
     
-    # ✅ FIX: "skipped" is explicitly kept active so the frontend UI can display the skipped warning banner
-    is_active = status_val not in ["cancelled", "completed"]
-    
-    age = int(t.patient_age) if t.patient_age is not None else None
-    gender = t.patient_gender if t.patient_gender else None
+    # ✅ FIX 1: "skipped" is now marked as inactive so it leaves the frontend active view
+    is_active = status_val not in ["cancelled", "completed", "skipped"]
 
     return SmartTokenResponse(
         id=str(t.id),
@@ -115,14 +112,14 @@ def _to_smart_token_response(t: Token) -> SmartTokenResponse:
         hospital_name=t.hospital_name,
         patient_name=t.patient_name,
         patient_phone=t.patient_phone,
-        patient_age=age,
-        patient_gender=gender,
+        patient_age=t.patient_age,
+        patient_gender=t.patient_gender,
         reason_for_visit=t.reason_for_visit,
         patient={
             "name": t.patient_name,
             "phone": t.patient_phone,
-            "age": age,
-            "gender": gender,
+            "age": t.patient_age,
+            "gender": t.patient_gender,
         },
         queue_opt_in=bool(t.queue_opt_in),
         queue_opted_in_at=t.queue_opted_in_at,
@@ -189,7 +186,6 @@ def _queue_object_for(db: Session, doctor_id: str, hospital_id: str, day_local: 
     q = db.query(DBQueue).filter(DBQueue.doctor_id == doctor_id).first()
     now_serving = int(getattr(q, "current_token", 1) or 1)
     
-    # ✅ FIX: Explicitly exclude "skipped" so the total queue length is accurate
     total_queue = db.query(Token).filter(
         Token.doctor_id == doctor_id,
         func.date(Token.appointment_date) == day_local,
@@ -369,25 +365,26 @@ async def get_my_active_token_details(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_active_user)
 ):
+    # ✅ FIX 2: Added 'skipped'
     token = db.query(Token).filter(
         Token.patient_id == current_user.user_id,
-        Token.status.notin_(["cancelled", "completed", "TokenStatus.CANCELLED", "TokenStatus.COMPLETED"])
+        Token.status.notin_(["cancelled", "completed", "skipped", "TokenStatus.CANCELLED", "TokenStatus.COMPLETED", "TokenStatus.SKIPPED"])
     ).order_by(Token.created_at.desc()).first()
 
     if not token:
         raise HTTPException(status_code=404, detail="No active token found")
 
-    #if not token.patient_name or not token.patient_phone:
-    #    user = db.query(User).filter(User.id == current_user.user_id).first()
-    #    if user:
-    #        if not token.patient_name:
-    #            token.patient_name = user.name
-    #        if not token.patient_phone:
-    #            token.patient_phone = user.phone
-    #        try:
-    #            db.commit()
-    #        except Exception:
-    #            db.rollback()
+    if not token.patient_name or not token.patient_phone:
+        user = db.query(User).filter(User.id == current_user.user_id).first()
+        if user:
+            if not token.patient_name:
+                token.patient_name = user.name
+            if not token.patient_phone:
+                token.patient_phone = user.phone
+            try:
+                db.commit()
+            except Exception:
+                db.rollback()
 
     doctor = db.query(Doctor).filter(Doctor.id == token.doctor_id).first()
     hospital = db.query(Hospital).filter(Hospital.id == token.hospital_id).first()
@@ -407,9 +404,10 @@ async def get_my_active_token(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_active_user)
 ):
+    # ✅ FIX 2: Added 'skipped'
     token = db.query(Token).filter(
         Token.patient_id == current_user.user_id,
-        Token.status.notin_(["cancelled", "completed", "TokenStatus.CANCELLED", "TokenStatus.COMPLETED"])
+        Token.status.notin_(["cancelled", "completed", "skipped", "TokenStatus.CANCELLED", "TokenStatus.COMPLETED", "TokenStatus.SKIPPED"])
     ).order_by(Token.created_at.desc()).first()
 
     if not token:
@@ -438,7 +436,8 @@ async def get_my_tokens(
 ):
     query = db.query(Token).filter(Token.patient_id == current_user.user_id)
     if only_active:
-        query = query.filter(Token.status.notin_(["cancelled", "completed", "TokenStatus.CANCELLED", "TokenStatus.COMPLETED"]))
+        # ✅ FIX 3: Added 'skipped'
+        query = query.filter(Token.status.notin_(["cancelled", "completed", "skipped", "TokenStatus.CANCELLED", "TokenStatus.COMPLETED", "TokenStatus.SKIPPED"]))
     tokens = query.order_by(Token.created_at.desc()).all()
     return [_to_smart_token_response(t) for t in tokens]
 
@@ -450,9 +449,10 @@ async def get_my_upcoming_tokens(
     limit: int = Query(50, ge=1, le=200),
 ):
     now = datetime.utcnow()
+    # ✅ FIX 3: Added 'skipped'
     tokens = db.query(Token).filter(
         Token.patient_id == current_user.user_id,
-        Token.status.notin_(["cancelled", "completed", "TokenStatus.CANCELLED", "TokenStatus.COMPLETED"]),
+        Token.status.notin_(["cancelled", "completed", "skipped", "TokenStatus.CANCELLED", "TokenStatus.COMPLETED", "TokenStatus.SKIPPED"]),
         Token.appointment_date >= now
     ).order_by(Token.appointment_date.asc()).limit(limit).all()
 
@@ -474,9 +474,10 @@ async def get_token_history(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_active_user)
 ):
+    # ✅ FIX 4: Added 'skipped' to the history filter so they populate on the frontend!
     tokens = db.query(Token).filter(
         Token.patient_id == current_user.user_id,
-        Token.status.in_(["cancelled", "completed", "TokenStatus.CANCELLED", "TokenStatus.COMPLETED"])
+        Token.status.in_(["cancelled", "completed", "skipped", "TokenStatus.CANCELLED", "TokenStatus.COMPLETED", "TokenStatus.SKIPPED"])
     ).order_by(Token.created_at.desc()).all()
     return [_to_smart_token_response(t) for t in tokens]
 
@@ -528,7 +529,7 @@ async def generate_smart_token_with_details(
 
 
 # ====================================================================================
-# ✅ THE CORE AI GENERATION ENDPOINT
+# THE CORE AI GENERATION ENDPOINT
 # ====================================================================================
 @router.post("/generate", response_model=SmartTokenResponse)
 async def generate_smart_token(
@@ -561,9 +562,7 @@ async def generate_smart_token(
     day_local = _local_day_for(appointment_date, tz_minutes)
     utc_start, utc_end = _utc_bounds_for_local_day(day_local, tz_minutes)
 
-    # --- ✅ FIX: STRICT DOUBLE BOOKING BLOCK ---
-    # Only blocks if the patient is ACTIVELY waiting/consulting TODAY.
-    # If they are "skipped" today, they are legally allowed to generate a new token and try again.
+    # --- STRICT DOUBLE BOOKING BLOCK ---
     BLOCKING_STATUSES = ["waiting", "confirmed", "pending", "called", "in_consultation", "in_progress", "TokenStatus.PENDING", "TokenStatus.WAITING", "TokenStatus.CONFIRMED"]
     existing_token = db.query(Token).filter(
         Token.patient_id == current_user.user_id,
@@ -676,8 +675,8 @@ async def generate_smart_token(
     # Token Creation & Saving 
     # ---------------------------------------------------------
     user = db.query(User).filter(User.id == current_user.user_id).first()
-    patient_name = payload.patient_name or (user.name if user else None)
-    patient_phone = payload.patient_phone or (user.phone if user else None)
+    patient_name = user.name if user else None
+    patient_phone = user.phone if user else None
     
     status_val = TokenStatus.PENDING.value if hasattr(TokenStatus.PENDING, 'value') else "pending"
     payment_val = PaymentStatus.PENDING.value if hasattr(PaymentStatus.PENDING, 'value') else "pending"
@@ -710,8 +709,6 @@ async def generate_smart_token(
         "estimated_wait_time": estimated_wait_time,
         "created_at": datetime.utcnow(),
         "updated_at": datetime.utcnow(),
-        "queue_position": patients_ahead + 1,
-        "total_queue": patients_ahead + 1,
     }
 
     valid_fields = {c.name for c in Token.__table__.columns}
@@ -737,16 +734,16 @@ async def generate_smart_token(
 
     if patient_phone:
         try:
-            await send_template_message(
-                phone=patient_phone,
-                template_name="token_number",
-                params=[
-                    doctor_data.get("name", "Doctor"),
-                    patient_name or "Patient",
-                    hospital_data.get("name", "Clinic"),
-                    doctor_data.get("specialization", "General"), 
-                    str(new_token.estimated_wait_time or 0)
-                ]
+            send_template_message(
+            phone=patient_phone,
+            template_name="token_number",
+            params=[
+                doctor_data.get("name", "Doctor"),
+                patient_name or "Patient",
+                hospital_data.get("name", "Clinic"),
+                doctor_data.get("specialization", "General"), 
+                str(estimated_wait_time or 0)
+            ]
             )
             logger.info(f"WhatsApp confirmation sent to {patient_phone} for token {token_id}")
         except Exception as e:
@@ -836,7 +833,7 @@ async def create_token(
     day = _parse_local_date(spec.appointment_date, tz_minutes)
     utc_start, utc_end = _utc_bounds_for_local_day(day, tz_minutes)
 
-    # --- ✅ FIX: STRICT DOUBLE BOOKING BLOCK ---
+    # --- STRICT DOUBLE BOOKING BLOCK ---
     BLOCKING_STATUSES = ["waiting", "confirmed", "pending", "called", "in_consultation", "in_progress", "TokenStatus.PENDING", "TokenStatus.WAITING", "TokenStatus.CONFIRMED"]
     existing_token = db.query(Token).filter(
         Token.patient_id == current_user.user_id,
@@ -871,15 +868,6 @@ async def create_token(
 
     status_val = TokenStatus.PENDING.value if hasattr(TokenStatus.PENDING, 'value') else "pending"
     payment_val = PaymentStatus.PENDING.value if hasattr(PaymentStatus.PENDING, 'value') else "pending"
-     
-    existing_active_count = db.query(Token).filter(
-    and_(
-        Token.doctor_id == spec.doctor_id,
-        Token.appointment_date >= utc_start,
-        Token.appointment_date <= utc_end,
-        Token.status.notin_(["completed", "cancelled"])
-    )
-    ).count()
 
     token_doc = {
         "id": token_id,
@@ -903,8 +891,6 @@ async def create_token(
         "reason_for_visit": spec.reason_for_visit or None,
         "created_at": datetime.utcnow(),
         "updated_at": datetime.utcnow(),
-        "queue_position": existing_active_count + 1,
-        "total_queue": existing_active_count + 1,
     }
 
     valid_fields = {c.name for c in Token.__table__.columns}
@@ -952,14 +938,9 @@ async def get_appointment_details(
         token.appointment_date,
         db=db 
     )
-    
-    token_data = _to_smart_token_response(token)
 
-    # ── FIX: inject consultation_notes into the response ─────────────────────
-    token_dict = token_data.model_dump()
-    token_dict["consultation_notes"] = token.consultation_notes  # already in Token model
     return {
-        "token": token_dict,
+        "token": _to_smart_token_response(token),
         "doctor": {k: v for k, v in doctor.__dict__.items() if not k.startswith('_')} if doctor else {},
         "hospital": {k: v for k, v in hospital.__dict__.items() if not k.startswith('_')} if hospital else {},
         "queue": queue

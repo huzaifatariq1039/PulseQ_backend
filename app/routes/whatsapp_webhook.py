@@ -45,12 +45,12 @@ async def twilio_whatsapp_webhook(
     body = await request.body()
     
     # Validate if in production or if signature is provided
-    #is_prod = os.getenv("ENVIRONMENT") == "production"
-    #if is_prod or signature:
-    #    if not signature:
-    #        logger.warning("Missing X-Twilio-Signature in production request")
-    #        raise HTTPException(status_code=403, detail="Missing X-Twilio-Signature")
-    #    validate_twilio_request(request, body, signature, url)
+    is_prod = os.getenv("ENVIRONMENT") == "production"
+    if is_prod or signature:
+        if not signature:
+            logger.warning("Missing X-Twilio-Signature in production request")
+            raise HTTPException(status_code=403, detail="Missing X-Twilio-Signature")
+        validate_twilio_request(request, body, signature, url)
 
     # 2. Parse Form Data
     from urllib.parse import parse_qs
@@ -168,7 +168,7 @@ async def twilio_whatsapp_webhook(
 
             await send_template_message(
                 phone, 
-                "queue_update", 
+                "queue_update_alert", 
                 [
                     token.patient_name or "Patient", 
                     str(patients_ahead), 
