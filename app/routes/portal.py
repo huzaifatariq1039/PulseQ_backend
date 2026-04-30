@@ -298,6 +298,19 @@ async def get_completed_consultations(
         "status": t.status,
         "consultation_notes": t.consultation_notes, 
     })
+    
+    return ok(
+        data=items,
+        meta={
+            "page": page,
+            "page_size": size,
+            "total": total,
+            "total_completed": total_completed,
+            "completed_today": completed_today,
+            "completed_this_month": completed_this_month,
+            "avg_consultation_time": avg_consultation_time,
+        }
+    )
 
 @router.get("/doctor/dashboard", dependencies=[Depends(require_roles("doctor", "patient", "admin"))])
 async def doctor_dashboard(

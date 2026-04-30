@@ -82,6 +82,9 @@ def _to_smart_token_response(t: Token) -> SmartTokenResponse:
     
     # ✅ FIX: "skipped" is explicitly kept active so the frontend UI can display the skipped warning banner
     is_active = status_val not in ["cancelled", "completed"]
+    
+    age = int(t.patient_age) if t.patient_age is not None else None
+    gender = t.patient_gender if t.patient_gender else None
 
     return SmartTokenResponse(
         id=str(t.id),
@@ -112,14 +115,14 @@ def _to_smart_token_response(t: Token) -> SmartTokenResponse:
         hospital_name=t.hospital_name,
         patient_name=t.patient_name,
         patient_phone=t.patient_phone,
-        patient_age=t.patient_age,
-        patient_gender=t.patient_gender,
+        patient_age=age,
+        patient_gender=gender,
         reason_for_visit=t.reason_for_visit,
         patient={
             "name": t.patient_name,
             "phone": t.patient_phone,
-            "age": t.patient_age,
-            "gender": t.patient_gender,
+            "age": age,
+            "gender": gender,
         },
         queue_opt_in=bool(t.queue_opt_in),
         queue_opted_in_at=t.queue_opted_in_at,

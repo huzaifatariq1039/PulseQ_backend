@@ -117,19 +117,31 @@ async def reception_queue(
     items: List[Dict[str, Any]] = []
     for t in tokens:
         doctor = db.query(Doctor).filter(Doctor.id == t.doctor_id).first()
-        user = db.query(User).filter(User.id == t.patient_id).first()
-        
-        # Calculate Age and Gender
-        age, gender = "0y", "Unknown"
-        if user:
-            gender = getattr(user, 'gender', "Unknown")
-            if user.date_of_birth:
-                try:
-                    dob = datetime.strptime(user.date_of_birth, "%Y-%m-%d")
-                    age = (datetime.utcnow() - dob).days // 365
-                except Exception:
-                    pass
-        
+
+    #  Read age from Token first (as int)
+        age = None
+        if t.patient_age is not None:
+            try:
+                age = int(t.patient_age)
+            except Exception:
+                age = None
+
+    # Read gender from Token first
+        gender = t.patient_gender if t.patient_gender else None
+
+    # Fallback to User table only if token has no age or gender
+        if age is None or gender is None:
+            user = db.query(User).filter(User.id == t.patient_id).first()
+            if user:
+                if age is None and user.date_of_birth:
+                   try:
+                       dob = datetime.strptime(user.date_of_birth, "%Y-%m-%d")
+                       age = (datetime.utcnow() - dob).days // 365  # ✅ int
+                   except Exception:
+                       age = None
+                if gender is None: 
+                    gender = getattr(user, 'gender', None)
+
         department = getattr(t, 'doctor_specialization', None) or (doctor.specialization if doctor else "")
         dept_text = f"{department or ''}"
         inferred_has_session = _infer_has_session(dept_text)
@@ -137,30 +149,29 @@ async def reception_queue(
         consultation_fee = getattr(t, 'consultation_fee', None) or (doctor.consultation_fee if doctor else 0.0)
         session_fee = getattr(t, 'session_fee', None) or (getattr(doctor, 'session_fee', None) if doctor else 0.0)
 
-        # Force total_fee to use the Token's actual saved total_fee which includes the Token fee of 50
-        total_fee = getattr(t, 'total_fee', None) 
+        total_fee = getattr(t, 'total_fee', None)
         if total_fee is None:
             total_fee = (consultation_fee or 0) + (session_fee or 0 if inferred_has_session else 0)
 
         items.append({
-            "token_id": t.id,
-            "token_number": t.display_code or str(t.token_number),
-            "mrn": t.mrn,
-            "patient_name": t.patient_name,
-            "patient_age": age,
-            "patient_gender": gender,
-            "patient_phone": t.patient_phone,
-            "doctor_name": t.doctor_name,
-            "department": department,
-            "reason": getattr(t, 'reason_for_visit', None) or "",
-            "consultation_fee": consultation_fee,
-            "session_fee": session_fee if inferred_has_session else None,
-            "total_fee": total_fee,
-            "status": t.status,
-            "payment_status": t.payment_status,
-            "payment_method": t.payment_method,
-            "payment": "PAID" if t.payment_status == "paid" else "UNPAID",  # ✅ ADD THIS
-})
+           "token_id": t.id,
+           "token_number": t.display_code or str(t.token_number),
+           "mrn": t.mrn,
+           "patient_name": t.patient_name,
+           "patient_age": age,            # ✅ int or None
+           "patient_gender": gender,      # ✅ from token or user
+           "patient_phone": t.patient_phone,
+           "doctor_name": t.doctor_name,
+           "department": department,
+           "reason": getattr(t, 'reason_for_visit', None) or "",
+           "consultation_fee": consultation_fee,
+           "session_fee": session_fee if inferred_has_session else None,
+           "total_fee": total_fee,
+           "status": t.status,
+           "payment_status": t.payment_status,
+           "payment_method": t.payment_method,
+           "payment": "PAID" if t.payment_status == "paid" else "UNPAID",
+    })
 
     return ok(
         data=items,
