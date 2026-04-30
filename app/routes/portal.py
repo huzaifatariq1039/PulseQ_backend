@@ -990,6 +990,15 @@ async def receptionist_update_token(
     token.updated_at = datetime.utcnow()
     db.commit()
     db.refresh(token)
+
+    user = db.query(User).filter(User.id == token.patient_id).first()
+    if user:
+        if "patient_name" in updated_fields:
+            user.name = token.patient_name
+        if "patient_phone" in updated_fields:
+            user.phone = token.patient_phone
+        user.updated_at = datetime.utcnow()
+        db.commit()
     
     return ok(
         data={
@@ -998,6 +1007,7 @@ async def receptionist_update_token(
             "patient_name": token.patient_name,
             "patient_age": token.patient_age,
             "patient_gender": token.patient_gender,
+            "patient_phone": token.patient_phone,
             "status": token.status,
             "updated_fields": updated_fields
         },
