@@ -17,17 +17,6 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# PHASE 3: Test Sending Message (Temporary Dummy DB for testing)
-patients_db = {
-    "whatsapp:+923491394355": {
-        "name": "Huzaifa",
-        "position": 2,
-        "wait_time": 10,
-        "status": "waiting"
-    }
-}
-
-
 @router.post("/twilio/webhook")
 async def twilio_whatsapp_webhook(
     request: Request,
@@ -35,14 +24,11 @@ async def twilio_whatsapp_webhook(
 ):  
     """
     Twilio WhatsApp Webhook to handle YES/NO confirmations.
-    Includes production security validation.
     """
-    # 1. Security Validation (Twilio Signature)
     signature = request.headers.get("X-Twilio-Signature","")
     body = await request.body()
     
     webhook_url = "https://oyster-app-notep.ondigitalocean.app/api/v1/webhooks/twilio/webhook"
-    # Validate if in production or if signature is provided
     is_prod = os.getenv("ENVIRONMENT") == "production"
     if is_prod and signature:
         try:
@@ -60,7 +46,6 @@ async def twilio_whatsapp_webhook(
             logger.error(f"Signature validation error: {e}")
             pass
 
-    # 2. Parse Form Data
     from urllib.parse import parse_qs
     form_data = {k: v[0] for k, v in parse_qs(body.decode("utf-8")).items()}
     
@@ -108,6 +93,7 @@ async def twilio_whatsapp_webhook(
         token.confirmed_at = now
         token.updated_at = now
         token.confirmation_status = "confirmed"
+        # Opt-in logic
         token.queue_opt_in = True
         token.queue_opted_in_at = now
         db.commit()
@@ -124,9 +110,9 @@ async def twilio_whatsapp_webhook(
                     except Exception:
                         pass
         except Exception as e:
-            logger.error(f"Failed to cancel reminder jobs for token {token.id}: {e}")
+            pass
         
-        # Send Queue Update template
+        # Send initial Queue Update template upon YES
         try:
             from app.services.whatsapp_service import send_template_message
             phone = user_number.replace("whatsapp:", "")
@@ -151,11 +137,11 @@ async def twilio_whatsapp_webhook(
                 ]
             )
             
-            # ✅ FIX: Convert token to dictionary before passing to the scheduler to prevent crash
+            # ✅ FIX: Serialize dictionary AND send the is_webhook_trigger flag!
             try:
                 from app.services.message_scheduler import schedule_messages
                 token_dict = {k: v for k, v in token.__dict__.items() if not k.startswith('_')}
-                await schedule_messages(token_dict)
+                await schedule_messages(token_dict, is_webhook_trigger=True)
                 logger.info(f"Ongoing queue update sequence scheduled for token {token.id}")
             except Exception as e:
                 logger.error(f"Failed to schedule ongoing messages for token {token.id}: {e}")

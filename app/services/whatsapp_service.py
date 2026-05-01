@@ -61,11 +61,7 @@ def send_queue_message(phone: str, name: str, position: int, wait_time: int, doc
             logger.info(f"WhatsApp template message (with buttons) sent to {formatted_phone}: SID {message.sid}")
         else:
             message_body = f"""Apki appointment book ho chuki h!\n\nDoctor: {doctor_name}\nPatient: {name}\nHospital: {hospital_name}\nRoom Number: {room_number}\nEstimated Time: {wait_time} minutes\n\nReply YES to receive live updates.\n\nPulseQ"""
-            message = client.messages.create(
-                from_=from_number,
-                to=formatted_phone,
-                body=message_body
-            )
+            message = client.messages.create(from_=from_number, to=formatted_phone, body=message_body)
             logger.info(f"WhatsApp text message sent (no buttons) to {formatted_phone}: SID {message.sid}")
         
         return message.sid
@@ -73,46 +69,10 @@ def send_queue_message(phone: str, name: str, position: int, wait_time: int, doc
         logger.error(f"Failed to send WhatsApp message to {phone}: {e}")
         return None
 
-
-def send_call_alert(phone: str, name: str):
-    """
-    Sends the 'patient_call_alert' template message when wait time is low.
-    """
-    if not TWILIO_ACCOUNT_SID or not TWILIO_AUTH_TOKEN or not TWILIO_CALL_ALERT_SID:
-        logger.warning("Twilio credentials or Call Alert SID not configured.")
-        return
-
-    try:
-        client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
-        
-        formatted_phone = str(phone)
-        if not formatted_phone.startswith("whatsapp:"):
-            if not formatted_phone.startswith("+"):
-                formatted_phone = f"+{formatted_phone}"
-            formatted_phone = f"whatsapp:{formatted_phone}"
-
-        from_number = TWILIO_WHATSAPP_NUMBER
-        if from_number and not from_number.startswith("whatsapp:"):
-            from_number = f"whatsapp:{from_number}"
-
-        message = client.messages.create(
-            from_=from_number,
-            to=formatted_phone,
-            content_sid=TWILIO_CALL_ALERT_SID,
-            content_variables=json.dumps({
-                "1": str(name)
-            })
-        )
-        logger.info(f"WhatsApp Call Alert sent to {formatted_phone}: SID {message.sid}")
-        return message.sid
-    except Exception as e:
-        logger.error(f"Failed to send Call Alert to {phone}: {e}")
-        return None
-
-
 async def send_template_message(phone: str, template_name: str, params: list):
     """
-    Sends a WhatsApp template message using Twilio.
+    Sends a WhatsApp template message using Twilio Content API.
+    Ensure variables in the Twilio Console are named {{1}}, {{2}}, etc.
     """
     if not TWILIO_ACCOUNT_SID or not TWILIO_AUTH_TOKEN:
         logger.warning("Twilio credentials not configured. Skipping template message.")
@@ -145,29 +105,18 @@ async def send_template_message(phone: str, template_name: str, params: list):
                         "5": str(params[4]) if len(params) > 4 else "0"
                     })
                 )
-                logger.info(f"WhatsApp Token Number template sent to {formatted_phone}: SID {message.sid}")
                 return message.sid
             else:
-                doctor_name = str(params[0]) if params else "Doctor"
-                name = str(params[1]) if len(params) > 1 else "Patient"
-                hospital_name = str(params[2]) if len(params) > 2 else "Clinic"
-                specialization = str(params[3]) if len(params) > 3 else "General"
-                wait_time = str(params[4]) if len(params) > 4 else "0"
-                body = f"""Apki appointment book ho chuki h!\n\nDoctor: {doctor_name}\nPatient: {name}\nHospital: {hospital_name}\nDepartment: {specialization}\nEstimated Time: {wait_time} minutes\n\nReply YES to receive live updates.\n\nPulseQ"""
-                message = client.messages.create(from_=from_number, to=formatted_phone, body=body)
-                logger.info(f"WhatsApp Token Number text sent (fallback) to {formatted_phone}: SID {message.sid}")
-                return message.sid
+                body = f"""Apki appointment book ho chuki h!\n\nDoctor: {params[0]}\nPatient: {params[1]}\nHospital: {params[2]}\nDepartment: {params[3]}\nEstimated Time: {params[4]} minutes\n\nReply YES to receive live updates.\n\nPulseQ"""
+                return client.messages.create(from_=from_number, to=formatted_phone, body=body).sid
 
         if template_name == "patient_call_alert" and TWILIO_CALL_ALERT_SID:
             message = client.messages.create(
                 from_=from_number,
                 to=formatted_phone,
                 content_sid=TWILIO_CALL_ALERT_SID,
-                content_variables=json.dumps({
-                    "1": str(params[0]) if params else "Patient"
-                })
+                content_variables=json.dumps({"1": str(params[0]) if params else "Patient"})
             )
-            logger.info(f"WhatsApp Call Alert template sent to {formatted_phone}: SID {message.sid}")
             return message.sid
 
         if template_name == "final_alert":
@@ -181,15 +130,10 @@ async def send_template_message(phone: str, template_name: str, params: list):
                         "2": str(params[1]) if len(params) > 1 else ""
                     })
                 )
-                logger.info(f"WhatsApp Final Alert template sent to {formatted_phone}: SID {message.sid}")
                 return message.sid
             else:
-                name = str(params[0]) if params else "Patient"
-                token = str(params[1]) if len(params) > 1 else ""
-                body = f"""Hello {name},\n\nAapki turn kisi bhi waqt aa sakti hai. Please hospital ki taraf rawana ho jayein.\n\nAapka token number {token} hai.\n\nKindly arrive on time.\n\nPulseQ"""
-                message = client.messages.create(from_=from_number, to=formatted_phone, body=body)
-                logger.info(f"WhatsApp Final Alert text sent (fallback) to {formatted_phone}: SID {message.sid}")
-                return message.sid
+                body = f"""Hello {params[0]},\n\nAapki turn kisi bhi waqt aa sakti hai. Please hospital ki taraf rawana ho jayein.\n\nAapka token number {params[1]} hai.\n\nKindly arrive on time.\n\nPulseQ"""
+                return client.messages.create(from_=from_number, to=formatted_phone, body=body).sid
 
         if template_name == "appointment_doctor_change":
             if TWILIO_DOCTOR_CHANGE_SID:
@@ -204,16 +148,6 @@ async def send_template_message(phone: str, template_name: str, params: list):
                         "4": str(params[3]) if len(params) > 3 else "https://pulseq.blog/"
                     })
                 )
-                logger.info(f"WhatsApp Doctor Change template sent to {formatted_phone}: SID {message.sid}")
-                return message.sid
-            else:
-                name = str(params[0]) if params else "Patient"
-                old_doctor = str(params[1]) if len(params) > 1 else ""
-                new_doctor = str(params[2]) if len(params) > 2 else ""
-                link = str(params[3]) if len(params) > 3 and params[3] else "https://pulseq.blog/"
-                body = f"""Hello {name},\n\nDr.{old_doctor} emergency ki wajah se available nahi hain.\n\nAapki appointment update kar di gayi hai: Dr.{new_doctor}\n\nAgar aap apni appointment modify karna chahte hain, to neeche diye gaye link ko use karein:\n{link}\n\nAgar aap appointment cancel karna chahte hain, to Cancel button par click karein.\n\nShukriya aapke cooperation ka."""
-                message = client.messages.create(from_=from_number, to=formatted_phone, body=body)
-                logger.info(f"WhatsApp Doctor Change text sent (fallback) to {formatted_phone}: SID {message.sid}")
                 return message.sid
 
         if template_name == "cancelled":
@@ -222,33 +156,19 @@ async def send_template_message(phone: str, template_name: str, params: list):
                     from_=from_number,
                     to=formatted_phone,
                     content_sid=TWILIO_CANCELLED_SID,
-                    content_variables=json.dumps({
-                        "1": str(params[0]) if params else "Patient"
-                    })
+                    content_variables=json.dumps({"1": str(params[0]) if params else "Patient"})
                 )
-                logger.info(f"WhatsApp Cancelled template sent to {formatted_phone}: SID {message.sid}")
                 return message.sid
             else:
-                name = str(params[0]) if params else "Patient"
-                body = f"""Hello {name},\n\nAapki appointment cancel ho chuki hai.\n\nAgr ap dobara book krna chahte hain to is website ka through book kr skte hain: https://pulseq.blog/\nYa Hospital reception sa rabta karein.\n\nThankyou\n\nPulseQ"""
-                message = client.messages.create(from_=from_number, to=formatted_phone, body=body)
-                logger.info(f"WhatsApp Cancelled text sent (fallback) to {formatted_phone}: SID {message.sid}")
-                return message.sid
+                body = f"""Hello {params[0]},\n\nAapki appointment cancel ho chuki hai.\n\nAgr ap dobara book krna chahte hain to is website ka through book kr skte hain: https://pulseq.blog/\nYa Hospital reception sa rabta karein.\n\nThankyou\n\nPulseQ"""
+                return client.messages.create(from_=from_number, to=formatted_phone, body=body).sid
 
         if template_name == "template":
             if TWILIO_THANKYOU_SID:
-                message = client.messages.create(
-                    from_=from_number,
-                    to=formatted_phone,
-                    content_sid=TWILIO_THANKYOU_SID
-                )
-                logger.info(f"WhatsApp Thankyou template sent to {formatted_phone}: SID {message.sid}")
-                return message.sid
+                return client.messages.create(from_=from_number, to=formatted_phone, content_sid=TWILIO_THANKYOU_SID).sid
             else:
                 body = """Thankyou for visiting PulseQ.\n\nFor future appointments use this link:\nhttps://pulseq.blog/\n\nDid you like our service?\n\n(Reply with one of the options below)\n1. Yes, It was Great\n2. No, I didn't like it"""
-                message = client.messages.create(from_=from_number, to=formatted_phone, body=body)
-                logger.info(f"WhatsApp Thankyou text sent (fallback) to {formatted_phone}: SID {message.sid}")
-                return message.sid
+                return client.messages.create(from_=from_number, to=formatted_phone, body=body).sid
 
         if template_name == "skipped":
             if TWILIO_SKIPPED_SID:
@@ -261,30 +181,17 @@ async def send_template_message(phone: str, template_name: str, params: list):
                         "2": str(params[1]) if len(params) > 1 else ""
                     })
                 )
-                logger.info(f"WhatsApp Skipped template sent to {formatted_phone}: SID {message.sid}")
                 return message.sid
             else:
-                name = str(params[0]) if params else "Patient"
-                token = str(params[1]) if len(params) > 1 else ""
-                body = f"""Hello {name},\n\nLagta hai ke aap apni scheduled appointment miss kar chuke hain. Aapka token number {token} tha.\n\nKindly jald az jald hospital reception se rabta karein taake aap apni appointment reschedule kar saken ya mazeed madad le saken.\n\nThank you for your attention.\n\nPulseQ"""
-                message = client.messages.create(from_=from_number, to=formatted_phone, body=body)
-                logger.info(f"WhatsApp Skipped text sent (fallback) to {formatted_phone}: SID {message.sid}")
-                return message.sid
+                body = f"""Hello {params[0]},\n\nLagta hai ke aap apni scheduled appointment miss kar chuke hain. Aapka token number {params[1]} tha.\n\nKindly jald az jald hospital reception se rabta karein taake aap apni appointment reschedule kar saken ya mazeed madad le saken.\n\nThank you for your attention.\n\nPulseQ"""
+                return client.messages.create(from_=from_number, to=formatted_phone, body=body).sid
 
         if template_name == "reminder_for_confirmation":
             if TWILIO_REMINDER_CONFIRM_SID:
-                message = client.messages.create(
-                    from_=from_number,
-                    to=formatted_phone,
-                    content_sid=TWILIO_REMINDER_CONFIRM_SID
-                )
-                logger.info(f"WhatsApp Reminder Confirm template sent to {formatted_phone}: SID {message.sid}")
-                return message.sid
+                return client.messages.create(from_=from_number, to=formatted_phone, content_sid=TWILIO_REMINDER_CONFIRM_SID).sid
             else:
                 body = """Aapki appointment ke liye koi response receive nahi hua.\n\nReply YES karein updates confirm karne ke liye aur NO karein cancel karne ke liye."""
-                message = client.messages.create(from_=from_number, to=formatted_phone, body=body)
-                logger.info(f"WhatsApp Reminder Confirm text sent (fallback) to {formatted_phone}: SID {message.sid}")
-                return message.sid
+                return client.messages.create(from_=from_number, to=formatted_phone, body=body).sid
 
         if template_name == "queue_update_alert":
             if TWILIO_QUEUE_UPDATE_SID:
@@ -300,28 +207,14 @@ async def send_template_message(phone: str, template_name: str, params: list):
                         "5": str(params[4]) if len(params) > 4 else "Token"
                     })
                 )
-                logger.info(f"WhatsApp Queue Update template sent to {formatted_phone}: SID {message.sid}")
                 return message.sid
             else:
-                name = str(params[0]) if params else "Patient"
-                patients_ahead = str(params[1]) if len(params) > 1 else "0"
-                wait_time = str(params[2]) if len(params) > 2 else "0"
-                location = str(params[3]) if len(params) > 3 else "Clinic"
-                token = str(params[4]) if len(params) > 4 else "Token"
-                body = f"""Dear {name},\n\nAapki turn qareeb aa rahi hai. Aap se pehle {patients_ahead} patients hain. Taqreeban wait {wait_time} hai. Please {location} ki taraf chle jayein.\nToken: {token}\n\nKindly tayar rhein.\n\nPulseQ"""
-                message = client.messages.create(from_=from_number, to=formatted_phone, body=body)
-                logger.info(f"WhatsApp Queue Update text sent (fallback) to {formatted_phone}: SID {message.sid}")
-                return message.sid
+                body = f"""Dear {params[0]},\n\nAapki turn qareeb aa rahi hai. Aap se pehle {params[1]} patients hain. Taqreeban wait {params[2]} hai. Please {params[3]} ki taraf chle jayein.\nToken: {params[4]}\n\nKindly tayar rhein.\n\nPulseQ"""
+                return client.messages.create(from_=from_number, to=formatted_phone, body=body).sid
 
         # Generic fallback
         body = f"Template: {template_name} | Params: {', '.join(map(str, params))}"
-        message = client.messages.create(
-            from_=from_number,
-            to=formatted_phone,
-            body=body
-        )
-        logger.info(f"WhatsApp generic message sent to {formatted_phone}: SID {message.sid}")
-        return message.sid
+        return client.messages.create(from_=from_number, to=formatted_phone, body=body).sid
 
     except Exception as e:
         logger.error(f"Failed to send WhatsApp template message to {phone}: {e}")

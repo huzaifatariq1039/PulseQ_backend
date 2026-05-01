@@ -2,7 +2,6 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional, List
 
-from app.templates import TEMPLATES
 from app.services.whatsapp_service import send_template_message
 from app.database import get_db
 from app.config import COLLECTIONS
@@ -94,7 +93,8 @@ async def _build_token_context(token: Dict[str, Any]) -> Dict[str, Any]:
     return ctx
 
 
-async def schedule_messages(token: Dict[str, Any]) -> None:
+# ✅ FIX: is_webhook_trigger flag and true dynamic wait minutes
+async def schedule_messages(token: Dict[str, Any], is_webhook_trigger: bool = False) -> None:
     ctx = await _build_token_context(token)
 
     appt = _to_dt(ctx.get("appointment_time")) or _to_dt(ctx.get("appointment_date"))
@@ -110,77 +110,85 @@ async def schedule_messages(token: Dict[str, Any]) -> None:
         pass
 
     now = datetime.now(timezone.utc)
-    diff_minutes = (appt - now).total_seconds() / 60.0
+    
+    # Extract estimated wait time safely
+    try:
+        est_wait_time = float(ctx.get("estimated_wait_time") or 0)
+    except (ValueError, TypeError):
+        est_wait_time = 0.0
+
+    # Calculate TRUE expected appointment time
+    expected_appt = appt + timedelta(minutes=est_wait_time)
+    true_wait_minutes = (expected_appt - now).total_seconds() / 60.0
 
     phone = str(ctx.get("patient_phone") or "").strip()
     if not phone:
         return
 
-    # ALWAYS SEND CONFIRMATION
-    try:
-        confirm_tpl = TEMPLATES["CONFIRMATION"]
-    except Exception:
-        confirm_tpl = None
-
-    if confirm_tpl:
+    # Only send initial confirmation if it's NOT coming from the Webhook YES reply (Stops Duplicate Bug)
+    if not is_webhook_trigger:
         confirm_params = [
             str(ctx.get("doctor_name") or "Doctor"),
             str(ctx.get("patient_name") or "Patient"),
             str(ctx.get("hospital_name") or "Hospital"),
-            str(ctx.get("doctor_room_number") or ctx.get("doctor_room") or ""),
-            str(ctx.get("estimated_wait_time") or ""),
+            str(ctx.get("department") or "General"),
+            str(int(true_wait_minutes) if true_wait_minutes > 0 else "0"),
         ]
-        await send_template_message(phone, confirm_tpl, confirm_params)
+        await send_template_message(phone, "token_number", confirm_params)
+
+    # Walk-In Protection
+    if true_wait_minutes < 5:
+        return
 
     # CASE 1: LONG
-    if diff_minutes > 60:
+    if true_wait_minutes > 60:
         await schedule_at(
-            appt - timedelta(minutes=60),
-            TEMPLATES.get("QUEUE_UPDATE"),
+            expected_appt - timedelta(minutes=60),
+            "queue_update_alert",
             ctx,
-            [str(ctx.get("patient_name") or "Patient"), str(ctx.get("token_number") or "")],
+            [str(ctx.get("patient_name") or "Patient"), "1", str(int(true_wait_minutes - 60)), str(ctx.get("hospital_name") or "Clinic"), str(ctx.get("token_number") or "")]
         )
         await schedule_at(
-            appt - timedelta(minutes=30),
-            TEMPLATES.get("FINAL_CALL"),
+            expected_appt - timedelta(minutes=30),
+            "final_alert",
             ctx,
-            [str(ctx.get("patient_name") or "Patient"), str(ctx.get("token_number") or "")],
+            [str(ctx.get("patient_name") or "Patient"), str(ctx.get("token_number") or "")]
         )
         await schedule_at(
-            appt - timedelta(minutes=1),
-            TEMPLATES.get("TURN_NOW"),
+            expected_appt - timedelta(minutes=10),
+            "patient_call_alert",
             ctx,
-            [str(ctx.get("patient_name") or "Patient")],
+            [str(ctx.get("patient_name") or "Patient")]
         )
 
     # CASE 2: MEDIUM
-    elif 30 < diff_minutes <= 60:
+    elif 30 < true_wait_minutes <= 60:
         await schedule_at(
-            appt - timedelta(minutes=30),
-            TEMPLATES.get("FINAL_CALL"),
+            expected_appt - timedelta(minutes=30),
+            "final_alert",
             ctx,
-            [str(ctx.get("patient_name") or "Patient"), str(ctx.get("token_number") or "")],
+            [str(ctx.get("patient_name") or "Patient"), str(ctx.get("token_number") or "")]
         )
         await schedule_at(
-            appt - timedelta(minutes=1),
-            TEMPLATES.get("TURN_NOW"),
+            expected_appt - timedelta(minutes=10),
+            "patient_call_alert",
             ctx,
-            [str(ctx.get("patient_name") or "Patient")],
+            [str(ctx.get("patient_name") or "Patient")]
         )
 
     # CASE 3: SHORT
     else:
         await schedule_at(
-            now + timedelta(minutes=1),
-            TEMPLATES.get("FINAL_CALL"),
+            now + timedelta(minutes=2),
+            "final_alert",
             ctx,
-            [str(ctx.get("patient_name") or "Patient"), str(ctx.get("token_number") or "")],
+            [str(ctx.get("patient_name") or "Patient"), str(ctx.get("token_number") or "")]
         )
         await schedule_at(
-            appt - timedelta(minutes=1),
-            TEMPLATES.get("TURN_NOW"),
+            expected_appt - timedelta(minutes=2),
+            "patient_call_alert",
             ctx,
-            [str(ctx.get("patient_name") or "Patient")],
+            [str(ctx.get("patient_name") or "Patient")]
         )
 
 
