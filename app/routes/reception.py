@@ -222,7 +222,7 @@ async def reception_tokens(
 
 
 # --------------------------------------------------------------------------------
-# NEW: UNIFIED AI WALK-IN TOKEN ENDPOINT
+# NEW: UNIFIED AI WALK-IN TOKEN ENDPOINT WITH WHATSAPP MESSAGING
 # --------------------------------------------------------------------------------
 @router.post("/walkin-token", dependencies=[Depends(require_roles("receptionist", "admin"))])
 async def receptionist_create_walkin_token(
@@ -232,7 +232,7 @@ async def receptionist_create_walkin_token(
 ) -> Dict[str, Any]:
     """
     Creates a Walk-in token from the receptionist portal. 
-    Uses the exact same XGBoost AI Wait-Time engine as the Patient App.
+    Uses the exact same XGBoost AI Wait-Time engine and WhatsApp logic as the Patient App.
     """
     hospital_id = payload.get("hospital_id")
     doctor_id = payload.get("doctor_id")
@@ -439,6 +439,53 @@ async def receptionist_create_walkin_token(
     
     db.add(new_token)
     db.commit()
+
+    # ---------------------------------------------------------
+    # 🚀 WHATSAPP MESSAGING & SCHEDULING (Mirrored from Patient App)
+    # ---------------------------------------------------------
+    def normalize_phone(phone_num: str) -> str:
+        if not phone_num:
+            return phone_num
+        phone_num = str(phone_num).strip().replace(" ", "").replace("-", "")
+        if phone_num.startswith("0") and len(phone_num) == 11:
+            return "+92" + phone_num[1:]  # 03325293408 → +923325293408
+        if not phone_num.startswith("+"):
+            return "+" + phone_num
+        return phone_num
+
+    if phone:
+        normalized_phone = normalize_phone(phone)
+        
+        # 1. Send the initial Token template
+        try:
+            from app.services.whatsapp_service import send_template_message
+            await send_template_message(
+                phone=normalized_phone,
+                template_name="token_number",
+                params=[
+                    doctor.name or "Doctor",
+                    patient_name or "Patient",
+                    hospital_name_str or "Clinic",
+                    doctor.specialization or "General", 
+                    str(estimated_wait_time or 0)
+                ]
+            )
+            logger.info(f"WhatsApp walk-in confirmation sent to {normalized_phone} for token {token_id}")
+        except Exception as e:
+            logger.error(f"Failed to send WhatsApp walk-in confirmation for token {token_id}: {e}")
+    
+        # 2. Schedule the confirmation reminders
+        try:
+            from app.services.confirmation_scheduler import schedule_confirmation_checks
+            await schedule_confirmation_checks(
+                token_id=token_id,
+                first_delay_minutes=15,
+                second_delay_minutes=15
+            )
+            logger.info(f"Confirmation reminder scheduled for walk-in token {token_id}")
+        except Exception as e:
+            logger.error(f"Failed to schedule confirmation reminder for walk-in token {token_id}: {e}")
+    # ---------------------------------------------------------
     
     return ok(
         data={
@@ -460,4 +507,228 @@ async def receptionist_create_walkin_token(
             "estimated_wait_time": estimated_wait_time
         }, 
         message="Walk-in token created via AI Engine"
+    )
+
+@router.post("/receptionist/tokens/{token_id}/skip", dependencies=[Depends(require_roles("receptionist", "patient", "admin"))])
+async def receptionist_skip_token(
+    token_id: str,
+    db: Session = Depends(get_db),
+    current: TokenData = Depends(get_current_active_user),
+) -> Dict[str, Any]:
+    token = db.query(Token).filter(Token.id == token_id).first()
+    if not token:
+        raise HTTPException(status_code=404, detail="Token not found")
+        
+    token.status = "skipped"
+    token.updated_at = datetime.utcnow()
+    token.skipped_at = datetime.utcnow()
+    db.commit()
+
+    try:
+        from app.services.message_scheduler import schedule_skip_messages
+        await schedule_skip_messages(token_id)
+        logger.info(f"Skip message scheduler triggered for token {token_id}")
+    except Exception as e:
+        logger.error(f"Failed to schedule skip messages for token {token_id}: {e}")
+    
+    return ok(message="Token skipped")
+
+
+@router.post("/doctor/tokens/{token_id}/skip", dependencies=[Depends(require_roles("doctor", "admin"))])
+async def doctor_skip_token(
+    token_id: str,
+    db: Session = Depends(get_db),
+    current: TokenData = Depends(get_current_active_user),
+) -> Dict[str, Any]:
+    token = db.query(Token).filter(Token.id == token_id).first()
+    if not token:
+        raise HTTPException(status_code=404, detail="Token not found")
+    
+    doctor_profile = db.query(Doctor).filter(Doctor.user_id == current.user_id).first()
+    doctor_profile_id = doctor_profile.id if doctor_profile else None
+    
+    if str(current.user_id) != str(token.doctor_id) and str(doctor_profile_id) != str(token.doctor_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: You can only skip your own tokens"
+        )
+    
+    st = str(token.status).lower()
+    if st in ["completed", "cancelled", "skipped"]:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Token cannot be skipped. Current status: {st}"
+        )
+    
+    now = datetime.utcnow()
+    token.status = "skipped"
+    token.skipped_at = now
+    token.updated_at = now
+    
+    db.commit()
+    
+    try:
+        from app.services.message_scheduler import schedule_skip_messages
+        await schedule_skip_messages(token_id)
+        logger.info(f"Skip message scheduler triggered for token {token_id}")
+    except Exception as e:
+        logger.error(f"Failed to schedule skip messages for token {token_id}: {e}")
+    
+    today = now.date()
+    next_token_obj = db.query(Token).filter(
+        Token.doctor_id == token.doctor_id,
+        Token.status.in_(["pending", "waiting", "confirmed"]),
+        func.date(Token.appointment_date) == today,
+        Token.token_number > token.token_number
+    ).order_by(Token.token_number.asc()).first()
+    
+    next_token_data = None
+    if next_token_obj:
+        next_token_obj.status = "called"
+        next_token_obj.called_at = now
+        next_token_obj.updated_at = now
+        
+        db.commit()
+        next_token_data = {k: v for k, v in next_token_obj.__dict__.items() if not k.startswith('_')}
+    
+    return ok(
+        data={
+            "token_id": token_id,
+            "status": "skipped",
+            "next_called_token": next_token_data
+        },
+        message="Token skipped successfully"
+    )
+
+
+@router.patch("/receptionist/tokens/{token_id}", dependencies=[Depends(require_roles("receptionist", "admin"))])
+async def receptionist_update_token(
+    token_id: str,
+    payload: Dict[str, Any],
+    db: Session = Depends(get_db),
+    current: TokenData = Depends(get_current_active_user),
+) -> Dict[str, Any]:
+    token = db.query(Token).filter(Token.id == token_id).first()
+    if not token:
+        raise HTTPException(status_code=404, detail="Token not found")
+    
+    if str(token.status).lower() in ["cancelled", "completed"]:
+        raise HTTPException(status_code=400, detail=f"Cannot edit token with status: {token.status}")
+    
+    if "status" in payload:
+        new_status = str(payload["status"]).strip().lower()
+        valid_statuses = ["pending", "waiting", "confirmed", "called", "skipped", "completed", "cancelled"]
+        
+        if new_status not in valid_statuses:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Invalid status. Must be one of: {', '.join(valid_statuses)}"
+            )
+        
+        if str(token.status).lower() == "skipped" and new_status in ["waiting", "confirmed", "pending"]:
+            token.status = new_status
+            token.updated_at = datetime.utcnow()
+            db.commit()
+            return ok(
+                data={
+                    "token_id": token.id,
+                    "display_code": token.display_code,
+                    "patient_name": token.patient_name,
+                    "status": token.status,
+                    "previous_status": "skipped"
+                },
+                message=f"Token re-added successfully with status: {new_status}"
+            )
+        
+        token.status = new_status
+        token.updated_at = datetime.utcnow()
+        db.commit()
+        
+        return ok(
+            data={"token_id": token.id, "status": token.status},
+            message="Token status updated successfully"
+        )
+    
+    updatable_fields = [
+        "patient_name", "patient_phone", "patient_gender",
+        "reason_for_visit", "appointment_date", "department"
+    ]
+    
+    if "reason" in payload and "reason_for_visit" not in payload:
+        payload["reason_for_visit"] = payload["reason"]
+    updated_fields = []
+    for field in updatable_fields:
+        if field in payload:
+            setattr(token, field, payload[field])
+            updated_fields.append(field)
+    
+    if "patient_age" in payload:
+        try:
+            age_str = str(payload["patient_age"]).strip()
+            if age_str.endswith('y'):
+                age_str = age_str[:-1]
+            age = int(age_str)
+            token.patient_age = age
+            if "patient_age" not in updated_fields:
+                updated_fields.append("patient_age")
+        except (ValueError, TypeError):
+            pass
+    
+    token.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(token)
+
+    user = db.query(User).filter(User.id == token.patient_id).first()
+    if user:
+        if "patient_name" in updated_fields:
+            user.name = token.patient_name
+        if "patient_phone" in updated_fields:
+            user.phone = token.patient_phone
+        user.updated_at = datetime.utcnow()
+        db.commit()
+    
+    return ok(
+        data={
+            "token_id": token.id,
+            "display_code": token.display_code,
+            "patient_name": token.patient_name,
+            "patient_age": token.patient_age,
+            "patient_gender": token.patient_gender,
+            "patient_phone": token.patient_phone,
+            "status": token.status,
+            "updated_fields": updated_fields
+        },
+        message="Token updated successfully"
+    )
+
+
+@router.delete("/receptionist/tokens/{token_id}", dependencies=[Depends(require_roles("receptionist", "admin"))])
+async def receptionist_delete_token(
+    token_id: str,
+    db: Session = Depends(get_db),
+    current: TokenData = Depends(get_current_active_user),
+) -> Dict[str, Any]:
+    token = db.query(Token).filter(Token.id == token_id).first()
+    if not token:
+        raise HTTPException(status_code=404, detail="Token not found")
+    
+    if str(token.status).lower() == "completed":
+        raise HTTPException(status_code=400, detail="Cannot delete completed token")
+    
+    if str(token.status).lower() == "cancelled":
+        return ok(message="Token is already cancelled")
+    
+    token.status = "cancelled"
+    token.cancelled_at = datetime.utcnow()
+    token.updated_at = datetime.utcnow()
+    db.commit()
+    
+    return ok(
+        data={
+            "token_id": token.id,
+            "display_code": token.display_code,
+            "status": "cancelled",
+            "cancelled_at": token.cancelled_at
+        },
+        message="Token cancelled/deleted successfully"
     )

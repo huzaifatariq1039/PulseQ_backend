@@ -12,12 +12,14 @@ from app.config import (
     TWILIO_SKIPPED_SID,
     TWILIO_REMINDER_CONFIRM_SID,
     TWILIO_QUEUE_UPDATE_SID,
-    TWILIO_TOKEN_NUMBER_SID
+    TWILIO_TOKEN_NUMBER_SID,
+    TWILIO_OTP_SID  # ✅ Add this import
 )
 import logging
 import json
 
 logger = logging.getLogger(__name__)
+
 
 def send_queue_message(phone: str, name: str, position: int, wait_time: int, doctor_name: str = "N/A", hospital_name: str = "PulseQ Clinic", room_number: str = "Room 1"):
     if not TWILIO_ACCOUNT_SID or not TWILIO_AUTH_TOKEN:
@@ -62,11 +64,8 @@ def send_queue_message(phone: str, name: str, position: int, wait_time: int, doc
         logger.error(f"Failed to send WhatsApp message to {phone}: {e}")
         return None
 
+
 async def send_template_message(phone: str, template_name: str, params: list):
-    """
-    Sends a WhatsApp template message using Twilio Content API.
-    Variables in the Twilio Console MUST be named {{1}}, {{2}}, etc.
-    """
     if not TWILIO_ACCOUNT_SID or not TWILIO_AUTH_TOKEN:
         return
 
@@ -82,6 +81,30 @@ async def send_template_message(phone: str, template_name: str, params: list):
         from_number = TWILIO_WHATSAPP_NUMBER
         if from_number and not from_number.startswith("whatsapp:"):
             from_number = f"whatsapp:{from_number}"
+
+        # ✅ OTP — moved to TOP before the generic fallback
+        if template_name == "otp_verification":
+            if TWILIO_OTP_SID:
+                message = client.messages.create(
+                    from_=from_number,
+                    to=formatted_phone,
+                    content_sid=TWILIO_OTP_SID,
+                    content_variables=json.dumps({
+                        "1": str(params[0]) if params else "000000"
+                    })
+                )
+                logger.info(f"WhatsApp OTP sent to {formatted_phone}: SID {message.sid}")
+                return message.sid
+            else:
+                otp = str(params[0]) if params else "000000"
+                body = f"{otp} is your verification code. For your security, do not share this code."
+                message = client.messages.create(
+                    from_=from_number,
+                    to=formatted_phone,
+                    body=body
+                )
+                logger.info(f"WhatsApp OTP fallback sent to {formatted_phone}: SID {message.sid}")
+                return message.sid
 
         if template_name == "token_number":
             if TWILIO_TOKEN_NUMBER_SID:
@@ -204,40 +227,10 @@ async def send_template_message(phone: str, template_name: str, params: list):
                 body = f"""Dear {params[0]},\n\nAapki turn qareeb aa rahi hai. Aap se pehle {params[1]} patients hain. Taqreeban wait {params[2]} hai. Please {params[3]} ki taraf chle jayein.\nToken: {params[4]}\n\nKindly tayar rhein.\n\nPulseQ"""
                 return client.messages.create(from_=from_number, to=formatted_phone, body=body).sid
 
-        # Generic fallback
-        body = f"Template: {template_name} | Params: {', '.join(map(str, params))}"
-        return client.messages.create(from_=from_number, to=formatted_phone, body=body).sid
+        # Unknown template — log warning, don't send garbage to patient
+        logger.warning(f"send_template_message: unknown template_name '{template_name}' — message not sent.")
+        return None
 
     except Exception as e:
         logger.error(f"Failed to send WhatsApp template message to {phone}: {e}")
         return None
-
-    # ── otp ─────────────────────────────────────────────────────────────────
-    if template_name == "otp_verification":
-        if TWILIO_OTP_SID:
-            message = client.messages.create(
-                 from_=from_number,
-                 to=formatted_phone,
-                 content_sid=TWILIO_OTP_SID,
-                 content_variables=json.dumps({
-                     "1": str(params[0]) if params else "000000",  # OTP code only
-                 })
-             )
-        logger.info(f"WhatsApp OTP sent to {formatted_phone}: SID {message.sid}")
-        return message.sid
-    else:
-        # Fallback text message
-        otp = str(params[0]) if params else "000000"
-        body = f"{otp} is your verification code. For your security, do not share this code."
-        message = client.messages.create(
-            from_=from_number,
-            to=formatted_phone,
-            body=body
-        )
-        logger.info(f"WhatsApp OTP text sent to {formatted_phone}: SID {message.sid}")
-        return message.sid
-
-    # ── unknown template ──────────────────────────────────────────────────────
-    # ✅ FIX (Bug 5): Log a warning instead of sending a raw debug string to the patient
-    logger.warning(f"send_template_message: unknown template_name '{template_name}' — message not sent.")
-    return None
