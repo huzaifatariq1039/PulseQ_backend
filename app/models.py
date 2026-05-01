@@ -838,3 +838,15 @@ class DoctorRatingSummary(BaseModel):
     average_rating: float
     total_reviews: int
     ratings: List[RatingResponse] = []
+
+class ForgotPasswordRequest(BaseModel):
+    phone: str
+
+class VerifyOTPRequest(BaseModel):
+    phone: str
+    otp: str
+
+class ResetPasswordRequest(BaseModel):
+    phone: str
+    otp: str
+    new_password: str

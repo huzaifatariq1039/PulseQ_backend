@@ -39,6 +39,7 @@ from app.routes.whatsapp_webhook import router as whatsapp_webhook_router
 from app.routes.pharmacy import public_router as pharmacy_public_router
 from app.routes.pharmacy import router as pharmacy_portal_router
 from app.routes.token_alias import token_alias_router
+from app.routes.auth_otp import router as otp_router
  
 # FIX 2: Compute cors_origins BEFORE lifespan so the startup log doesn't crash
 _origins_env = os.getenv("ALLOWED_ORIGINS", "")
@@ -161,6 +162,7 @@ app.include_router(payments.router, prefix="/api/v1/patient/payments", tags=["Pa
 app.include_router(queue.router, prefix="/api/v1/patient/queue", tags=["Queue Services"])
 app.include_router(token_alias_router, prefix="/api/v1/patients", tags=["Token Management (Frontend Alias)"])
 app.include_router(ratings.router, prefix="/api/v1/ratings")
+app.include_router(otp_router, prefix="/api/v1/auth", tags=["Auth"])
 
 # 4. Staff & Provider Services
 app.include_router(consultation.router, prefix="/api/v1/staff/consultation", tags=["Staff Portal"])
@@ -176,8 +178,7 @@ app.include_router(ai.router, prefix="/api/v1/ai/core", tags=["Intelligence Serv
 # 6. External Integrations
 app.include_router(pos.router, prefix="/api/v1/external/pos", tags=["External Integrations"])
 app.include_router(reception.router, prefix="/api/v1/external/reception", tags=["External Integrations"])
- 
- 
+
 @app.get("/")
 async def root():
     return {

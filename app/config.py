@@ -92,6 +92,7 @@ TWILIO_SKIPPED_SID = os.getenv("TWILIO_SKIPPED_SID") # New: For "skipped" templa
 TWILIO_REMINDER_CONFIRM_SID = os.getenv("TWILIO_REMINDER_CONFIRM_SID") # New: For "reminder_for_confirmation" template
 TWILIO_QUEUE_UPDATE_SID = os.getenv("TWILIO_QUEUE_UPDATE_SID") # New: For "queue_update" template after YES
 TWILIO_TOKEN_NUMBER_SID = os.getenv("TWILIO_TOKEN_NUMBER_SID")
+TWILIO_OTP_SID = os.getenv("TWILIO_OTP_SID")  # ✅ ADD THIS
 
 # POS System Integration
 POS_SYSTEM_BASE_URL = os.getenv("POS_SYSTEM_BASE_URL", "http://localhost:5000")

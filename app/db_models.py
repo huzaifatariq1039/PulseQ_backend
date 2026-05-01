@@ -4,7 +4,8 @@ from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.database import Base
 import enum
-
+import uuid
+from datetime import datetime
 
 # Enums
 class UserRole(str, enum.Enum):
@@ -386,6 +387,15 @@ class SupportTicket(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
+class OTPVerification(Base):
+    __tablename__ = "otp_verifications"
+    
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    phone = Column(String, nullable=False)
+    otp = Column(String, nullable=False)
+    is_used = Column(Boolean, default=False)
+    expires_at = Column(DateTime, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 # Pharmacy Sale Model
 class PharmacySale(Base):
