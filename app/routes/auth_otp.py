@@ -72,8 +72,8 @@ async def forgot_password(
     
     # Generate new OTP
     otp = generate_otp()
-    expires_at = datetime.utcnow() + timedelta(minutes=10)  # 10 min expiry
-    
+    expires_at = datetime.utcnow() + timedelta(minutes=2)  # 2 min expiry
+
     # Save OTP to DB
     otp_record = OTPVerification(
         id=str(uuid.uuid4()),
@@ -91,11 +91,7 @@ async def forgot_password(
         await send_template_message(
             phone=phone,
             template_name="otp_verification",
-            params=[
-                user.name or "User",  # {1} name
-                otp,                   # {2} otp
-                "10"                   # {3} expiry minutes
-            ]
+            params=[otp]
         )
         logger.info(f"OTP sent to {phone} for password reset")
     except Exception as e:
@@ -133,6 +129,9 @@ async def verify_otp(
             status_code=400,
             detail="Invalid or expired OTP. Please request a new one."
         )
+    
+    otp_record.is_used = True
+    db.commit()
     
     return ok(
         data={"phone": phone, "otp_valid": True},

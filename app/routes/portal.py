@@ -8,13 +8,21 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, or_, and_
 from app.db_models import User, Doctor, Hospital, Token, ActivityLog, Queue as DBQueue, Department
 from app.utils.responses import ok
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, time
 import random
 from app.services.token_service import SmartTokenService
 from app.routes.pharmacy import router as pharmacy_router
 from app.utils.mrn import get_or_create_patient_mrn
 import uuid
 import logging
+
+# --- 🚀 AI Engine Imports ---
+from app.services.ai_engine import ai_engine
+from app.routes.ai import (
+    get_current_hour, get_current_day, calculate_queue_velocity, get_last_patient_duration,
+    avg_last_5, avg_last_10, count_available_doctors, get_hour_history,
+    get_weekday_history, get_doctor_history
+)
 
 router = APIRouter()
 
@@ -155,7 +163,7 @@ async def get_doctor_tokens(
            "mrn": getattr(t, 'mrn', None) or "N/A",
            "department": t.department,
            "reason_for_visit": t.reason_for_visit or "",   
-           "consultation_notes": t.consultation_notes or "",             
+           "consultation_notes": t.consultation_notes or "",              
            "started_at": start, # ✅ Overrides nulls
            "completed_at": end, # ✅ Overrides nulls
            "duration": duration,
@@ -605,6 +613,9 @@ async def receptionist_dashboard(
         }
     )
 
+# --------------------------------------------------------------------------------
+# 🚀 UNIFIED AI WALK-IN TOKEN ENDPOINT
+# --------------------------------------------------------------------------------
 @router.post("/receptionist/walkin-token", dependencies=[Depends(require_roles("receptionist", "patient", "admin"))])
 async def receptionist_create_walkin_token(
     payload: Dict[str, Any],
@@ -626,11 +637,27 @@ async def receptionist_create_walkin_token(
     if not doctor:
         raise HTTPException(status_code=404, detail="Doctor not found")
 
+    doctor_data = {k: v for k, v in doctor.__dict__.items() if not k.startswith('_')}
+    
+    # 1. Calculate precise UTC bounds for today to match Patient Portal exactly
+    tz_doc = doctor_data.get("tz_offset_minutes", 300)
+    tz = timezone(timedelta(minutes=tz_doc))
+    now_utc = datetime.utcnow().replace(tzinfo=timezone.utc)
+    now_local = now_utc.astimezone(tz)
+    day_local = now_local.date()
+    
+    local_start = datetime.combine(day_local, time.min).replace(tzinfo=tz)
+    local_end = datetime.combine(day_local, time.max).replace(tzinfo=tz)
+    utc_start = local_start.astimezone(timezone.utc).replace(tzinfo=None)
+    utc_end = local_end.astimezone(timezone.utc).replace(tzinfo=None)
+
+    # 2. Find or Create User
     dob_str = None
+    patient_age_int = 30 # Default for AI if missing
     if age:
         try:
-            years = int(age)
-            dob_str = (datetime.utcnow() - timedelta(days=years*365)).strftime("%Y-%m-%d")
+            patient_age_int = int(age)
+            dob_str = (datetime.utcnow() - timedelta(days=patient_age_int*365)).strftime("%Y-%m-%d")
         except Exception:
             pass
 
@@ -653,13 +680,19 @@ async def receptionist_create_walkin_token(
             user.gender = gender
         if patient_name and user.name != patient_name:
             user.name = patient_name
+            
+        if user.date_of_birth and not age:
+            try:
+                dob = datetime.strptime(user.date_of_birth, "%Y-%m-%d")
+                patient_age_int = (datetime.utcnow() - dob).days // 365
+            except Exception:
+                pass
 
     db.commit()
     db.refresh(user)
 
     hospital = db.query(Hospital).filter(Hospital.id == hospital_id).first()
     hospital_name_str = hospital.name if hospital else "Unknown Hospital"
-
     mrn = get_or_create_patient_mrn(db, user.id, hospital_id)
 
     doc_fee = float(doctor.consultation_fee or 0)
@@ -667,8 +700,10 @@ async def receptionist_create_walkin_token(
     total_fee = doc_fee + token_fee
 
     last_token = db.query(Token).filter(
+        Token.hospital_id == hospital_id,
         Token.doctor_id == doctor_id,
-        func.date(Token.appointment_date) == datetime.utcnow().date()
+        Token.appointment_date >= utc_start,
+        Token.appointment_date <= utc_end
     ).order_by(Token.token_number.desc()).first()
     
     next_num = (last_token.token_number + 1) if last_token else 1
@@ -681,25 +716,89 @@ async def receptionist_create_walkin_token(
         
     display_code = f"{doc_initial}-{next_num:03d}"
     
-    patients_ahead = db.query(Token).filter(
-        Token.doctor_id == doctor_id,
-        func.date(Token.appointment_date) == datetime.utcnow().date(),
-        Token.status.in_(["pending", "in_queue", "in_progress"])
-    ).count()
-    estimated_wait_time = max(0, patients_ahead * 15)
-    
-    patient_age_int = None
-    if age:
+    # ---------------------------------------------------------
+    # 🚀 AI ESTIMATED WAIT TIME CALCULATION
+    # ---------------------------------------------------------
+    estimated_wait_time = 0
+    BLOCKING_STATUSES = ["waiting", "confirmed", "pending", "called", "in_consultation", "in_progress", "TokenStatus.PENDING", "TokenStatus.WAITING", "TokenStatus.CONFIRMED"]
+
+    try:
+        patients_ahead = db.query(Token).filter(
+            Token.doctor_id == doctor_id,
+            Token.status.in_(BLOCKING_STATUSES),
+            Token.appointment_date >= utc_start,
+            Token.appointment_date <= utc_end
+        ).count()
+
+        completed_today = db.query(Token).filter(
+            Token.doctor_id == doctor_id,
+            func.lower(Token.status) == "completed",
+            Token.appointment_date >= utc_start,
+            Token.appointment_date <= utc_end
+        ).count()
+
+        if completed_today == 0:
+            estimated_wait_time = (patients_ahead + 1) * 5
+        else:
+            if patients_ahead == 0:
+                estimated_wait_time = 0 
+            else:
+                if not ai_engine.model:
+                    ai_engine.load()
+
+                last_5 = avg_last_5(doctor_id, db) or 5.0
+                last_10 = avg_last_10(doctor_id, db) or 5.0 
+                last_1 = get_last_patient_duration(doctor_id, db) or 5.0
+
+                ai_input: Dict[str, Any] = {
+                    "hour_of_day": get_current_hour(),
+                    "day_of_week": get_current_day(),
+                    "patients_ahead_of_user": patients_ahead,
+                    "patients_in_queue": patients_ahead + 1,
+                    "queue_length_last_10_min": 0, 
+                    "queue_velocity": calculate_queue_velocity(doctor_id, db),
+                    "last_patient_duration": last_1,
+                    "avg_service_time_last_5": last_5,
+                    "avg_service_time_last_10": last_10,
+                    "doctors_available": count_available_doctors(db),
+                    "doctor_type": "Specialist" if doctor_data.get("has_session") else "General Medicine",
+                    "clinic_type": "Specialist" if doctor_data.get("has_session") else "General Medicine",
+                    "avg_wait_time_this_hour_past_week": get_hour_history(db),
+                    "avg_wait_time_this_weekday_past_month": get_weekday_history(db),
+                    "avg_service_time_doctor_historic": get_doctor_history(doctor_id, db),
+                    "Name": patient_name,
+                    "Doctor Name": doctor_data.get("name", "Unknown"),
+                    "Service_Duration": 0, 
+                    "Disease": reason or doctor_data.get("specialization") or "General",
+                    "Age": patient_age_int
+                }
+
+                predicted_duration = ai_engine.predict_duration(ai_input)
+                predicted_duration = max(predicted_duration, 3.5) 
+
+                rolling_service_time = (0.5 * last_5) + (0.3 * last_10) + (0.2 * last_1)
+                ai_eta = patients_ahead * predicted_duration
+
+                if completed_today >= 30:
+                    alpha = 0.7   
+                elif completed_today >= 10:
+                    alpha = 0.5   
+                else:
+                    alpha = 0.2   
+
+                eta = alpha * ai_eta + (1 - alpha) * (patients_ahead * rolling_service_time)
+                estimated_wait_time = max(int(eta), 5) 
+
+    except Exception as e:
+        logger.error(f"AI Wait Time Calculation failed for walk-in: {e}", exc_info=True)
+        # Safe Fallback
         try:
-            patient_age_int = int(age)
+            last_5 = avg_last_5(doctor_id, db) or 5.0
+            estimated_wait_time = int(max(patients_ahead, 1) * last_5)
         except Exception:
-            pass
-    elif user.date_of_birth:
-        try:
-            dob = datetime.strptime(user.date_of_birth, "%Y-%m-%d")
-            patient_age_int = (datetime.utcnow() - dob).days // 365
-        except Exception:
-            pass
+            estimated_wait_time = max(0, patients_ahead * 15)
+
+    # ---------------------------------------------------------
 
     new_token = Token(
         id=token_id,
@@ -747,7 +846,7 @@ async def receptionist_create_walkin_token(
             "token_fee": token_fee,
             "total_fee": total_fee
         }, 
-        message="Walk-in token created"
+        message="Walk-in token created via AI Engine"
     )
 
 @router.post("/receptionist/tokens/{token_id}/skip", dependencies=[Depends(require_roles("receptionist", "patient", "admin"))])
