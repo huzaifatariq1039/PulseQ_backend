@@ -9,7 +9,6 @@ from app.utils.responses import ok
 from datetime import datetime, timezone, time
 import random
 import logging
-import asyncio
 from app.services.cache_service import CacheService, cached
 
 # FIX 4: Split into two routers — public (read-only) and staff (write + auth-gated)
@@ -231,12 +230,11 @@ async def update_doctor_status(
         
         for pt in pending_tokens:
             try:
-                asyncio.create_task(
-                    schedule_confirmation_checks(
-                        token_id=str(pt.id),
-                        first_delay_minutes=1, 
-                        second_delay_minutes=15
-                    )
+                # Synchronous call since it shouldn't be awaited
+                schedule_confirmation_checks(
+                    token_id=str(pt.id),
+                    first_delay_minutes=1, 
+                    second_delay_minutes=15
                 )
             except Exception as e:
                 logger.error(f"Failed to start queue updates for token {pt.id}: {e}")

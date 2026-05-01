@@ -80,7 +80,7 @@ def _to_smart_token_response(t: Token) -> SmartTokenResponse:
     status_val = str(t.status.value if hasattr(t.status, 'value') else t.status).lower()
     pay_status_val = str(t.payment_status.value if hasattr(t.payment_status, 'value') else t.payment_status).lower()
     
-    # ✅ FIX 1: "skipped" is now marked as inactive so it leaves the frontend active view
+    # "skipped" is now marked as inactive so it leaves the frontend active view
     is_active = status_val not in ["cancelled", "completed", "skipped"]
 
     return SmartTokenResponse(
@@ -365,7 +365,6 @@ async def get_my_active_token_details(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_active_user)
 ):
-    # ✅ FIX 2: Added 'skipped'
     token = db.query(Token).filter(
         Token.patient_id == current_user.user_id,
         Token.status.notin_(["cancelled", "completed", "skipped", "TokenStatus.CANCELLED", "TokenStatus.COMPLETED", "TokenStatus.SKIPPED"])
@@ -404,7 +403,6 @@ async def get_my_active_token(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_active_user)
 ):
-    # ✅ FIX 2: Added 'skipped'
     token = db.query(Token).filter(
         Token.patient_id == current_user.user_id,
         Token.status.notin_(["cancelled", "completed", "skipped", "TokenStatus.CANCELLED", "TokenStatus.COMPLETED", "TokenStatus.SKIPPED"])
@@ -436,7 +434,6 @@ async def get_my_tokens(
 ):
     query = db.query(Token).filter(Token.patient_id == current_user.user_id)
     if only_active:
-        # ✅ FIX 3: Added 'skipped'
         query = query.filter(Token.status.notin_(["cancelled", "completed", "skipped", "TokenStatus.CANCELLED", "TokenStatus.COMPLETED", "TokenStatus.SKIPPED"]))
     tokens = query.order_by(Token.created_at.desc()).all()
     return [_to_smart_token_response(t) for t in tokens]
@@ -449,7 +446,6 @@ async def get_my_upcoming_tokens(
     limit: int = Query(50, ge=1, le=200),
 ):
     now = datetime.utcnow()
-    # ✅ FIX 3: Added 'skipped'
     tokens = db.query(Token).filter(
         Token.patient_id == current_user.user_id,
         Token.status.notin_(["cancelled", "completed", "skipped", "TokenStatus.CANCELLED", "TokenStatus.COMPLETED", "TokenStatus.SKIPPED"]),
@@ -474,7 +470,6 @@ async def get_token_history(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_active_user)
 ):
-    # ✅ FIX 4: Added 'skipped' to the history filter so they populate on the frontend!
     tokens = db.query(Token).filter(
         Token.patient_id == current_user.user_id,
         Token.status.in_(["cancelled", "completed", "skipped", "TokenStatus.CANCELLED", "TokenStatus.COMPLETED", "TokenStatus.SKIPPED"])
@@ -596,7 +591,6 @@ async def generate_smart_token(
     estimated_wait_time = 0
 
     try:
-        # "skipped" is intentionally excluded so it doesn't inflate wait times!
         patients_ahead = db.query(Token).filter(
             Token.doctor_id == doctor_id,
             Token.status.in_(BLOCKING_STATUSES),
@@ -745,6 +739,7 @@ async def generate_smart_token(
     if patient_phone:
         patient_phone = normalize_phone(patient_phone)
         try:
+            # ONLY send 4 parameters to match the Twilio template: Doctor, Patient, Hospital, Department
             await send_template_message(
                 phone=patient_phone,
                 template_name="token_number",
@@ -752,18 +747,18 @@ async def generate_smart_token(
                   doctor_data.get("name", "Doctor"),
                   patient_name or "Patient",
                   hospital_data.get("name", "Clinic"),
-                  doctor_data.get("specialization", "General"), 
-                  str(estimated_wait_time or 0)
+                  doctor_data.get("specialization", "General")
                 ]
             )
             logger.info(f"WhatsApp confirmation sent to {patient_phone} for token {token_id}")
         except Exception as e:
             logger.error(f"Failed to send WhatsApp confirmation for token {token_id}: {e}")
     
-        # NEW LOGIC: Only start the live 15-minute loop if the doctor is currently available
+        # ONLY start the 15-minute live updates if the doctor is ALREADY available
         if str(doctor.status or "").lower() == "available":
             try:
-                await schedule_confirmation_checks(
+                # Removed 'await' since schedule_confirmation_checks is a synchronous function
+                schedule_confirmation_checks(
                     token_id=token_id,
                     first_delay_minutes=15,
                     second_delay_minutes=15
@@ -847,7 +842,6 @@ async def create_token(
     day = _parse_local_date(spec.appointment_date, tz_minutes)
     utc_start, utc_end = _utc_bounds_for_local_day(day, tz_minutes)
 
-    # --- STRICT DOUBLE BOOKING BLOCK ---
     BLOCKING_STATUSES = ["waiting", "confirmed", "pending", "called", "in_consultation", "in_progress", "TokenStatus.PENDING", "TokenStatus.WAITING", "TokenStatus.CONFIRMED"]
     existing_token = db.query(Token).filter(
         Token.patient_id == current_user.user_id,
