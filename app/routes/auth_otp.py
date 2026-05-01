@@ -130,14 +130,13 @@ async def verify_otp(
             detail="Invalid or expired OTP. Please request a new one."
         )
     
-    otp_record.is_used = True
-    db.commit()
+    # REMOVED: otp_record.is_used = True
+    # REMOVED: db.commit()
     
     return ok(
         data={"phone": phone, "otp_valid": True},
         message="OTP verified successfully"
     )
-
 
 @router.post("/reset-password")
 async def reset_password(

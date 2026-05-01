@@ -545,6 +545,14 @@ async def generate_smart_token(
     if not doctor or not hospital:
         raise HTTPException(status_code=400, detail="Doctor or Hospital not found")
 
+    # === NEW: STRICT AVAILABILITY CHECK ===
+    if str(doctor.status or "").lower() != "available":
+        raise HTTPException(
+            status_code=400, 
+            detail="Tokens can only be booked when the doctor is currently available."
+        )
+    # ======================================
+
     doctor_data = {k: v for k, v in doctor.__dict__.items() if not k.startswith('_')}
     hospital_data = {k: v for k, v in hospital.__dict__.items() if not k.startswith('_')}
 
@@ -739,7 +747,7 @@ async def generate_smart_token(
     if patient_phone:
         patient_phone = normalize_phone(patient_phone)
         try:
-            # ONLY send 4 parameters to match the Twilio template: Doctor, Patient, Hospital, Department
+            # 1. Send 4 variables since estimated time was removed from Twilio
             await send_template_message(
                 phone=patient_phone,
                 template_name="token_number",
@@ -754,20 +762,19 @@ async def generate_smart_token(
         except Exception as e:
             logger.error(f"Failed to send WhatsApp confirmation for token {token_id}: {e}")
     
-        # ONLY start the 15-minute live updates if the doctor is ALREADY available
-        if str(doctor.status or "").lower() == "available":
-            try:
-                # Removed 'await' since schedule_confirmation_checks is a synchronous function
-                schedule_confirmation_checks(
-                    token_id=token_id,
-                    first_delay_minutes=15,
-                    second_delay_minutes=15
-                )
-                logger.info(f"Confirmation reminder scheduled for token {token_id}")
-            except Exception as e:
-                logger.error(f"Failed to schedule confirmation reminder for token {token_id}: {e}")
-        else:
-            logger.info(f"Doctor {doctor_id} is not yet available. Reminders for token {token_id} are paused.")
+        # 2. Dynamic loop purely based on the model's estimated wait time
+        # Divide by  to ensure both messages are sent WITHIN the estimated interval
+        wait_interval = max(1, int(estimated_wait_time // 4))
+
+        try:
+            schedule_confirmation_checks(
+                token_id=token_id,
+                first_delay_minutes=wait_interval,
+                second_delay_minutes=wait_interval
+            )
+            logger.info(f"Reminders scheduled for token {token_id} strictly at {wait_interval}m intervals")
+        except Exception as e:
+            logger.error(f"Failed to schedule reminder for token {token_id}: {e}")
 
     return response_obj
 
@@ -836,6 +843,14 @@ async def create_token(
     hospital = db.query(Hospital).filter(Hospital.id == spec.hospital_id).first()
     if not doctor or not hospital:
         raise HTTPException(status_code=400, detail="Doctor or Hospital not found")
+
+    # === NEW: STRICT AVAILABILITY CHECK ===
+    if str(doctor.status or "").lower() != "available":
+        raise HTTPException(
+            status_code=400, 
+            detail="Tokens can only be booked when the doctor is currently available."
+        )
+    # ======================================
 
     doctor_data = {k: v for k, v in doctor.__dict__.items() if not k.startswith('_')}
     tz_minutes = _tz_offset_for(doctor_data)
@@ -911,6 +926,48 @@ async def create_token(
 
     q = _queue_object_for(db, spec.doctor_id, spec.hospital_id, day, token_number)
     token_resp = _to_smart_token_response(new_token)
+    
+    def normalize_phone(phone: str) -> str:
+        if not phone:
+           return phone
+        phone = str(phone).strip().replace(" ", "").replace("-", "")
+        if phone.startswith("0") and len(phone) == 11:
+           return "+92" + phone[1:]
+        if not phone.startswith("+"):
+           return "+" + phone
+        return phone
+
+    if patient_phone:
+        patient_phone = normalize_phone(patient_phone)
+        try:
+            await send_template_message(
+                phone=patient_phone,
+                template_name="token_number",
+                params=[
+                  doctor_data.get("name", "Doctor"),
+                  patient_name or "Patient",
+                  hospital.name,
+                  doctor_data.get("specialization", "General")
+                ]
+            )
+            logger.info(f"WhatsApp confirmation sent to {patient_phone} for token {token_id}")
+        except Exception as e:
+            logger.error(f"Failed to send WhatsApp confirmation for token {token_id}: {e}")
+            
+        # 2. Dynamic loop purely based on the model's estimated wait time
+        # Divide by 3 to ensure both messages are sent WITHIN the estimated interval
+        estimated_wait = float(q.get("estimated_wait_time", 0)) 
+        wait_interval = max(1, int(estimated_wait // 3))
+
+        try:
+            schedule_confirmation_checks(
+                token_id=token_id,
+                first_delay_minutes=wait_interval,
+                second_delay_minutes=wait_interval
+            )
+            logger.info(f"Reminders scheduled for token {token_id} strictly at {wait_interval}m intervals")
+        except Exception as e:
+            logger.error(f"Failed to schedule reminder for token {token_id}: {e}")
 
     return {
         **token_resp.model_dump(),

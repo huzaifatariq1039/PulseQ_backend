@@ -204,41 +204,12 @@ async def update_doctor_status(
             reason=reason,
         )
 
-    old_status = str(doctor.status or "").lower()
-    
     now = datetime.utcnow()
     doctor.status = new_status
     doctor.updated_at = now
     db.commit()
     db.refresh(doctor)
     
-    # NEW LOGIC: Trigger queue updates for patients if doctor becomes available
-    if new_status == "available" and old_status != "available":
-        logger.info(f"Doctor {doctor.id} is now available. Waking up pending tokens...")
-        from app.services.confirmation_scheduler import schedule_confirmation_checks
-        
-        today = datetime.utcnow().date()
-        start_of_day = datetime.combine(today, time.min)
-        end_of_day = datetime.combine(today, time.max)
-        
-        pending_tokens = db.query(Token).filter(
-            Token.doctor_id == doctor.id,
-            Token.appointment_date >= start_of_day,
-            Token.appointment_date <= end_of_day,
-            Token.status.in_(["pending", "waiting", "confirmed", "TokenStatus.PENDING", "TokenStatus.WAITING"])
-        ).all()
-        
-        for pt in pending_tokens:
-            try:
-                # Synchronous call since it shouldn't be awaited
-                schedule_confirmation_checks(
-                    token_id=str(pt.id),
-                    first_delay_minutes=1, 
-                    second_delay_minutes=15
-                )
-            except Exception as e:
-                logger.error(f"Failed to start queue updates for token {pt.id}: {e}")
-
     merged = {k: v for k, v in doctor.__dict__.items() if not k.startswith('_')}
     return {"success": True, "data": merged, "message": "Doctor status updated"}
 
