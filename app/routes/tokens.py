@@ -77,11 +77,28 @@ def _utc_bounds_for_local_day(local_day: datetime.date, tz_minutes: int):
 
 
 def _to_smart_token_response(t: Token) -> SmartTokenResponse:
-    status_val = str(t.status.value if hasattr(t.status, 'value') else t.status).lower()
-    pay_status_val = str(t.payment_status.value if hasattr(t.payment_status, 'value') else t.payment_status).lower()
+    # ✅ Safely coerce status string to TokenStatus enum
+    raw_status = str(t.status.value if hasattr(t.status, 'value') else t.status).lower().strip()
     
-    # "skipped" is now marked as inactive so it leaves the frontend active view
-    is_active = status_val not in ["cancelled", "completed", "skipped"]
+    # Handle legacy prefixed values like "TokenStatus.PENDING"
+    if "." in raw_status:
+        raw_status = raw_status.split(".")[-1].lower()
+    
+    try:
+        status_val = TokenStatus(raw_status)
+    except ValueError:
+        status_val = TokenStatus.PENDING  # ✅ safe fallback
+    
+    # Same for payment status
+    raw_payment = str(t.payment_status.value if hasattr(t.payment_status, 'value') else t.payment_status).lower().strip()
+    if "." in raw_payment:
+        raw_payment = raw_payment.split(".")[-1].lower()
+    try:
+        pay_status_val = PaymentStatus(raw_payment)
+    except ValueError:
+        pay_status_val = PaymentStatus.PENDING  # ✅ safe fallback
+
+    is_active = status_val not in [TokenStatus.CANCELLED, TokenStatus.COMPLETED, TokenStatus.SKIPPED]
 
     return SmartTokenResponse(
         id=str(t.id),
@@ -93,8 +110,8 @@ def _to_smart_token_response(t: Token) -> SmartTokenResponse:
         hex_code=t.hex_code,
         display_code=t.display_code,
         appointment_date=t.appointment_date,
-        status=status_val,
-        payment_status=pay_status_val,
+        status=status_val,           # ✅ now a proper enum value
+        payment_status=pay_status_val,  # ✅ now a proper enum value
         payment_method=t.payment_method,
         queue_position=t.queue_position,
         total_queue=t.total_queue,
