@@ -1,0 +1,287 @@
+<p-toast position="top-right"></p-toast>
+
+<app-reception-sidebar [currentNav]="currentNav" [sidebarOpen]="sidebarOpen" (toggleSidebar)="toggleSidebar()"
+    (navigate)="navigateTo($event)" (signOut)="signOut()">
+
+    <!-- HEADER -->
+    <div class="header-row">
+        <div>
+            <h2>Reception Dashboard</h2>
+            <p class="subtitle">Manage patient flow and tokens.</p>
+        </div>
+        <div class="controls">
+            <button pButton icon="pi pi-plus" label="Walk-in Patient" class="walkin-btn" (click)="showWalkIn = true">
+            </button>
+        </div>
+    </div>
+
+    <!-- CONTENT GRID -->
+    <div class="content">
+
+        <!-- ── LEFT COLUMN ── -->
+        <div class="content-left">
+
+            <!-- NOW SERVING -->
+            <p-card class="serving-card">
+                <div class="serving-header">
+                    TOKEN NUMBER
+                    <span class="badge">NOW SERVING</span>
+                </div>
+
+                <div *ngIf="current; else noServing">
+                    <div class="token">{{ current.token }}</div>
+                    <div class="patient-name">{{ current.name }}</div>
+                    <div class="patient-meta">
+                        {{ current.age }}y • {{ current.gender }} • {{ current.department }}
+                    </div>
+                    <div class="serving-actions">
+                        <button pButton icon="pi pi-forward" label="Skip" class="skip-btn" (click)="skipCurrent()">
+                        </button>
+                    </div>
+                </div>
+
+                <ng-template #noServing>
+                    <div class="empty-serving">
+                        <i class="pi pi-inbox empty-icon"></i>
+                        <p class="empty-text">No patient currently being served</p>
+                    </div>
+                </ng-template>
+            </p-card>
+
+            <!-- STATS -->
+            <div class="summary-row">
+                <div class="summary-box">
+                    <div class="stat-label">WAITING</div>
+                    <div class="value">{{ waitingCount }}</div>
+                </div>
+                <div class="summary-box">
+                    <div class="stat-label">COMPLETED</div>
+                    <div class="value">{{ completedCount }}</div>
+                </div>
+                <div class="summary-box" [ngClass]="{'skipped-highlight': skippedTokens.length > 0}">
+                    <div class="stat-label">SKIPPED</div>
+                    <div class="value">{{ skippedCount }}</div>
+                </div>
+                <div class="summary-box">
+                    <div class="stat-label">AVG WAIT</div>
+                    <div class="value">{{ avgWait }} min</div>
+                </div>
+            </div>
+
+            <!-- SKIPPED PATIENTS PANEL -->
+            <div class="skipped-panel" *ngIf="skippedTokens.length > 0">
+                <div class="skipped-panel-header">
+                    <i class="pi pi-exclamation-triangle"></i>
+                    <span>Skipped Patients</span>
+                    <span class="skipped-badge">{{ skippedTokens.length }}</span>
+                </div>
+                <div class="skipped-list">
+                    <div class="skipped-row" *ngFor="let p of skippedTokens">
+                        <div class="skipped-avatar">
+                            <i class="pi pi-user"></i>
+                        </div>
+                        <div class="skipped-info">
+                            <div class="skipped-token-id">{{ p.token }}</div>
+                            <div class="skipped-meta">{{ p.name }} • {{ p.age }}y • {{ p.department }}</div>
+                        </div>
+                        <button pButton icon="pi pi-refresh" label="Re-add" class="readd-btn" (click)="reAddToQueue(p)">
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- ── RIGHT COLUMN ── -->
+        <aside class="content-right">
+
+            <!-- UPCOMING QUEUE -->
+            <p-card class="upcoming-card">
+                <div class="upcoming-header">
+                    <span>Upcoming Queue</span>
+                    <span class="count">{{ upcoming.length }} patients</span>
+                </div>
+
+                <div class="empty-queue" *ngIf="upcoming.length === 0">
+                    <i class="pi pi-users empty-icon"></i>
+                    <p class="empty-text">No patients waiting</p>
+                </div>
+
+                <div class="list" *ngIf="upcoming.length > 0">
+                    <div class="list-item" *ngFor="let p of upcoming; let i = index">
+                        <div class="index">{{ i + 1 }}</div>
+                        <div class="info">
+                            <div class="token-id">{{ p.token }}</div>
+                            <!-- Force Recompile -->
+                            <div class="small">{{ p.name }} • {{ p.age }}y • {{ p.gender }}</div>
+                        </div>
+                        <div class="time">~{{ p.estimatedWait }}m</div>
+                    </div>
+                </div>
+            </p-card>
+
+            <!-- ACTIVE DOCTORS -->
+            <p-card class="active-doctors">
+                <div class="doctors-header">
+                    <i class="pi pi-heart"></i>
+                    <span>Active Doctors</span>
+                </div>
+                <div class="empty-queue" *ngIf="doctorData.length === 0">
+                    <p class="empty-text">No active doctors found</p>
+                </div>
+                <div class="list" *ngIf="doctorData.length > 0">
+                    <div class="doctor-row" *ngFor="let doc of doctorData">
+                        <div class="doctor-details">
+                            <div class="doctor-name">{{ doc.name }}</div>
+                            <div class="doctor-dept">{{ doc.department || doc.specialization }}</div>
+                        </div>
+                        <span class="doctor-room" *ngIf="doc.available">Available</span>
+                        <span class="doctor-room" *ngIf="!doc.available"
+                            style="background:#f1f5f9; color:#64748b;">Busy/Leave</span>
+                    </div>
+                </div>
+            </p-card>
+
+        </aside>
+    </div>
+    <!-- </main>
+    </div> -->
+
+    <!-- WALK IN DIALOG -->
+    <p-dialog header="New Walk-in Patient" [(visible)]="showWalkIn" [modal]="true" [style]="{ width: '560px' }">
+        <div class="p-fluid walkin-form">
+
+            <div class="p-field">
+                <label class="label">Select Department <span class="required-asterisk">*</span></label>
+                <p-dropdown placeholder="Choose a department..." [options]="departments" [(ngModel)]="walkIn.department"
+                    (onBlur)="walkInTouched['department'] = true" (onChange)="onDepartmentChangeWalkIn()"></p-dropdown>
+                <div class="error-message" *ngIf="walkInTouched['department'] && !walkIn.department">
+                    Department is required
+                </div>
+            </div>
+
+            <div class="p-field">
+                <label class="label">Select Doctor</label>
+                <p-dropdown [options]="doctors" [(ngModel)]="walkIn.doctor" [disabled]="walkIn.assignAnyDoctor"
+                    (onChange)="onDoctorChange($event.value)"></p-dropdown>
+            </div>
+
+            <div class="p-field checkbox-field">
+                <p-checkbox [(ngModel)]="walkIn.assignAnyDoctor" [binary]="true"
+                    (onChange)="onAssignAnyDoctorChange($event.checked)"></p-checkbox>
+                <label style="margin: 10px; color: #475569; cursor: pointer;">Assign any available doctor</label>
+            </div>
+
+            <!-- Doctor Info Card -->
+            <div *ngIf="selectedDoctorInfo" class="doctor-info-card fade-in">
+                <div class="doctor-info-header">
+                    <span class="doctor-info-name">{{ selectedDoctorInfo.name }}</span>
+                    <span class="doctor-info-badge"
+                        [ngClass]="selectedDoctorInfo.available ? 'badge-available' : 'badge-unavailable'">
+                        {{ selectedDoctorInfo.available ? 'Available' : 'Unavailable' }}
+                    </span>
+                </div>
+                <div class="doctor-info-detail">
+                    <div><i class="pi pi-user" style="margin-right:4px;"></i>{{ selectedDoctorInfo.specialization }}
+                    </div>
+                    <div><i class="pi pi-verified" style="margin-right:4px;"></i>{{ selectedDoctorInfo.qualifications }}
+                    </div>
+                    <div><i class="pi pi-clock" style="margin-right:4px;"></i>{{ selectedDoctorInfo.timings }}</div>
+                    <div><i class="pi pi-wallet" style="margin-right:4px;"></i>{{ selectedDoctorInfo.fee }}</div>
+                </div>
+            </div>
+
+            <div class="p-field">
+                <label class="label">Patient Name <span class="required-asterisk">*</span></label>
+                <input type="text" pInputText [(ngModel)]="walkIn.name" placeholder="Enter patient name"
+                    (input)="walkInTouched['name'] = true"
+                    [ngClass]="{'ng-invalid': walkInTouched['name'] && !isNameValid(walkIn.name)}" />
+                <div class="error-message"
+                    *ngIf="walkInTouched['name'] && walkIn.name && hasNumbersInName(walkIn.name)">
+                    Name cannot contain numbers
+                </div>
+                <div class="error-message" *ngIf="walkInTouched['name'] && !walkIn.name">
+                    Patient Name is required
+                </div>
+                <div class="error-message"
+                    *ngIf="walkInTouched['name'] && walkIn.name && !hasNumbersInName(walkIn.name) && !isNameValid(walkIn.name)">
+                    Name must contain only letters
+                </div>
+            </div>
+
+            <div class="p-field">
+                <label class="label">Phone Number <span class="required-asterisk">*</span></label>
+                <input type="text" pInputText [(ngModel)]="walkIn.phone" placeholder="03000000000"
+                    (input)="walkInTouched['phone'] = true"
+                    [ngClass]="{'ng-invalid': walkInTouched['phone'] && !isPhoneValid(walkIn.phone)}" />
+                <div class="error-message" *ngIf="walkInTouched['phone'] && !walkIn.phone">
+                    Phone Number is required
+                </div>
+                <div class="error-message"
+                    *ngIf="walkInTouched['phone'] && walkIn.phone && !isPhoneValid(walkIn.phone)">
+                    Phone must contain exactly 11 digits
+                </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                <div class="p-field">
+                    <label class="label">Age <span class="required-asterisk">*</span></label>
+                    <input type="number" min="1" max="150" pInputText [(ngModel)]="walkIn.age" placeholder="1-150"
+                        (input)="walkInTouched['age'] = true"
+                        [ngClass]="{'ng-invalid': walkInTouched['age'] && !isAgeValid(walkIn.age)}" />
+                    <div class="error-message" *ngIf="walkInTouched['age'] && !walkIn.age">Age is required</div>
+                    <div class="error-message" *ngIf="walkInTouched['age'] && walkIn.age && !isAgeValid(walkIn.age)">
+                        Age must be 1-150
+                    </div>
+                </div>
+                <div class="p-field">
+                    <label class="label">Gender <span class="required-asterisk">*</span></label>
+                    <p-dropdown [options]="genders" optionLabel="label" optionValue="value" [(ngModel)]="walkIn.gender"
+                        (onChange)="walkInTouched['gender'] = true"></p-dropdown>
+                    <div class="error-message" *ngIf="walkInTouched['gender'] && !walkIn.gender">Gender is required
+                    </div>
+                </div>
+            </div>
+
+            <div class="p-field">
+                <label class="label">Reason for Visit <span class="required-asterisk">*</span></label>
+                <textarea pInputTextarea [(ngModel)]="walkIn.reason" rows="4" style="resize: none;"
+                    (input)="walkInTouched['reason'] = true"
+                    [ngClass]="{'ng-invalid': walkInTouched['reason'] && !walkIn.reason}"></textarea>
+                <div class="error-message" *ngIf="walkInTouched['reason'] && !walkIn.reason">
+                    Reason for Visit is required
+                </div>
+            </div>
+
+            <div class="p-field">
+                <label class="label">Payment Status <span class="required-asterisk">*</span></label>
+                <div style="display:flex; gap:1rem; align-items:center;">
+                    <label style="display:flex; align-items:center; gap:0.5rem;">
+                        <input type="radio" name="payment" [(ngModel)]="walkIn.paymentStatus" value="paid"
+                            (change)="walkInTouched['paymentStatus']=true">
+                        <span>Paid</span>
+                    </label>
+                    <label style="display:flex; align-items:center; gap:0.5rem;">
+                        <input type="radio" name="payment" [(ngModel)]="walkIn.paymentStatus" value="unpaid"
+                            (change)="walkInTouched['paymentStatus']=true">
+                        <span>Unpaid</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="p-field">
+                <label class="label">Special Notes</label>
+                <textarea pInputTextarea [(ngModel)]="walkIn.specialInstructions" rows="3"
+                    style="resize: none;"></textarea>
+            </div>
+
+            <div style="display: flex; gap: 1rem; margin-top: 1.5rem;">
+                <button pButton label="Cancel" (click)="showWalkIn=false" class="p-button-secondary"
+                    style="flex: 1; border-radius: 8px !important;"></button>
+                <button pButton label="Generate Token" (click)="addWalkIn()" class="walkin-generate-btn"
+                    [disabled]="!isNameValid(walkIn.name) || !isAgeValid(walkIn.age) || !walkIn.gender || !walkIn.department || !isPhoneValid(walkIn.phone) || !walkIn.reason"
+                    style="flex: 1; border-radius: 8px !important; background: #047857 !important; color: white !important;"></button>
+            </div>
+        </div>
+    </p-dialog>
+</app-reception-sidebar>

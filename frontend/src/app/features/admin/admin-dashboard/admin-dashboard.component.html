@@ -1,0 +1,70 @@
+<p-toast></p-toast>
+
+<div class="layout">
+    <!-- SIDEBAR -->
+    <app-admin-sidebar></app-admin-sidebar>
+
+    <!-- MAIN CONTENT -->
+    <main class="main-content">
+        <div class="page-container">
+
+            <!-- HEADER -->
+            <div class="admin-header">
+                <div>
+                    <h1>System Overview</h1>
+                    <p class="subtitle">Welcome back, Admin.</p>
+                </div>
+            </div>
+
+            <!-- METRIC CARDS – Dashboard Overview -->
+            <div class="metrics-grid">
+                <div *ngFor="let metric of metrics" class="metric-card">
+                    <div class="metric-icon" [style.backgroundColor]="metric.bgColor">
+                        <i [class]="'pi ' + metric.icon" [style.color]="metric.iconColor || '#374151'"></i>
+                    </div>
+                    <div class="metric-info">
+                        <div class="metric-label">{{ metric.label }}</div>
+                        <div class="metric-value">{{ metric.value }}</div>
+                        <div class="metric-note" *ngIf="metric.note">{{ metric.note }}</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- CONTENT ROW: Chart + Logs -->
+            <div class="content-row">
+                <!-- CHART: Patient Flow Today -->
+                <div class="chart-container">
+                    <p-card>
+                        <ng-template pTemplate="header">
+                            <div class="card-header">Patient Flow (Today)</div>
+                        </ng-template>
+                        <p-chart type="bar" [data]="chartData" [options]="chartOptions"
+                            [style]="{'height': '300px'}"></p-chart>
+                    </p-card>
+                </div>
+
+                <!-- LOGS: Live System Events -->
+                <div class="logs-container">
+                    <p-card>
+                        <ng-template pTemplate="header">
+                            <div class="card-header">Live System Logs</div>
+                        </ng-template>
+                        <div class="logs-list">
+                            <div *ngFor="let log of logEntries" class="log-item">
+                                <div class="log-dot"></div>
+                                <div class="log-message">
+                                    Token <strong>{{ extractToken(log.message) }}</strong>
+                                    {{ extractLogSuffix(log.message) }}
+                                </div>
+                                <div class="log-time">{{ log.time }}</div>
+                            </div>
+                            <div *ngIf="logEntries.length === 0" class="log-empty">
+                                <p>No recent activities</p>
+                            </div>
+                        </div>
+                    </p-card>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>

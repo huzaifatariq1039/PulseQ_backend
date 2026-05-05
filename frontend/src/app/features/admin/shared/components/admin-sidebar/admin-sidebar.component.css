@@ -1,0 +1,422 @@
+.sidebar {
+    width: 220px;
+    background: #111827;
+    display: flex;
+    flex-direction: column;
+    color: #fff;
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    z-index: 100;
+    transition: transform 0.3s ease;
+}
+
+.sidebar-header {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    padding: 1.5rem 1.25rem 1rem;
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #fff;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    white-space: nowrap;
+}
+
+.sidebar-header i {
+    font-size: 1.1rem;
+    color: #60a5fa;
+    flex-shrink: 0;
+}
+
+.sidebar-menu {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 0.75rem 0.6rem;
+    gap: 0.15rem;
+}
+
+.menu-item {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    padding: 0.6rem 0.75rem;
+    border-radius: 8px;
+    color: #9ca3af;
+    text-decoration: none;
+    font-size: 0.82rem;
+    font-weight: 500;
+    transition: background 0.15s, color 0.15s;
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+.menu-item:hover {
+    background: rgba(255, 255, 255, 0.07);
+    color: #e5e7eb;
+}
+
+.menu-item.active {
+    background: #2563eb;
+    color: #fff;
+}
+
+.menu-item.active .pi-cart {
+    color: #fff !important;
+}
+
+.menu-item i {
+    font-size: 0.9rem;
+    width: 16px;
+    text-align: center;
+    flex-shrink: 0;
+}
+
+.menu-item .pi-cart {
+    color: #fff !important;
+}
+
+
+.menu-item span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.sidebar-footer {
+    padding: 1rem 0.6rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.signout-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    background: none;
+    border: none;
+    color: #9ca3af;
+    cursor: pointer;
+    font-size: 0.82rem;
+    font-weight: 500;
+    padding: 0.6rem 0.75rem;
+    border-radius: 8px;
+    width: 100%;
+    transition: color 0.15s, background 0.15s;
+    white-space: nowrap;
+}
+
+.signout-btn:hover {
+    color: #f87171;
+    background: rgba(248, 113, 113, 0.08);
+}
+
+/* ── MOBILE TOPBAR ── */
+.mobile-topbar {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 56px;
+    background: #111827;
+    align-items: center;
+    /* keep hamburger and title together on left side */
+    justify-content: flex-start;
+    padding: 0 1rem;
+    z-index: 200;
+    color: #fff;
+}
+
+.mobile-topbar .brand-name {
+    font-size: 1rem;
+    font-weight: 700;
+    color: #fff;
+    margin-left: 0.75rem; /* provide space from hamburger */
+}
+
+.hamburger {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 1.25rem;
+    color: #e5e7eb;
+    padding: 0.25rem;
+}
+
+.sidebar-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 99;
+}
+
+/* Mobile responsiveness */
+@media (max-width: 1200px) {
+    .sidebar {
+        width: 220px;
+    }
+
+    .menu-item {
+        padding: 0.6rem 0.7rem;
+        font-size: 0.8rem;
+    }
+
+    .menu-item i {
+        font-size: 0.85rem;
+    }
+
+    .sidebar-header {
+        padding: 1.25rem 1rem 0.9rem;
+        font-size: 1rem;
+    }
+
+    .signout-btn {
+        padding: 0.6rem 0.7rem;
+        font-size: 0.8rem;
+    }
+}
+
+@media (max-width: 900px) {
+    .sidebar {
+        width: 240px;
+        transform: translateX(-100%);
+    }
+
+    .sidebar.open {
+        transform: translateX(0);
+    }
+
+    .mobile-topbar {
+        display: flex;
+        z-index: 300; /* ensure button above overlay */
+    }
+
+    .sidebar-overlay {
+        display: block;
+    }
+
+    /* force content full width when sidebar hidden */
+    .sidebar + .main-content,
+    .layout .main-content {
+        margin-left: 0 !important;
+        padding-top: calc(56px + 2rem) !important;
+    }
+
+    .menu-item {
+        padding: 0.55rem 0.65rem;
+        font-size: 0.78rem;
+    }
+
+    .sidebar-header {
+        padding: 1.1rem 0.9rem 0.8rem;
+        gap: 0.55rem;
+    }
+
+    .sidebar-menu {
+        padding: 0.65rem 0.5rem;
+        gap: 0.1rem;
+    }
+
+    .sidebar-footer {
+        padding: 0.8rem 0.5rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .sidebar {
+        width: 240px;
+    }
+
+    .menu-item {
+        padding: 0.5rem 0.6rem;
+        font-size: 0.75rem;
+        gap: 0.5rem;
+    }
+
+    .menu-item i {
+        font-size: 0.8rem;
+        width: 14px;
+    }
+
+    .sidebar-header {
+        padding: 1rem 0.8rem 0.75rem;
+        font-size: 0.95rem;
+        gap: 0.5rem;
+    }
+
+    .sidebar-header i {
+        font-size: 1rem;
+    }
+
+    .sidebar-menu {
+        padding: 0.6rem 0.45rem;
+    }
+
+    .sidebar-footer {
+        padding: 0.7rem 0.45rem;
+    }
+
+    .signout-btn {
+        padding: 0.5rem 0.6rem;
+        font-size: 0.75rem;
+        gap: 0.5rem;
+    }
+
+    .mobile-topbar {
+        height: 52px;
+        padding: 0 0.75rem;
+    }
+
+    .mobile-topbar .brand-name {
+        font-size: 0.95rem;
+        margin-left: 0.6rem;
+    }
+
+    .hamburger {
+        font-size: 1.15rem;
+    }
+}
+
+@media (max-width: 600px) {
+    .sidebar {
+        width: 100%;
+        max-width: 85vw;
+    }
+
+    .sidebar-header {
+        padding: 0.9rem 0.75rem 0.7rem;
+        font-size: 0.9rem;
+        gap: 0.45rem;
+    }
+
+    .sidebar-header i {
+        font-size: 0.95rem;
+    }
+
+    .sidebar-menu {
+        padding: 0.55rem 0.4rem;
+        gap: 0.08rem;
+    }
+
+    .menu-item {
+        padding: 0.45rem 0.55rem;
+        font-size: 0.72rem;
+        gap: 0.45rem;
+    }
+
+    .menu-item i {
+        font-size: 0.75rem;
+        width: 12px;
+    }
+
+    .sidebar-footer {
+        padding: 0.6rem 0.4rem;
+    }
+
+    .signout-btn {
+        padding: 0.45rem 0.55rem;
+        font-size: 0.72rem;
+        gap: 0.45rem;
+    }
+
+    .mobile-topbar {
+        height: 50px;
+        padding: 0 0.6rem;
+        gap: 0.4rem;
+    }
+
+    .mobile-topbar .brand-name {
+        font-size: 0.9rem;
+        margin-left: 0.5rem;
+    }
+
+    .hamburger {
+        font-size: 1.1rem;
+        padding: 0.2rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .sidebar {
+        width: 100%;
+    }
+
+    .sidebar-header {
+        padding: 0.75rem 0.65rem 0.6rem;
+        font-size: 0.85rem;
+        gap: 0.4rem;
+    }
+
+    .sidebar-header i {
+        font-size: 0.9rem;
+    }
+
+    .sidebar-header span {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .sidebar-menu {
+        padding: 0.5rem 0.35rem;
+        gap: 0.05rem;
+    }
+
+    .menu-item {
+        padding: 0.4rem 0.5rem;
+        font-size: 0.7rem;
+        gap: 0.4rem;
+    }
+
+    .menu-item i {
+        font-size: 0.7rem;
+        width: 11px;
+        flex-shrink: 0;
+    }
+
+    .menu-item span {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .sidebar-footer {
+        padding: 0.5rem 0.35rem;
+    }
+
+    .signout-btn {
+        padding: 0.4rem 0.5rem;
+        font-size: 0.7rem;
+        gap: 0.4rem;
+    }
+
+    .signout-btn i {
+        font-size: 0.8rem;
+        flex-shrink: 0;
+    }
+
+    .mobile-topbar {
+        height: 48px;
+        padding: 0 0.5rem;
+        gap: 0.35rem;
+    }
+
+    .mobile-topbar .brand-name {
+        font-size: 0.85rem;
+        font-weight: 600;
+        margin-left: 0.4rem;
+    }
+
+    .hamburger {
+        font-size: 1rem;
+        padding: 0.15rem;
+        min-width: 44px;
+        min-height: 44px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+}

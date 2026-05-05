@@ -1,0 +1,46 @@
+<!-- MOBILE TOPBAR -->
+<div class="mobile-topbar">
+    <div class="brand-name">Reception</div>
+    <button class="hamburger" (click)="onToggleSidebar()">
+        <i [ngClass]="sidebarOpen ? 'pi pi-times' : 'pi pi-bars'"></i>
+    </button>
+</div>
+
+<!-- SIDEBAR OVERLAY -->
+<div class="sidebar-overlay" *ngIf="sidebarOpen" (click)="onToggleSidebar()"></div>
+
+<div class="layout">
+    <!-- SIDEBAR -->
+    <aside class="sidebar" [class.open]="sidebarOpen">
+        <div class="brand">
+            <i class="pi pi-clipboard brand-icon"></i>
+            <span>Reception</span>
+        </div>
+
+        <nav class="nav">
+            <ul>
+                <li [class.active]="currentNav === 'dashboard'" (click)="onNavigate('dashboard')">
+                    <i class="pi pi-th-large"></i>
+                    <span>Dashboard</span>
+                </li>
+                <li [class.active]="currentNav === 'queue'" (click)="onNavigate('queue')">
+                    <i class="pi pi-clipboard"></i>
+                    <span>Queue List</span>
+                </li>
+                <li [class.active]="currentNav === 'manage-doctors'" (click)="onNavigate('manage-doctors')">
+                    <i class="pi pi-user-edit"></i>
+                    <span>Manage Doctors</span>
+                </li>
+            </ul>
+        </nav>
+
+        <div class="signout" (click)="onSignOut()">
+            <i class="pi pi-sign-out"></i> Sign Out
+        </div>
+    </aside>
+
+    <!-- MAIN (Content will be projected here) -->
+    <main class="main">
+        <ng-content></ng-content>
+    </main>
+</div>

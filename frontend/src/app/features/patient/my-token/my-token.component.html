@@ -1,0 +1,95 @@
+<div class="page">
+    <p-toast position="top-right"></p-toast>
+    <app-patient-header></app-patient-header>
+
+    <main class="container">
+        <div class="intro">
+            <h1>My Token</h1>
+            <p class="subtitle">Your current token details and status.</p>
+        </div>
+
+        <div class="token-tabs" *ngIf="allTokens.length > 0">
+            <button *ngFor="let t of allTokens; let i = index" class="token-tab"
+                [class.active]="selectedTokenIndex === i" (click)="selectToken(i)">
+                {{ t.tokenNumber }}
+            </button>
+        </div>
+
+        <div class="token-wrapper" *ngIf="hasActiveToken && token">
+            <p-card class="token-card">
+                <div class="card-inner">
+
+                    <div class="token-section">
+                        <div class="token-label">YOUR TOKEN NUMBER</div>
+                        <div class="token-number">{{ token.tokenNumber }}</div>
+                        <span class="status-badge" [ngClass]="{
+              'status-pending':   token.status === 'pending',
+              'status-waiting':   token.status === 'waiting',
+              'status-called':    token.status === 'called',
+              'status-completed': token.status === 'completed',
+              'status-cancelled': token.status === 'cancelled'
+            }">{{ token.status | titlecase }}</span>
+                        <div class="mrn-display">Medical Record Number: {{ token.mrn || '-' }}</div>
+                    </div>
+
+                    <div class="info-grid">
+                        <div class="info-block">
+                            <div class="info-label"><i class="pi pi-building"></i> Hospital</div>
+                            <div class="info-value">{{ token.hospital }}</div>
+                        </div>
+                        <div class="info-block">
+                            <div class="info-label"><i class="pi pi-heart"></i> Department</div>
+                            <div class="info-value">{{ token.department }}</div>
+                        </div>
+                        <div class="info-block">
+                            <div class="info-label"><i class="pi pi-user"></i> Doctor</div>
+                            <div class="info-value">{{ token.doctor || 'Any' }}</div>
+                        </div>
+                        <div class="info-block">
+                            <div class="info-label"><i class="pi pi-clock"></i> Estimated Wait</div>
+                            <div class="info-value">{{ token.estimatedWait }}</div>
+                        </div>
+                    </div>
+
+                    <div class="patient-details mt-3">
+                        <h4>Patient Details</h4>
+                        <div class="detail-row">
+                            <div><strong>Name:</strong> {{ token.patientName }}</div>
+                            <div><strong>Phone:</strong> {{ token.patientPhone }}</div>
+                        </div>
+                        <div class="detail-row">
+                            <div><strong>Age:</strong> {{ token.patientAge }}</div>
+                            <div><strong>Gender:</strong> {{ token.patientGender }}</div>
+                        </div>
+                        <div class="detail-row">
+                            <div><strong>Notes:</strong> {{ token.specialNotes }}</div>
+                        </div>
+                    </div>
+
+                    <div class="reason-section mt-3">
+                        <strong>Reason for Visit</strong>
+                        <p class="reason-text">{{ token.reasonForVisit }}</p>
+                    </div>
+
+                    <div class="action-buttons">
+                        <button pButton label="Save Ticket" icon="pi pi-download" iconPos="left" (click)="saveTicket()"
+                            class="btn-save"></button>
+                        <button pButton label="Leave Queue" icon="pi pi-times" iconPos="left" (click)="leaveQueue()"
+                            class="btn-leave"></button>
+                    </div>
+
+                </div>
+            </p-card>
+        </div>
+
+        <div class="no-token-section" *ngIf="!hasActiveToken">
+            <i class="pi pi-inbox no-token-icon"></i>
+            <h2 class="no-token-title">No Active Token</h2>
+            <p class="no-token-text">You don't have an active token. Generate a new token to proceed.</p>
+            <button pButton label="Generate Token" icon="pi pi-plus" iconPos="left" (click)="generateToken()"
+                class="btn-generate"></button>
+        </div>
+    </main>
+
+    <p-confirmDialog></p-confirmDialog>
+</div>

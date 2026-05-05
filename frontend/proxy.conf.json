@@ -1,0 +1,8 @@
+{
+  "/api": {
+    "target": "https://oyster-app-notep.ondigitalocean.app",
+    "secure": true,
+    "changeOrigin": true,
+    "logLevel": "debug"
+  }
+}

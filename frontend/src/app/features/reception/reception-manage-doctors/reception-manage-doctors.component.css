@@ -1,0 +1,457 @@
+/* ── HEADER ── */
+.header-row {
+    margin-bottom: 1.5rem;
+}
+
+.header-row h2 {
+    margin: 0;
+    font-size: 1.55rem;
+    font-weight: 800;
+    color: #0f172a;
+    letter-spacing: -0.3px;
+}
+
+.subtitle {
+    color: #6b7280;
+    font-size: 0.875rem;
+    margin-top: 0.25rem;
+    font-weight: 500;
+}
+
+/* ── SEARCH & FILTER BAR ── */
+.search-filter-bar {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.85rem 1.25rem;
+    background: #fff;
+    border-radius: 8px;
+    border: 1px solid #e5e7eb;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+    flex-wrap: wrap;
+}
+
+.search-input-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex: 1;
+    min-width: 200px;
+    background: #f9fafb;
+    border-radius: 6px;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid #e5e7eb;
+}
+
+.search-input-wrapper i {
+    color: #9ca3af;
+    font-size: 0.9rem;
+    flex-shrink: 0;
+}
+
+.search-input {
+    border: none;
+    outline: none;
+    background: transparent;
+    flex: 1;
+    font-size: 0.9rem;
+    color: #1f2937;
+    min-width: 150px;
+}
+
+.search-input::placeholder {
+    color: #d1d5db;
+}
+
+.department-filter {
+    min-width: 180px;
+}
+
+.search-filter-bar :deep(.p-dropdown) {
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+}
+
+.clear-btn {
+    color: #9ca3af !important;
+}
+
+.clear-btn:hover {
+    background: #f3f4f6 !important;
+    color: #6b7280 !important;
+}
+
+/* ── DOCTORS TABLE ── */
+.doctors-card {
+    border-radius: 12px;
+}
+
+.doctors-card :deep(.p-card-body) {
+    padding: 1.5rem;
+}
+
+/* Horizontal scroll wrapper */
+.table-scroll-wrapper {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.doctors-card :deep(.p-datatable) {
+    font-size: 0.9rem;
+    min-width: 700px;
+    /* forces horizontal scroll on small screens */
+}
+
+.doctors-card :deep(.p-datatable-thead > tr > th) {
+    background-color: #f9fafb;
+    color: #374151;
+    font-weight: 600;
+    padding: 1rem 0.9rem;
+    border-bottom: 2px solid #e5e7eb;
+    white-space: nowrap;
+}
+
+.doctors-card :deep(.p-datatable-tbody > tr > td) {
+    padding: 0.85rem 0.9rem;
+    border-bottom: 1px solid #f1f5f9;
+    vertical-align: middle;
+}
+
+.doctors-card :deep(.p-datatable-tbody > tr:hover) {
+    background-color: #f9fafb;
+}
+
+/* ── COLUMN WIDTHS ── */
+.col-name {
+    min-width: 150px;
+}
+
+.col-dept {
+    min-width: 140px;
+}
+
+.col-qual {
+    min-width: 160px;
+}
+
+.col-fee {
+    min-width: 100px;
+}
+
+.col-status {
+    min-width: 110px;
+}
+
+.col-actions {
+    min-width: 70px;
+    text-align: center;
+}
+
+/* ── CELL CONTENT ── */
+.doctor-name {
+    font-weight: 600;
+    color: #1f2937;
+}
+
+.dept-text {
+    color: #374151;
+    font-size: 0.88rem;
+}
+
+.qual-text {
+    color: #475569;
+    font-size: 0.85rem;
+}
+
+.fee-badge {
+    background: #f0fdf4;
+    color: #166534;
+    border: 1px solid #bbf7d0;
+    padding: 0.3rem 0.7rem;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 0.83rem;
+    white-space: nowrap;
+    display: inline-block;
+}
+
+/* ── STATUS BADGES ── */
+.status-badge {
+    padding: 0.35rem 0.85rem;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 0.83rem;
+    display: inline-block;
+    white-space: nowrap;
+}
+
+.status-available {
+    background-color: #dcfce7;
+    color: #166534;
+}
+
+.status-offline {
+    background-color: #f3f4f6;
+    color: #6b7280;
+}
+.status-on-leave {
+     background-color: #fef3c7;
+     color: #b45309;
+}
+
+/* ── EDIT BUTTON ── */
+.edit-btn {
+    color: #047857 !important;
+    font-size: 1.1rem !important;
+    padding: 0.5rem !important;
+    transition: color 0.2s;
+}
+
+.edit-btn:hover {
+    color: #065f46 !important;
+}
+
+/* ── EMPTY CELL ── */
+.empty-cell {
+    text-align: center;
+    padding: 2rem !important;
+    color: #9ca3af;
+    font-size: 0.9rem;
+}
+
+/* ── EDIT DIALOG ── */
+.doctor-dialog {
+    padding: 0.5rem 0.25rem;
+}
+
+.doctor-dialog :deep(.p-field) {
+    margin-bottom: 1.25rem !important;
+}
+
+.doctor-dialog :deep(.p-field label) {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+    font-size: 0.875rem;
+    color: #374151;
+}
+
+.doctor-dialog :deep(.p-inputtext),
+.doctor-dialog :deep(.p-dropdown) {
+    width: 100%;
+    font-size: 0.9rem;
+}
+
+.doctor-dialog .checkbox-field {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1.25rem !important;
+}
+
+.checkbox-label {
+    font-weight: 500;
+    color: #374151;
+    cursor: pointer;
+}
+
+.required-asterisk {
+    color: #dc2626;
+    font-weight: 700;
+}
+
+.save-btn {
+    background: #047857 !important;
+    color: #fff !important;
+    border: none !important;
+    border-radius: 6px !important;
+    font-weight: 600 !important;
+    box-shadow: none !important;
+}
+
+.save-btn:hover {
+    background: #065f46 !important;
+}
+
+/* ── RESPONSIVE ── */
+@media (max-width: 1200px) {
+
+    .doctors-card :deep(.p-datatable-thead > tr > th),
+    .doctors-card :deep(.p-datatable-tbody > tr > td) {
+        padding: 0.75rem 0.7rem;
+        font-size: 0.85rem;
+    }
+
+    .header-row h2 {
+        font-size: 1.25rem;
+    }
+
+    .search-filter-bar {
+        gap: 0.75rem;
+        padding: 0.75rem 1rem;
+    }
+
+    .search-input-wrapper {
+        min-width: 180px;
+    }
+
+    .department-filter {
+        min-width: 160px;
+    }
+}
+
+@media (max-width: 900px) {
+    .doctors-card :deep(.p-card-body) {
+        padding: 1rem;
+    }
+
+    .doctors-card :deep(.p-datatable-thead > tr > th),
+    .doctors-card :deep(.p-datatable-tbody > tr > td) {
+        padding: 0.6rem 0.5rem;
+        font-size: 0.8rem;
+    }
+
+    .doctors-card :deep(.p-datatable) {
+        font-size: 0.8rem;
+    }
+
+    .search-filter-bar {
+        gap: 0.5rem;
+        padding: 0.6rem 0.75rem;
+    }
+
+    .search-input-wrapper {
+        min-width: 160px;
+        padding: 0.4rem 0.65rem;
+    }
+
+    .search-input {
+        font-size: 0.85rem;
+    }
+
+    .department-filter {
+        min-width: 140px;
+    }
+}
+
+@media (max-width: 768px) {
+    .header-row {
+        margin-bottom: 1rem;
+    }
+
+    .header-row h2 {
+        font-size: 1.1rem;
+    }
+
+    .subtitle {
+        font-size: 0.8rem;
+    }
+
+    .doctors-card :deep(.p-card-body) {
+        padding: 0.75rem;
+    }
+
+    .doctors-card :deep(.p-datatable-thead > tr > th),
+    .doctors-card :deep(.p-datatable-tbody > tr > td) {
+        padding: 0.55rem 0.4rem;
+        font-size: 0.76rem;
+    }
+
+    .search-filter-bar {
+        gap: 0.4rem;
+        padding: 0.5rem 0.6rem;
+        margin-bottom: 1rem;
+    }
+
+    .search-input-wrapper {
+        min-width: 140px;
+        padding: 0.35rem 0.5rem;
+    }
+
+    .search-input {
+        font-size: 0.8rem;
+    }
+
+    .search-input-wrapper i {
+        font-size: 0.85rem;
+    }
+
+    .department-filter {
+        min-width: 120px;
+    }
+
+    .search-filter-bar :deep(.p-dropdown) {
+        font-size: 0.8rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .header-row h2 {
+        font-size: 1rem;
+    }
+
+    .subtitle {
+        font-size: 0.75rem;
+        margin-top: 0.15rem;
+    }
+
+    .doctors-card {
+        border-radius: 6px;
+    }
+
+    .doctors-card :deep(.p-card-body) {
+        padding: 0.5rem;
+    }
+
+    .search-filter-bar {
+        gap: 0.3rem;
+        padding: 0.4rem 0.5rem;
+        margin-bottom: 0.75rem;
+        flex-direction: column;
+    }
+
+    .search-input-wrapper {
+        width: 100%;
+        min-width: unset;
+        padding: 0.3rem 0.5rem;
+    }
+
+    .search-input {
+        font-size: 0.75rem;
+    }
+
+    .search-input-wrapper i {
+        font-size: 0.8rem;
+    }
+
+    .department-filter {
+        width: 100%;
+        min-width: unset;
+    }
+
+    .search-filter-bar :deep(.p-dropdown) {
+        font-size: 0.75rem;
+    }
+
+    /* Dialog */
+    :deep(.p-dialog) {
+        width: 95% !important;
+        margin: auto !important;
+    }
+
+    .doctor-dialog :deep(.p-field) {
+        margin-bottom: 1rem !important;
+    }
+
+    .doctor-dialog :deep(.p-field label) {
+        font-size: 0.8rem;
+    }
+
+    .doctor-dialog :deep(.p-inputtext),
+    .doctor-dialog :deep(.p-dropdown) {
+        font-size: 0.85rem;
+        padding: 0.5rem !important;
+    }
+}

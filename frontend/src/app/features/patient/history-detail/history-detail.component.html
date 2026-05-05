@@ -1,0 +1,145 @@
+<app-patient-header></app-patient-header>
+
+<p-toast></p-toast>
+
+<main class="page">
+    <div class="container">
+
+        <!-- Loading State -->
+        <div *ngIf="loading" class="loading-wrap">
+            <i class="pi pi-spin pi-spinner" style="font-size: 2rem;"></i>
+            <p>Loading visit details...</p>
+        </div>
+
+        <!-- Visit Detail — "visit as v" gives template a non-null typed alias -->
+        <ng-container *ngIf="!loading && visit as v">
+            <section class="intro">
+                <h1>Visit Details</h1>
+                <p class="subtitle">Complete information about your consultation</p>
+            </section>
+
+            <section class="detail-card">
+                <div class="card-top">
+                    <div class="doc-left">
+                        <div class="avatar-big">{{ v.doctor.charAt(0) }}</div>
+                        <div class="doc-info">
+                            <div class="doc-name">{{ v.doctor }}</div>
+                            <div class="doc-spec">{{ v.specialty }}</div>
+                        </div>
+                    </div>
+                    <div class="token-box">
+                        TOKEN<br />
+                        <span class="token-number">{{ v.token }}</span>
+                    </div>
+                </div>
+
+                <div class="card-body">
+                    <div class="meta-row">
+                        <div class="meta-card">
+                            <div class="meta-label">VISIT DATE</div>
+                            <div class="meta-value">{{ v.date }}</div>
+                        </div>
+                        <div class="meta-card">
+                            <div class="meta-label">VISIT TIME</div>
+                            <div class="meta-value">{{ v.time }}</div>
+                        </div>
+                    </div>
+
+                    <div class="patient-box">
+                        <div class="patient-label">PATIENT INFORMATION</div>
+                        <div class="patient-row">
+                            <div>
+                                <div class="muted">Name</div>
+                                <div class="strong">{{ v.patientName }}</div>
+                            </div>
+                            <div>
+                                <div class="muted">Age / Gender</div>
+                                <div class="strong">{{ v.ageGender }}</div>
+                            </div>
+                            <div>
+                                <div class="muted">Phone</div>
+                                <div class="strong">{{ v.phone }}</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="reason-section">
+                        <div class="muted">REASON FOR VISIT</div>
+                        <div class="reason-text">{{ v.reason }}</div>
+                    </div>
+
+                    <div class="notes-section">
+                        <div class="muted">CONSULTATION NOTES</div>
+                        <div class="notes-text">{{ v.notes }}</div>
+                    </div>
+
+                    <!-- Rating Section -->
+                    <div class="rating-section">
+                        <div class="muted">DOCTOR RATING</div>
+
+                        <!-- Eligible: completed visit, no rating yet -->
+                        <button *ngIf="isRatingEligible()" class="rate-doctor-btn" (click)="openRatingModal()">
+                            <i class="pi pi-star"></i>
+                            Rate Doctor
+                        </button>
+
+                        <!-- Already rated -->
+                        <div *ngIf="hasRating()" class="rating-display">
+                            <div class="rating-card">
+                                <div class="rating-top">
+                                    <div class="rating-left">
+                                        <div class="rating-stars">
+                                            <app-star-rating [interactive]="false" [rating]="v.rating?.stars">
+                                            </app-star-rating>
+                                        </div>
+                                        <span class="rating-score">({{ v.rating?.stars }}.0)</span>
+                                    </div>
+                                    <span class="rating-date">{{ v.rating?.ratedAt | date: 'MMM d, yyyy' }}</span>
+                                </div>
+                                <div *ngIf="v.rating?.feedback" class="feedback-section">
+                                    <div class="feedback-label">Your Feedback:</div>
+                                    <div class="rating-feedback">{{ v.rating?.feedback }}</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Not yet eligible -->
+                        <div *ngIf="!isRatingEligible() && !hasRating()" class="no-rating-msg">
+                            <i class="pi pi-info-circle"></i>
+                            Rating available after visit is completed.
+                        </div>
+                    </div>
+
+                    <div class="card-footer">
+                        <div class="visit-id">Visit ID: {{ v.id }}</div>
+                        <div class="status-badge" [ngClass]="v.status.toLowerCase()">
+                            {{ v.status }}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="back-btn-wrap">
+                    <a routerLink="/history" class="back-btn">← Back to All Visits</a>
+                </div>
+            </section>
+        </ng-container>
+
+        <!-- Empty / Error State -->
+        <ng-container *ngIf="!loading && !visit">
+            <section class="intro">
+                <h1>Visit Details</h1>
+            </section>
+            <div class="empty-state">
+                <i class="pi pi-calendar-times"></i>
+                <p>Visit details could not be loaded. Please try again.</p>
+                <a routerLink="/history" class="back-btn">← Back to All Visits</a>
+            </div>
+        </ng-container>
+
+    </div>
+</main>
+
+<!-- Rating Modal — outside *ngIf so visit can still be null here, use ?. -->
+<app-rating-modal [(visible)]="showRatingModal" [doctorName]="visit?.doctor || ''"
+    [doctorSpecialty]="visit?.specialty || ''" (ratingSubmitted)="onRatingSubmitted($event)">
+</app-rating-modal>

@@ -1,5 +1,43 @@
-# Ignore environment variables
+# --- Environment & Secrets ---
 .env
+.env.local
+.env.*.local
+.env.*.js
+serviceAccountKey.json
+*.firebase-adminsdk*.json
+smart-token-*.json
 
-# Ignore Firebase service account
-smart-token-247bb-firebase-adminsdk-fbsvc-b793f6e6af.json
+# --- Backend (Python/FastAPI) ---
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+env/
+build/
+*.egg-info/
+pip-wheel-metadata/
+.pytest_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+*.sqlite3
+*.db
+
+# --- Frontend (Angular/Node) ---
+node_modules/
+dist/
+/frontend/out-tsc/
+/frontend/.angular/
+npm-debug.log*
+yarn-error.log
+.next/
+out/
+
+# --- OS / Editor Files ---
+.vscode/
+.idea/
+.DS_Store
+*.swp
+*.swo
+*~

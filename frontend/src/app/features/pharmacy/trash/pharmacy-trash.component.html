@@ -1,0 +1,137 @@
+<div class="layout">
+
+    <!-- Sidebar handles its own topbar + overlay + drawer -->
+    <app-pharmacy-sidebar></app-pharmacy-sidebar>
+
+    <main class="main-content">
+
+        <div class="page-header">
+            <h2>Deleted Medicines</h2>
+            <p class="subtitle">View and restore deleted medicines from trash</p>
+        </div>
+
+        <div class="search-card">
+            <span class="p-input-icon-left search-wrapper">
+                <i class="pi pi-search"></i>
+                <input pInputText type="text" placeholder="Search deleted medicines..." class="search-input"
+                    [(ngModel)]="searchQuery" (input)="applySort()" />
+            </span>
+            <p-dropdown [options]="sortOptions" [(ngModel)]="selectedSort" optionLabel="label" optionValue="value"
+                styleClass="sort-dropdown" (onChange)="applySort()">
+            </p-dropdown>
+        </div>
+
+        <!-- ── Bulk Action Toolbar (visible when items are selected) ── -->
+        <div class="bulk-toolbar" [class.bulk-toolbar--visible]="selectedCount > 0">
+            <div class="bulk-toolbar__info">
+                <i class="pi pi-check-circle"></i>
+                <span><strong>{{ selectedCount }}</strong> medicine{{ selectedCount !== 1 ? 's' : '' }} selected</span>
+            </div>
+            <div class="bulk-toolbar__actions">
+                <button class="bulk-btn bulk-btn--clear" (click)="clearSelection()">
+                    <i class="pi pi-times"></i>
+                    Clear
+                </button>
+                <button class="bulk-btn bulk-btn--delete" (click)="deleteSelected()" [disabled]="isBulkDeleting">
+                    <i class="pi" [ngClass]="isBulkDeleting ? 'pi-spin pi-spinner' : 'pi-trash'"></i>
+                    {{ isBulkDeleting ? 'Deleting...' : 'Delete Selected' }}
+                </button>
+            </div>
+        </div>
+
+        <div class="inventory-card">
+
+            <div class="table-header">
+                <h3>Deleted Medicines</h3>
+                <span class="table-subtitle">
+                    {{ filteredMedicines.length }}
+                    medicine{{ filteredMedicines.length !== 1 ? 's' : '' }} in trash
+                </span>
+            </div>
+
+            <div class="table-scroll-outer">
+                <div class="table-scroll">
+                    <table class="inventory-table">
+                        <thead>
+                            <tr>
+                                <!-- Select-all checkbox -->
+                                <th class="col-check">
+                                    <input type="checkbox" class="row-checkbox" [checked]="allSelected"
+                                        [indeterminate]="someSelected" (change)="toggleSelectAll($event)"
+                                        [disabled]="filteredMedicines.length === 0" />
+                                </th>
+                                <th>Product ID</th>
+                                <th>Batch No.</th>
+                                <th>Medicine Name</th>
+                                <th>Generic Name</th>
+                                <th>Type</th>
+                                <th>Category</th>
+                                <th>Sub Category</th>
+                                <th>Distributor</th>
+                                <th>Stock Unit</th>
+                                <th>Quantity</th>
+                                <th>Purchase Price</th>
+                                <th>Selling Price</th>
+                                <th>Total Purchase Price</th>
+                                <th>Total Selling Price</th>
+                                <th>Expiry Date</th>
+                                <th class="sticky-col-right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <ng-container *ngIf="filteredMedicines.length > 0; else emptyTrash">
+                                <tr *ngFor="let med of filteredMedicines" [class.row--selected]="isSelected(med.id)">
+                                    <!-- Per-row checkbox -->
+                                    <td class="col-check">
+                                        <input type="checkbox" class="row-checkbox" [checked]="isSelected(med.id)"
+                                            (change)="toggleSelectOne(med.id)" />
+                                    </td>
+                                    <td>{{ med.productId || med.id }}</td>
+                                    <td>{{ med.batchNumber }}</td>
+                                    <td class="bold">{{ med.name }}</td>
+                                    <td>{{ med.genericName || '-' }}</td>
+                                    <td>{{ med.type || '-' }}</td>
+                                    <td>{{ med.category || '-' }}</td>
+                                    <td>{{ med.subCategory || '-' }}</td>
+                                    <td>{{ med.distributorCompany || '-' }}</td>
+                                    <td>{{ med.stockUnit || '-' }}</td>
+                                    <td class="bold">{{ med.quantity }}</td>
+                                    <td>{{ med.purchasedPrice | currency:'PKR':'Rs ' }}</td>
+                                    <td>{{ med.sellingPrice | currency:'PKR':'Rs ' }}</td>
+                                    <td>{{ (med.purchasedPrice * med.quantity) | currency:'PKR':'Rs ' }}</td>
+                                    <td>{{ (med.sellingPrice * med.quantity) | currency:'PKR':'Rs ' }}</td>
+                                    <td>{{ med.expiryDate | date:'MMM d, y' }}</td>
+
+                                    <td class="sticky-col-right">
+                                        <button class="action-btn restore" (click)="undoDelete(med)" title="Restore">
+                                            <i class="pi pi-undo"></i>
+                                        </button>
+                                        <button class="action-btn delete" (click)="deletePermanently(med)"
+                                            title="Delete Permanently">
+                                            <i class="pi pi-trash"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                            </ng-container>
+                            <ng-template #emptyTrash>
+                                <tr>
+                                    <td colspan="17" class="empty-cell">
+                                        <div class="empty-state">
+                                            <i class="pi pi-trash empty-icon"></i>
+                                            <div class="empty-title">Trash is empty</div>
+                                            <div class="empty-text">No deleted medicines found</div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </ng-template>
+                        </tbody>
+                    </table>
+                    <span class="scroll-hint">← Scroll horizontally to see all columns →</span>
+                </div>
+            </div>
+        </div>
+
+        <p-toast position="top-right" [baseZIndex]="9999"></p-toast>
+        <p-confirmDialog [baseZIndex]="10000"></p-confirmDialog>
+    </main>
+</div>

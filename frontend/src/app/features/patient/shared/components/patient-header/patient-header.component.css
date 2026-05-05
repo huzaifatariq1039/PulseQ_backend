@@ -1,0 +1,253 @@
+:host {
+    display: block;
+    --primary: #2563eb;
+}
+
+.topbar {
+    position: sticky;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.3rem 1rem;
+    border-bottom: 1px solid #eef2f6;
+    background: #fff;
+    min-height: 40px;
+}
+
+.topbar-left {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.logo {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+}
+
+.brand {
+    font-weight: 600;
+    font-size: 1rem;
+}
+
+/* ── DESKTOP NAV ── */
+.topnav {
+    display: flex;
+    flex-direction: row;
+    gap: 0.75rem;
+    align-items: center;
+}
+
+.topnav a {
+    padding: 0.25rem 0.5rem;
+    border-radius: 6px;
+    cursor: pointer;
+    color: #434d57;
+    font-size: 0.9rem;
+    font-weight: 500;
+    text-decoration: none;
+}
+
+.topnav a.active {
+    background: #eef6ff;
+    color: var(--primary);
+    font-weight: 600;
+    border-radius: 6px;
+}
+
+/* ── TOPBAR RIGHT ── */
+.topbar-right {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+
+/* ── NOTIFICATION BELL + BADGE ── */
+.notif-wrapper {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.notif-badge {
+    position: absolute;
+    top: 1px;
+    right: 1px;
+    background: #e53935;
+    color: #fff;
+    font-size: 9px;
+    font-weight: 700;
+    min-width: 16px;
+    height: 16px;
+    border-radius: 999px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 3px;
+    pointer-events: none;
+    line-height: 1;
+    border: 1.5px solid #fff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+/* ── AVATAR ── */
+.avatar {
+    width: 28px;
+    height: 28px;
+    background: #e9f0ff;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    font-size: 0.9rem;
+    text-decoration: none;
+}
+
+.topbar .p-button-text {
+    min-width: 40px;
+    min-height: 40px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    text-decoration: none;
+}
+
+/* ── MOBILE MENU BUTTONS ── */
+.mobile-menu-btn,
+.mobile-close-btn {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 1.25rem;
+    color: #434d57;
+    padding: 0.25rem;
+    order: -1;
+}
+
+/* ── MOBILE OVERLAY ── */
+.mobile-menu-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.4);
+    z-index: 999;
+    top: 40px;
+}
+
+/* ── RESPONSIVE ── */
+@media (max-width: 768px) {
+    .topbar {
+        padding: 0.5rem 0.75rem;
+    }
+
+    .brand {
+        font-size: 0.9rem;
+    }
+
+    .mobile-menu-btn,
+    .mobile-close-btn {
+        display: flex;
+    }
+
+    .topnav {
+        display: none;
+    }
+
+    .topnav.mobile-dropdown {
+        display: none;
+        position: fixed;
+        top: 40px;
+        left: 0;
+        right: 0;
+        flex-direction: column;
+        gap: 0;
+        background: #fff;
+        border-bottom: 1px solid #eef2f6;
+        z-index: 1001;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        max-height: 0;
+        overflow: hidden;
+        transition: max-height 0.3s ease;
+    }
+
+    .topnav.mobile-dropdown.open {
+        display: flex !important;
+        max-height: 300px;
+    }
+
+    .topnav a {
+        padding: 0.75rem 1rem;
+        border-radius: 6px;
+        border-bottom: 1px solid #f3f4f6;
+        font-size: 0.9rem;
+        display: block;
+    }
+
+    .topnav a:last-child {
+        border-bottom: none;
+    }
+
+    .topnav a.active {
+        background: #eef6ff;
+        color: var(--primary);
+        font-weight: 600;
+        border-radius: 6px;
+        padding-left: 1rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .topbar {
+        padding: 0.5rem 0.5rem;
+        min-height: 48px;
+    }
+
+    .topbar-left {
+        gap: 0.35rem;
+    }
+
+    .logo {
+        width: 24px;
+        height: 24px;
+    }
+
+    .brand {
+        font-size: 0.8rem;
+    }
+
+    .topbar-right {
+        gap: 0.4rem;
+    }
+
+    .avatar {
+        width: 24px;
+        height: 24px;
+        font-size: 0.8rem;
+    }
+
+    .notif-badge {
+        top: 0px;
+        right: 0px;
+        font-size: 8px;
+        min-width: 14px;
+        height: 14px;
+    }
+
+    .topnav.mobile-dropdown {
+        top: 48px;
+    }
+
+    .mobile-menu-overlay {
+        top: 48px;
+    }
+}

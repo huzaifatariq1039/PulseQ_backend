@@ -1,0 +1,155 @@
+<div class="mobile-topbar">
+    <div class="brand-label">Dr. Portal</div>
+    <button class="hamburger" (click)="toggleSidebar()">
+        <i [ngClass]="sidebarOpen ? 'pi pi-times' : 'pi pi-bars'"></i>
+    </button>
+</div>
+
+<!-- overlay for mobile -->
+<div class="sidebar-overlay" *ngIf="sidebarOpen" (click)="toggleSidebar()"></div>
+
+<div class="doctor-layout">
+    <!-- shared sidebar component -->
+    <app-doctor-sidebar [open]="sidebarOpen" (signOut)="logout()" (close)="sidebarOpen = false"></app-doctor-sidebar>
+
+    <!-- MAIN CONTENT -->
+    <main class="main-content">
+        <!-- HEADER -->
+        <div class="page-header">
+            <div>
+                <h1>Patient Ratings & Reviews</h1>
+                <p class="subtitle">See feedback from your completed consultations</p>
+            </div>
+        </div>
+
+        <!-- SUMMARY CARD -->
+        <div class="summary-card">
+            <div class="summary-left">
+                <div class="average-rating">
+                    <div class="big-number">{{ averageRating }}</div>
+                    <div class="stars">
+                        <i *ngFor="let i of [0,1,2,3,4]" [class.pi-star-fill]="i < Math.floor(averageRating)"
+                            [class.pi-star]="i >= Math.floor(averageRating)" class="pi"></i>
+                    </div>
+                </div>
+                <div class="review-count">Based on {{ totalReviews }} review<span *ngIf="totalReviews !== 1">s</span>
+                </div>
+            </div>
+
+            <div class="summary-right">
+                <div class="distribution-section">
+                    <div class="distribution-title">Rating Distribution</div>
+                    <div *ngFor="let dist of distribution" class="distribution-row">
+                        <div class="dist-label">{{ dist.stars }} <i class="pi pi-star-fill"></i></div>
+                        <div class="dist-bar">
+                            <div class="dist-progress" [style.width.%]="dist.percentage"></div>
+                        </div>
+                        <div class="dist-count">{{ dist.count }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SEARCH & FILTER -->
+        <div class="filter-section">
+            <div class="search-box">
+                <i class="pi pi-search"></i>
+                <input type="text" placeholder="Search by patient name or feedback..." [(ngModel)]="searchQuery"
+                    (input)="onSearchChange()" class="search-input" />
+            </div>
+
+            <div class="filter-dropdowns">
+                <div class="filter-group">
+                    <label class="filter-label">Sort By:</label>
+                    <select [(ngModel)]="sortBy" (change)="onSortChange(sortBy)" class="filter-select">
+                        <option value="recent">Most Recent</option>
+                        <option value="highest">Highest Rating</option>
+                        <option value="lowest">Lowest Rating</option>
+                    </select>
+                </div>
+
+                <div class="filter-group">
+                    <label class="filter-label">Filter By:</label>
+                    <select (change)="onFilterSelectChange($event)" class="filter-select">
+                        <option value="all">All Ratings</option>
+                        <option value="5">5 Stars</option>
+                        <option value="4">4 Stars</option>
+                        <option value="3">3 Stars</option>
+                        <option value="2">2 Stars</option>
+                        <option value="1">1 Star</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- EMPTY STATE: No Ratings -->
+        <div class="empty-state" *ngIf="showEmptyState">
+            <div class="empty-illustration">
+                <div class="gradient-circle">
+                    <i class="pi pi-star"></i>
+                </div>
+            </div>
+            <h2>No ratings yet</h2>
+            <p>Patient feedback will appear here after consultations are completed.</p>
+            <p class="encouragement">Keep providing excellent care!</p>
+        </div>
+
+        <!-- EMPTY STATE: No Search Results -->
+        <div class="empty-state" *ngIf="showNoResults && !showEmptyState">
+            <div class="empty-illustration">
+                <div class="gradient-circle search">
+                    <i class="pi pi-search"></i>
+                </div>
+            </div>
+            <h2>No reviews found</h2>
+            <p>Try adjusting your search or filters</p>
+        </div>
+
+        <!-- RATINGS LIST -->
+        <div class="ratings-list" *ngIf="!showEmptyState && !showNoResults">
+            <div class="rating-card" *ngFor="let card of filteredRatings">
+                <!-- Card Header -->
+                <div class="card-header">
+                    <div class="patient-info">
+                        <div class="avatar">{{ card.patientInitials }}</div>
+                        <div class="name-and-date">
+                            <div class="patient-name">{{ card.patientName }}</div>
+                            <div class="visit-date">
+                                <i class="pi pi-calendar"></i>
+                                {{ card.visitDate | date: 'MMMM dd, yyyy' }}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="rating-display">
+                        <div class="stars">
+                            <i *ngFor="let _ of getStarArray(card.rating.stars)" class="pi pi-star-fill"></i>
+                            <i *ngFor="let _ of getStarArray(5 - card.rating.stars)" class="pi pi-star"></i>
+                        </div>
+                        <div class="rating-value">{{ card.rating.stars }}.0</div>
+                    </div>
+                </div>
+
+                <!-- Feedback -->
+                <div class="card-feedback">
+                    <div *ngIf="card.rating.feedback; else noFeedback" class="feedback-box">
+                        {{ card.rating.feedback }}
+                    </div>
+                    <ng-template #noFeedback>
+                        <div class="feedback-box empty">
+                            No written feedback provided.
+                        </div>
+                    </ng-template>
+                </div>
+
+                <!-- Card Footer -->
+                <div class="card-footer">
+                    <div class="visit-reason" *ngIf="card.visitReason">
+                        <i class="pi pi-file"></i>
+                        {{ card.visitReason }}
+                    </div>
+                    <div class="token-badge" *ngIf="card.tokenNumber">Token: {{ card.tokenNumber }}</div>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>

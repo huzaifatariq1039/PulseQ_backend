@@ -1,0 +1,526 @@
+/* Sales Table Header and Export Button */
+.sales-table-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	flex-wrap: wrap;
+	gap: 0.75rem;
+	padding: 1rem 1.25rem 0.75rem;
+	border-bottom: 1px solid #f3f4f6;
+}
+
+.export-btn {
+	display: flex;
+	align-items: center;
+	gap: 0.4rem;
+	padding: 0.5rem 1rem;
+	background: #fff;
+	color: #374151;
+	border: 1px solid #e5e7eb;
+	border-radius: 8px;
+	cursor: pointer;
+	font-weight: 600;
+	font-size: 0.875rem;
+	white-space: nowrap;
+	flex-shrink: 0;
+	transition: all 0.2s;
+}
+
+.export-btn:hover:not(:disabled) {
+	background: #f0fdf4;
+	border-color: #16a34a;
+	color: #16a34a;
+}
+
+.export-btn:disabled {
+	opacity: 0.6;
+	cursor: not-allowed;
+}
+* {
+	margin: 0;
+	padding: 0;
+	box-sizing: border-box;
+}
+
+.layout {
+	display: flex;
+	min-height: 100vh;
+	background: #f3f4f6;
+	font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.main-content {
+	flex: 1;
+	margin-left: 240px;
+	padding: 1.5rem 1.75rem;
+	min-height: 100vh;
+}
+
+.page-header h2 {
+	font-size: 1.5rem;
+	font-weight: 700;
+	color: #111827;
+	margin: 0 0 0.2rem;
+}
+
+.page-header .subtitle {
+	color: #6b7280;
+	font-size: 0.85rem;
+	margin: 0 0 1.25rem;
+}
+
+/* SUMMARY CARDS */
+.summary-grid {
+	display: grid;
+	grid-template-columns: 1fr 1fr 1fr 1fr;
+	gap: 0.875rem;
+	margin-bottom: 1rem;
+}
+
+.search-bar {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.5rem;
+	margin-left: 1.5rem;
+}
+
+.search-input {
+	padding: 0.5rem 1rem;
+	border-radius: 8px;
+	border: 1px solid #e5e7eb;
+	font-size: 0.9rem;
+	min-width: 180px;
+}
+
+.summary-card {
+	background: #fff;
+	border-radius: 10px;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.07);
+	overflow: hidden;
+}
+
+.card-inner {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 1rem 1.1rem;
+}
+
+.card-left {
+	display: flex;
+	align-items: center;
+	gap: 0.875rem;
+}
+
+.card-icon {
+	width: 40px;
+	height: 40px;
+	border-radius: 9px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 1rem;
+	flex-shrink: 0;
+}
+
+.weekly-icon {
+	background: #eff6ff;
+	color: #3b82f6;
+}
+
+.monthly-icon {
+	background: #f0fdf4;
+	color: #22c55e;
+}
+
+.total-icon {
+	background: rgba(255, 255, 255, 0.2);
+	color: #fff;
+}
+
+.card-label {
+	font-size: 0.75rem;
+	color: #6b7280;
+	font-weight: 500;
+	margin-bottom: 0.1rem;
+}
+
+.card-value {
+	font-size: 1.2rem;
+	font-weight: 800;
+	color: #111827;
+	line-height: 1.2;
+}
+
+.card-sub {
+	font-size: 0.7rem;
+	color: #9ca3af;
+	margin-top: 0.1rem;
+}
+
+.card-badge {
+	font-size: 0.72rem;
+	font-weight: 700;
+	display: flex;
+	align-items: center;
+	gap: 0.2rem;
+	padding: 0.25rem 0.5rem;
+	border-radius: 20px;
+	flex-shrink: 0;
+}
+
+.growth-badge {
+	background: #f0fdf4;
+	color: #16a34a;
+}
+
+.decline-badge {
+	background: #fef2f2;
+	color: #dc2626;
+}
+
+.total-card {
+	background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+}
+
+.total-card .card-label {
+	color: rgba(255, 255, 255, 0.8);
+}
+
+.total-card .card-value {
+	color: #fff;
+}
+
+.total-card .card-sub {
+	color: rgba(255, 255, 255, 0.65);
+}
+
+/* FILTER ROW */
+.filter-section {
+	display: flex;
+	align-items: center;
+	gap: 1rem;
+	background: #fff;
+	border-radius: 9px;
+	padding: 0.6rem 1.1rem;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+	margin-bottom: 0.875rem;
+	flex-wrap: wrap;
+}
+
+.filter-label {
+	font-size: 0.85rem;
+	font-weight: 600;
+	color: #374151;
+	white-space: nowrap;
+}
+
+.filter-buttons {
+	display: flex;
+	gap: 0.35rem;
+	flex-wrap: wrap;
+}
+
+.filter-btn {
+	padding: 0.35rem 0.875rem;
+	border-radius: 7px;
+	border: 1px solid #e5e7eb;
+	background: #fff;
+	color: #374151;
+	font-size: 0.8rem;
+	font-weight: 500;
+	cursor: pointer;
+	transition: all 0.15s;
+	white-space: nowrap;
+}
+
+.filter-btn:hover {
+	background: #f3f4f6;
+}
+
+.filter-btn.active {
+	background: #2563eb;
+	color: #fff;
+	border-color: #2563eb;
+}
+
+/* CALENDAR */
+.calendar-row {
+	margin-bottom: 0.875rem;
+}
+
+.calendar-wrapper {
+	display: flex;
+	align-items: center;
+	background: #fff;
+	border: 1px solid #e5e7eb;
+	border-radius: 9px;
+	padding: 0 1rem;
+	height: 42px;
+	gap: 0.6rem;
+	transition: border-color 0.2s, box-shadow 0.2s;
+	width: 100%;
+}
+
+.calendar-wrapper:focus-within {
+	border-color: #3b82f6;
+	box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.calendar-icon {
+	color: #9ca3af;
+	font-size: 0.9rem;
+	flex-shrink: 0;
+}
+
+:host ::ng-deep .range-calendar {
+	flex: 1;
+	width: 100%;
+}
+
+:host ::ng-deep .range-calendar .p-inputtext {
+	border: none !important;
+	box-shadow: none !important;
+	outline: none !important;
+	padding: 0 !important;
+	font-size: 0.875rem !important;
+	color: #374151 !important;
+	background: transparent !important;
+	width: 100% !important;
+	height: 40px !important;
+}
+
+:host ::ng-deep .range-calendar .p-inputtext::placeholder {
+	color: #9ca3af;
+}
+
+:host ::ng-deep .p-datepicker {
+	border-radius: 10px !important;
+	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12) !important;
+}
+
+:host ::ng-deep .p-datepicker .p-highlight {
+	background: #2563eb !important;
+	color: #fff !important;
+}
+
+:host ::ng-deep .p-datepicker td.p-datepicker-today>span {
+	border: 1px solid #2563eb;
+}
+
+/* SALES TABLE */
+.table-card {
+	background: #fff;
+	border-radius: 10px;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.07);
+	overflow: hidden;
+}
+
+.table-card-header {
+	display: flex;
+	align-items: baseline;
+	gap: 0.6rem;
+	padding: 1rem 1.25rem 0.65rem;
+	border-bottom: 1px solid #f3f4f6;
+}
+
+.table-card-header h3 {
+	font-size: 0.95rem;
+	font-weight: 700;
+	color: #111827;
+	margin: 0;
+}
+
+.transaction-count {
+	font-size: 0.75rem;
+	color: #9ca3af;
+}
+
+:host ::ng-deep .sales-table .p-datatable-wrapper {
+	overflow-x: auto;
+}
+
+:host ::ng-deep .sales-table .p-datatable-table {
+	min-width: 500px;
+}
+
+:host ::ng-deep .sales-table .p-datatable-thead>tr>th {
+	background: #f9fafb;
+	color: #9ca3af;
+	font-size: 0.68rem;
+	font-weight: 700;
+	letter-spacing: 0.05em;
+	text-transform: uppercase;
+	border: none;
+	border-bottom: 1px solid #e5e7eb;
+	padding: 0.65rem 1.25rem;
+	white-space: nowrap;
+}
+
+:host ::ng-deep .sales-table .p-datatable-tbody>tr>td {
+	border: none;
+	border-bottom: 1px solid #f3f4f6;
+	padding: 0.75rem 1.25rem;
+	font-size: 0.875rem;
+	color: #374151;
+}
+
+:host ::ng-deep .sales-table .p-datatable-tbody>tr:last-child>td {
+	border-bottom: none;
+}
+
+:host ::ng-deep .sales-table .p-datatable-tbody>tr:hover>td {
+	background: #f9fafb;
+}
+
+.amount-cell {
+	color: #16a34a !important;
+	font-weight: 700;
+}
+
+.empty-state {
+	text-align: center;
+	padding: 2.5rem;
+	color: #9ca3af;
+}
+
+.empty-state i {
+	font-size: 2rem;
+	margin-bottom: 0.6rem;
+	display: block;
+	opacity: 0.4;
+}
+
+.empty-state p {
+	font-size: 0.875rem;
+}
+
+/* ── RESPONSIVE ── */
+@media (max-width: 900px) {
+	.main-content {
+		margin-left: 0;
+		padding: 1.25rem 1rem;
+		padding-top: calc(56px + 1.25rem);
+	}
+
+	.summary-grid {
+		grid-template-columns: 1fr 1fr;
+	}
+
+	.total-card {
+		grid-column: span 2;
+	}
+}
+
+@media (max-width: 768px) {
+	.main-content {
+		padding: 1rem;
+		padding-top: calc(56px + 1rem);
+	}
+
+	.filter-section {
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 0.5rem;
+	}
+
+	.card-inner {
+		flex-wrap: wrap;
+		gap: 0.5rem;
+	}
+
+	.card-badge {
+		margin-left: 0;
+	}
+}
+
+@media (max-width: 480px) {
+	.summary-grid {
+		grid-template-columns: 1fr;
+	}
+
+	.total-card {
+		grid-column: span 1;
+	}
+
+	.card-value {
+		font-size: 1rem;
+	}
+
+	.filter-section {
+		flex-direction: column;
+		align-items: stretch;
+		gap: 0.5rem;
+	}
+
+	.card-inner {
+		flex-direction: column;
+		align-items: flex-start;
+	}
+
+	/* make filter controls full width */
+	.filter-section .filter-label,
+	.filter-section .filter-buttons,
+	.filter-section .calendar-wrapper {
+		width: 100%;
+	}
+
+	/* table adjustments */
+	:host ::ng-deep .sales-table .p-datatable-table {
+		min-width: auto !important;
+		width: 100% !important;
+	}
+	:host ::ng-deep .sales-table .p-datatable-wrapper {
+		overflow-x: auto;
+		-webkit-overflow-scrolling: touch;
+	}
+
+	/* improve table cell spacing on mobile */
+	:host ::ng-deep .sales-table .p-datatable-tbody>tr>td {
+		padding: 0.5rem 0.4rem;
+		font-size: 0.75rem;
+		white-space: normal;
+		word-break: break-word;
+	}
+	:host ::ng-deep .sales-table .p-datatable-thead>tr>th {
+		padding: 0.4rem;
+		font-size: 0.6rem;
+	}
+
+	/* hide less important columns on very small screens */
+	:host ::ng-deep .sales-table .p-datatable-tbody>tr>td:nth-child(n+3),
+	:host ::ng-deep .sales-table .p-datatable-thead>tr>th:nth-child(n+3) {
+		display: none;
+	}
+
+	/* show transaction ID, amount, and date on mobile */
+	:host ::ng-deep .sales-table .p-datatable-tbody>tr>td:nth-child(2),
+	:host ::ng-deep .sales-table .p-datatable-thead>tr>th:nth-child(2),
+	:host ::ng-deep .sales-table .p-datatable-tbody>tr>td:nth-child(4),
+	:host ::ng-deep .sales-table .p-datatable-thead>tr>th:nth-child(4),
+	:host ::ng-deep .sales-table .p-datatable-tbody>tr>td:nth-child(5),
+	:host ::ng-deep .sales-table .p-datatable-thead>tr>th:nth-child(5) {
+		display: table-cell;
+	}
+
+	/* adjust paginator for mobile */
+	:host ::ng-deep .sales-table .p-paginator {
+		padding: 0.5rem !important;
+		font-size: 0.75rem !important;
+	}
+
+	/* improve summary card readability */
+	.card-left {
+		flex-wrap: wrap;
+	}
+
+	.page-header h2 {
+		font-size: 1.25rem;
+	}
+
+	/* make main content padding tighter */
+	.main-content {
+		padding: 0.75rem !important;
+		padding-top: calc(56px + 0.75rem) !important;
+	}
+}

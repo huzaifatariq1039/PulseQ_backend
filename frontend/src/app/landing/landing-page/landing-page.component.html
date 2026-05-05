@@ -1,0 +1,38 @@
+<div class="landing-container">
+    <div class="logo">
+        <img src="assets/logo.jpeg" alt="PulseQ" class="landing-logo" />
+    </div>
+
+    <h1 class="title">PulseQ</h1>
+    <p class="subtitle">Digital Queue System for Healthcare. Select your role to continue.</p>
+
+    <div class="card-grid">
+        <!-- only two choices on main landing: patient or staff bundle -->
+        <div class="role-card" (click)="goTo('patient')">
+            <div class="icon patient">
+                <i class="pi pi-user"></i>
+            </div>
+            <p class="head">Patient</p>
+            <p class="desc">Get tokens &amp; track status</p>
+        </div>
+
+        <div class="role-card" (click)="goTo('staff')">
+            <div class="icon admin">
+                <!-- using admin icon as generic group icon -->
+                <i class="pi pi-users"></i>
+            </div>
+            <p class="head">Staff</p>
+            <p class="desc">Reception, Doctor, Admin, Pharmacy</p>
+        </div>
+    </div>
+
+    <!-- Demo Appointment Button -->
+    <div class="demo-btn-wrap" style="text-align: center; margin-top: 2rem;">
+        <button class="demo-btn" (click)="goTo('demo')">
+            <i class="pi pi-calendar-plus" style="margin-right: 0.5rem;"></i>
+            Book a Demo Appointment
+        </button>
+    </div>
+
+    <div class="footer">PulseQ v1.0 • Designed for Hospital Workflows</div>
+</div>

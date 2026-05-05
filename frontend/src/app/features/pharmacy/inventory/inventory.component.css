@@ -1,0 +1,723 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   BASE RESET
+───────────────────────────────────────────────────────────────────────── */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   LAYOUT
+───────────────────────────────────────────────────────────────────────── */
+.layout {
+    display: flex;
+    min-height: 100vh;
+    background: #f3f4f6;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.main-content {
+    flex: 1;
+    margin-left: 240px;
+    padding: 1.5rem 1.75rem;
+    min-height: 100vh;
+    min-width: 0;
+    overflow-x: hidden;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   PAGE HEADER
+───────────────────────────────────────────────────────────────────────── */
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.2rem;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+
+.page-header h2 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #111827;
+}
+
+.subtitle {
+    color: #6b7280;
+    font-size: 0.85rem;
+    margin-top: 0.2rem;
+}
+
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   HEADER BUTTONS
+───────────────────────────────────────────────────────────────────────── */
+.add-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.5rem 1rem;
+    background: #2563eb;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 0.875rem;
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition: background 0.2s;
+}
+
+.add-btn:hover {
+    background: #1d4ed8;
+}
+
+.export-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.5rem 1rem;
+    background: #fff;
+    color: #374151;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 0.875rem;
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition: all 0.2s;
+}
+
+.export-btn:hover:not(:disabled) {
+    background: #f0fdf4;
+    border-color: #16a34a;
+    color: #16a34a;
+}
+
+.export-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.import-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.5rem 1rem;
+    background: #fff;
+    color: #374151;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 0.875rem;
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition: all 0.2s;
+}
+
+.import-btn:hover:not(:disabled) {
+    background: #eff6ff;
+    border-color: #2563eb;
+    color: #2563eb;
+}
+
+.import-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   SEARCH + FILTER ROW
+───────────────────────────────────────────────────────────────────────── */
+.search-filter-row {
+    display: flex;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.search-wrapper {
+    flex: 1;
+    min-width: 180px;
+    display: flex;
+    align-items: center;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 0 0.9rem;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.search-wrapper:focus-within {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.search-wrapper i {
+    color: #9ca3af;
+    margin-right: 0.5rem;
+}
+
+.search-input {
+    flex: 1;
+    padding: 0.6rem 0;
+    border: none;
+    outline: none;
+    font-size: 0.875rem;
+    background: transparent;
+}
+
+.sort-dropdown {
+    min-width: 200px;
+    flex-shrink: 0;
+}
+
+:host ::ng-deep .sort-dropdown.p-dropdown,
+:host ::ng-deep p-dropdown.sort-dropdown>.p-dropdown {
+    width: 100% !important;
+    min-width: 200px !important;
+    border: 1px solid #e5e7eb !important;
+    border-radius: 8px !important;
+    background: #fff !important;
+    height: 38px !important;
+    display: flex !important;
+    align-items: center !important;
+    transition: border-color 0.2s, box-shadow 0.2s !important;
+}
+
+:host ::ng-deep p-dropdown.sort-dropdown .p-dropdown {
+    width: 210px !important;
+    min-width: 210px !important;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    background: #fff;
+    height: 40px;
+    display: flex;
+    align-items: center;
+}
+
+:host ::ng-deep p-dropdown.sort-dropdown .p-dropdown:not(.p-disabled).p-focus {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    outline: none;
+}
+
+:host ::ng-deep p-dropdown.sort-dropdown .p-dropdown-label {
+    font-size: 0.875rem;
+    color: #374151;
+    padding: 0 0.75rem 0 0.875rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+:host ::ng-deep p-dropdown.sort-dropdown .p-dropdown-trigger {
+    padding-right: 0.5rem;
+    flex-shrink: 0;
+}
+
+:host ::ng-deep .p-dropdown-panel .p-dropdown-item {
+    font-size: 0.875rem;
+    padding: 0.5rem 0.75rem;
+    white-space: nowrap;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   BULK ACTION BAR
+───────────────────────────────────────────────────────────────────────── */
+.bulk-action-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.65rem 1rem;
+    margin-bottom: 0.75rem;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 8px;
+    animation: slideDown 0.18s ease;
+    flex-wrap: wrap;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-6px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.bulk-count {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #1d4ed8;
+}
+
+.bulk-count i {
+    font-size: 0.9rem;
+}
+
+.bulk-actions {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.bulk-clear-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.4rem 0.85rem;
+    background: #fff;
+    color: #374151;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    font-weight: 600;
+    transition: all 0.2s;
+}
+
+.bulk-clear-btn:hover {
+    background: #f9fafb;
+    border-color: #9ca3af;
+}
+
+.bulk-delete-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.4rem 0.85rem;
+    background: #dc2626;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    font-weight: 600;
+    transition: background 0.2s;
+}
+
+.bulk-delete-btn:hover:not(:disabled) {
+    background: #b91c1c;
+}
+
+.bulk-delete-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   INVENTORY CARD
+───────────────────────────────────────────────────────────────────────── */
+.inventory-card {
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.07);
+    overflow: hidden;
+    max-width: 100%;
+}
+
+.table-header {
+    padding: 1rem 1.25rem 0.75rem;
+    border-bottom: 1px solid #f3f4f6;
+}
+
+.table-header h3 {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #111827;
+}
+
+.table-subtitle {
+    font-size: 0.75rem;
+    color: #9ca3af;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   TABLE SCROLL + WIDE TABLE
+───────────────────────────────────────────────────────────────────────── */
+.table-scroll-outer {
+    width: 100%;
+    overflow-x: auto;
+    position: relative;
+    -webkit-overflow-scrolling: touch;
+}
+
+.table-scroll-outer::-webkit-scrollbar {
+    height: 6px;
+}
+
+.table-scroll-outer::-webkit-scrollbar-track {
+    background: #f1f5f9;
+}
+
+.table-scroll-outer::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 3px;
+}
+
+.table-scroll-outer::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+}
+
+.wide-table .p-datatable-table {
+    min-width: 1500px !important;
+}
+
+.wide-table th,
+.wide-table td {
+    white-space: nowrap;
+}
+
+.wide-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: #f9fafb;
+}
+
+:host ::ng-deep .inventory-table .p-datatable-wrapper {
+    overflow: visible !important;
+}
+
+:host ::ng-deep .inventory-table .p-datatable-table {
+    min-width: 1500px;
+}
+
+:host ::ng-deep .inventory-table .p-datatable-thead>tr>th {
+    background: #f9fafb;
+    color: #9ca3af;
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    border: none;
+    border-bottom: 1px solid #e5e7eb;
+    padding: 0.5rem 0.75rem;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+}
+
+:host ::ng-deep .inventory-table .p-datatable-tbody>tr>td {
+    border: none;
+    border-bottom: 1px solid #f3f4f6;
+    padding: 0.65rem 0.75rem;
+    font-size: 0.825rem;
+    color: #374151;
+    white-space: nowrap;
+    vertical-align: middle;
+}
+
+:host ::ng-deep .inventory-table .p-datatable-tbody>tr:last-child>td {
+    border-bottom: none;
+}
+
+:host ::ng-deep .inventory-table .p-datatable-tbody>tr:hover>td {
+    background: #f9fafb;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   CHECKBOX COLUMN
+───────────────────────────────────────────────────────────────────────── */
+.col-checkbox {
+    width: 40px !important;
+    min-width: 40px !important;
+    max-width: 40px !important;
+    text-align: center !important;
+    padding: 0.5rem 0.4rem !important;
+}
+
+.row-checkbox {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+    accent-color: #2563eb;
+    border-radius: 3px;
+}
+
+/* Selected row highlight */
+:host ::ng-deep .inventory-table .p-datatable-tbody>tr.row-selected>td {
+    background: #eff6ff !important;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   STICKY ACTIONS COLUMN
+───────────────────────────────────────────────────────────────────────── */
+.sticky-col-right {
+    position: sticky;
+    right: 0;
+    background: inherit;
+    z-index: 2;
+    box-shadow: -2px 0 6px rgba(0, 0, 0, 0.07);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   STATUS BADGES
+───────────────────────────────────────────────────────────────────────── */
+.badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.25rem 0.6rem;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.badge i {
+    font-size: 0.7rem;
+}
+
+.badge-active {
+    background: #dcfce7;
+    color: #16a34a;
+}
+
+.badge-low-stock {
+    background: #fef3c7;
+    color: #b45309;
+}
+
+.badge-expired {
+    background: #fee2e2;
+    color: #dc2626;
+}
+
+.badge-expiring-soon {
+    background: #fef9c3;
+    color: #b45309;
+}
+
+.badge-about-to-expire {
+    background: #fef9c3;
+    color: #b45309;
+    border: 1px solid #fde68a;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   QUANTITY CELL
+───────────────────────────────────────────────────────────────────────── */
+.quantity-normal {
+    font-weight: 700;
+    color: #111827;
+}
+
+.quantity-warning {
+    font-weight: 700;
+    color: #f59e0b;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   ACTION BUTTONS
+───────────────────────────────────────────────────────────────────────── */
+.actions-cell {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+}
+
+.action-btn {
+    background: none;
+    border: none;
+    padding: 0.2rem 0.4rem;
+    cursor: pointer;
+    font-size: 1.1rem;
+    outline: none;
+    border-radius: 4px;
+    transition: background 0.15s;
+}
+
+.action-btn:hover {
+    background: #f3f4f6;
+}
+
+.action-view i {
+    color: #2563eb !important;
+}
+
+.action-edit i {
+    color: #22c55e !important;
+}
+
+.action-delete i {
+    color: #dc2626 !important;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   PAGINATOR
+───────────────────────────────────────────────────────────────────────── */
+:host ::ng-deep .inventory-table .p-paginator {
+    border: none;
+    border-top: 1px solid #f3f4f6;
+    background: #fff;
+    padding: 0.6rem 1rem;
+}
+
+:host ::ng-deep .inventory-table .p-paginator-pages .p-paginator-page {
+    background: none;
+    border: 1px solid #e5e7eb;
+    color: #374151;
+    min-width: 2rem;
+    height: 2rem;
+    border-radius: 6px;
+    font-size: 0.8rem;
+}
+
+:host ::ng-deep .inventory-table .p-paginator-pages .p-paginator-page.p-highlight {
+    background: #2563eb;
+    border-color: #2563eb;
+    color: white;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   SCROLL HINT
+───────────────────────────────────────────────────────────────────────── */
+.scroll-hint {
+    text-align: center;
+    color: #bdbdbd;
+    font-size: 0.85rem;
+    padding: 6px 16px 10px;
+    display: block;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   EMPTY STATE
+───────────────────────────────────────────────────────────────────────── */
+.empty-state {
+    text-align: center;
+    padding: 2.5rem;
+    color: #9ca3af;
+}
+
+.empty-state i {
+    font-size: 2rem;
+    margin-bottom: 0.6rem;
+    display: block;
+    opacity: 0.4;
+}
+
+.empty-state p {
+    font-size: 0.9rem;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   RESPONSIVE
+───────────────────────────────────────────────────────────────────────── */
+@media (max-width: 900px) {
+
+    .layout .mobile-topbar,
+    .mobile-topbar {
+        display: flex !important;
+    }
+
+    .layout .sidebar-overlay,
+    .sidebar-overlay {
+        display: block !important;
+    }
+
+    .main-content {
+        margin-left: 0;
+        padding: 1.25rem 1rem;
+        padding-top: calc(56px + 1.25rem);
+    }
+}
+
+@media (max-width: 768px) {
+    .main-content {
+        padding: 1rem;
+        padding-top: calc(56px + 1rem);
+    }
+
+    .search-filter-row {
+        flex-wrap: wrap;
+    }
+
+    .sort-dropdown {
+        min-width: 100%;
+    }
+
+    :host ::ng-deep p-dropdown.sort-dropdown>.p-dropdown,
+    :host ::ng-deep p-dropdown.sort-dropdown .p-dropdown {
+        width: 100% !important;
+        min-width: 100% !important;
+    }
+
+    :host ::ng-deep .inventory-table .p-datatable-table {
+        min-width: 1500px !important;
+    }
+
+    .bulk-action-bar {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .bulk-actions {
+        width: 100%;
+        justify-content: flex-end;
+    }
+}
+
+@media (max-width: 480px) {
+    .page-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .add-btn {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .search-filter-row {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .search-wrapper {
+        width: 100%;
+        min-width: 0;
+    }
+
+    .sort-dropdown {
+        width: 100%;
+        min-width: 0;
+    }
+
+    :host ::ng-deep .inventory-table .p-datatable-table {
+        min-width: 1500px !important;
+    }
+
+    :host ::ng-deep .inventory-table .p-datatable-tbody>tr>td {
+        padding: 0.5rem 0.6rem;
+        font-size: 0.775rem;
+    }
+
+    :host ::ng-deep .inventory-table .p-datatable-thead>tr>th {
+        padding: 0.4rem 0.6rem;
+        font-size: 0.6rem;
+    }
+
+    :host ::ng-deep .inventory-table .p-paginator {
+        padding: 0.5rem !important;
+        font-size: 0.75rem !important;
+    }
+}

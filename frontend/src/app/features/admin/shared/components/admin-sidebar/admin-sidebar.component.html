@@ -1,0 +1,53 @@
+<!-- MOBILE TOPBAR -->
+<div class="mobile-topbar">
+    <button class="hamburger" (click)="toggleSidebar()">
+        <i [ngClass]="sidebarOpen ? 'pi pi-times' : 'pi pi-bars'"></i>
+    </button>
+    <div class="brand-name">Admin Panel</div>
+</div>
+
+<!-- SIDEBAR OVERLAY -->
+<div class="sidebar-overlay" *ngIf="sidebarOpen" (click)="toggleSidebar()"></div>
+
+<!-- SIDEBAR -->
+<aside class="sidebar" [class.open]="sidebarOpen">
+    <div class="sidebar-header">
+        <i class="pi pi-shield"></i>
+        <span>Admin Panel</span>
+    </div>
+
+    <nav class="sidebar-menu">
+        <a routerLink="/dashboard" routerLinkActive="active" class="menu-item"
+            [routerLinkActiveOptions]="{ exact: true }" (click)="sidebarOpen = false">
+            <i class="pi pi-th-large"></i>
+            <span>Dashboard</span>
+        </a>
+        <a routerLink="/completed-consultations" routerLinkActive="active" class="menu-item"
+            [routerLinkActiveOptions]="{ exact: false }" (click)="sidebarOpen = false">
+            <i class="pi pi-check-circle"></i>
+            <span>Completed Consultations</span>
+        </a>
+        <a routerLink="/manage-doctors" routerLinkActive="active" class="menu-item"
+            [routerLinkActiveOptions]="{ exact: false }" (click)="sidebarOpen = false">
+            <i class="pi pi-users"></i>
+            <span>Doctors</span>
+        </a>
+        <a routerLink="/manage-departments" routerLinkActive="active" class="menu-item"
+            [routerLinkActiveOptions]="{ exact: false }" (click)="sidebarOpen = false">
+            <i class="pi pi-building"></i>
+            <span>Departments</span>
+        </a>
+        <a routerLink="/pharmacy-sales-revenue" routerLinkActive="active" class="menu-item"
+            [routerLinkActiveOptions]="{ exact: false }" (click)="sidebarOpen = false">
+            <i class="pi pi-shopping-cart"></i>
+            <span>Pharmacy Sales</span>
+        </a>
+    </nav>
+
+    <div class="sidebar-footer">
+        <button class="signout-btn" (click)="signOut()">
+            <i class="pi pi-sign-out"></i>
+            <span>Sign Out</span>
+        </button>
+    </div>
+</aside>

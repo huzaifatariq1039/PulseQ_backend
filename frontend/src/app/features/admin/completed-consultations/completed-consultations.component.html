@@ -1,0 +1,185 @@
+<p-toast></p-toast>
+
+<div class="layout">
+    <!-- SIDEBAR -->
+    <app-admin-sidebar></app-admin-sidebar>
+
+    <main class="main-content">
+        <div class="page-container">
+
+            <!-- HEADER -->
+            <div class="admin-header">
+                <h1>Completed Consultations</h1>
+                <p class="subtitle">View all finished patient consultations and duration insights</p>
+            </div>
+
+            <!-- METRICS -->
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <div class="metric-icon" style="background-color: #eff6ff;">
+                        <i class="pi pi-check-circle"></i>
+                    </div>
+                    <div class="metric-info">
+                        <div class="metric-label">Completed Today</div>
+                        <div class="metric-value">{{ completedToday }}</div>
+                        <div class="metric-note">Consultations</div>
+                    </div>
+                </div>
+
+                <div class="metric-card">
+                    <div class="metric-icon" style="background-color: #ecfdf5;">
+                        <i class="pi pi-clock"></i>
+                    </div>
+                    <div class="metric-info">
+                        <div class="metric-label">Average Consultation Time</div>
+                        <div class="metric-value">{{ averageDuration }} min</div>
+                        <div class="metric-note">Per patient</div>
+                    </div>
+                </div>
+
+                <div class="metric-card">
+                    <div class="metric-icon" style="background-color: #fdf4ff;">
+                        <i class="pi pi-calendar"></i>
+                    </div>
+                    <div class="metric-info">
+                        <div class="metric-label">Completed This Month</div>
+                        <div class="metric-value">{{ completedThisMonth }}</div>
+                        <div class="metric-note">Total consultations</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TABLE -->
+            <div class="table-card">
+                <div class="card-header">
+                    <h2>Consultation Records</h2>
+                    <p>{{ tokens.length }} completed consultation{{ tokens.length !== 1 ? 's' : '' }}</p>
+                </div>
+
+                <p-table [value]="tokens">
+                    <ng-template pTemplate="header">
+                        <tr>
+                            <th>TOKEN NUMBER</th>
+                            <th>MRN</th>
+                            <th>PATIENT NAME</th>
+                            <th>DOCTOR NAME</th>
+                            <th>DEPARTMENT</th>
+                            <th>START TIME</th>
+                            <th>END TIME</th>
+                            <th>DURATION</th>
+                            <th>STATUS</th>
+                            <th>ACTION</th>
+                        </tr>
+                    </ng-template>
+                    <ng-template pTemplate="body" let-token>
+                        <tr>
+                            <td>{{ token.tokenNumber }}</td>
+                            <td>{{ token.mrn || '-' }}</td>
+                            <td><span class="patient-name">{{ token.patientName }}</span></td>
+                            <td>{{ token.doctorName }}</td>
+                            <td>{{ token.department }}</td>
+                            <td>{{ token.consultationStartTime | date:'h:mm a' }}</td>
+                            <td>{{ token.consultationEndTime | date:'h:mm a' }}</td>
+                            <td><span class="duration-value">{{ getDuration(token) }} min</span></td>
+                            <td>
+                                <span class="status-badge status-completed">
+                                    <i class="pi pi-check-circle"></i>
+                                    Completed
+                                </span>
+                            </td>
+                            <td>
+                                <button pButton type="button" icon="pi pi-eye" label="View Details"
+                                    class="view-btn p-button-sm" (click)="openDetails(token)"></button>
+                            </td>
+                        </tr>
+                    </ng-template>
+                </p-table>
+            </div>
+
+            <!-- DETAILS DIALOG — Image 2 style -->
+            <p-dialog header="Consultation Details" [(visible)]="displayDialog" [modal]="true"
+                [style]="{ width: '560px' }" [closable]="true" [draggable]="false" [resizable]="false"
+                (onHide)="closeDialog()">
+
+                <ng-container *ngIf="selectedToken">
+
+                    <!-- PATIENT INFORMATION SECTION -->
+                    <div class="dialog-section">
+                        <div class="dialog-section-header">
+                            <i class="pi pi-user section-icon"></i>
+                            <span class="dialog-section-title">Patient Information</span>
+                        </div>
+                        <div class="dialog-section-body">
+                            <div class="info-grid">
+                                <div class="info-field">
+                                    <div class="field-label">PATIENT NAME</div>
+                                    <div class="field-value">{{ selectedToken.patientName }}</div>
+                                </div>
+                                <div class="info-field">
+                                    <div class="field-label">MRN</div>
+                                    <div class="field-value">{{ selectedToken.mrn || '-' }}</div>
+                                </div>
+                                <div class="info-field full-width" *ngIf="selectedToken.cnic">
+                                    <div class="field-label">CNIC</div>
+                                    <div class="field-value">{{ selectedToken.cnic }}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- CONSULTATION DETAILS SECTION -->
+                    <div class="dialog-section">
+                        <div class="dialog-section-header">
+                            <i class="pi pi-sync section-icon"></i>
+                            <span class="dialog-section-title">Consultation Details</span>
+                        </div>
+                        <div class="dialog-section-body">
+                            <div class="info-grid">
+                                <div class="info-field">
+                                    <div class="field-label">TOKEN NUMBER</div>
+                                    <div class="field-value">{{ selectedToken.tokenNumber }}</div>
+                                </div>
+                                <div class="info-field">
+                                    <div class="field-label">DEPARTMENT</div>
+                                    <div class="field-value">{{ selectedToken.department || '-' }}</div>
+                                </div>
+                                <div class="info-field">
+                                    <div class="field-label">DOCTOR NAME</div>
+                                    <div class="field-value">{{ selectedToken.doctorName }}</div>
+                                </div>
+                                <div class="info-field">
+                                    <div class="field-label">CREATED TIME</div>
+                                    <div class="field-value">{{ selectedToken.createdAt | date:'MMM d, y - h:mm a' }}
+                                    </div>
+                                </div>
+                                <div class="info-field">
+                                    <div class="field-label">START TIME</div>
+                                    <div class="field-value">{{ selectedToken.consultationStartTime | date:'h:mm a' }}
+                                    </div>
+                                </div>
+                                <div class="info-field">
+                                    <div class="field-label">END TIME</div>
+                                    <div class="field-value">{{ selectedToken.consultationEndTime | date:'h:mm a' }}
+                                    </div>
+                                </div>
+                                <div class="info-field full-width">
+                                    <div class="field-label">TOTAL DURATION</div>
+                                    <div class="field-value duration-blue large">{{ getDuration(selectedToken) }}
+                                        minutes</div>
+                                </div>
+
+                            </div>
+                        </div>
+                    </div>
+
+                </ng-container>
+
+                <ng-template pTemplate="footer">
+                    <button pButton type="button" label="Close" (click)="closeDialog()"
+                        class="dialog-close-btn"></button>
+                </ng-template>
+            </p-dialog>
+
+        </div>
+    </main>
+</div>

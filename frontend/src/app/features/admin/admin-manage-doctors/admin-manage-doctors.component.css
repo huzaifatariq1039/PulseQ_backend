@@ -1,0 +1,902 @@
+/* ─── LAYOUT ─────────────────────────────────────────── */
+.manage-doctors-layout {
+    display: flex;
+    min-height: 100vh;
+    background: #f3f4f6;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.manage-doctors-main {
+    flex: 1;
+    margin-left: 240px;
+    padding: 2rem 2rem 3rem;
+    max-width: calc(100% - 240px);
+    overflow-y: auto;
+}
+
+/* ─── PAGE HEADER ────────────────────────────────────── */
+.page-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1.75rem;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.page-title {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: #111827;
+    margin: 0 0 0.2rem;
+}
+
+.page-subtitle {
+    font-size: 0.875rem;
+    color: #6b7280;
+    margin: 0;
+}
+
+/* ─── ADD DOCTOR BUTTON ──────────────────────────────── */
+.add-doctor-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    background: #2563eb;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 0 1.25rem;
+    height: 40px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s, box-shadow 0.2s;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.add-doctor-btn:hover {
+    background: #1d4ed8;
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+}
+
+.add-doctor-btn:active {
+    background: #1e40af;
+}
+
+.add-doctor-btn .pi {
+    font-size: 0.8rem;
+}
+
+/* ─── SEARCH & FILTER BAR ────────────────────────────── */
+.search-filter-bar {
+    display: flex;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.search-box {
+    position: relative;
+    flex: 1;
+    min-width: 200px;
+}
+
+.search-icon {
+    position: absolute;
+    left: 0.9rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #9ca3af;
+    font-size: 0.875rem;
+    z-index: 1;
+}
+
+.search-input {
+    width: 100%;
+    padding: 0.65rem 0.9rem 0.65rem 2.5rem !important;
+    font-size: 0.875rem;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    background: #fff;
+    color: #111827;
+    height: 40px;
+    outline: none;
+    transition: border-color 0.15s;
+    box-sizing: border-box;
+}
+
+.search-input:focus {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.08);
+}
+
+.search-input::placeholder {
+    color: #9ca3af;
+}
+
+.dept-dropdown ::ng-deep .p-dropdown {
+    height: 40px !important;
+    border: 1px solid #e5e7eb !important;
+    border-radius: 8px !important;
+    min-width: 200px;
+}
+
+.dept-dropdown ::ng-deep .p-dropdown-label {
+    padding: 0.65rem 0.9rem !important;
+    font-size: 0.875rem !important;
+    line-height: 1.4 !important;
+}
+
+.dept-dropdown ::ng-deep .p-dropdown:not(.p-disabled):hover {
+    border-color: #3b82f6 !important;
+}
+
+/* ─── TABLE CARD ─────────────────────────────────────── */
+.table-card {
+    background: #fff;
+    border-radius: 12px;
+    border: 1px solid #e5e7eb;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+    overflow: hidden;
+}
+
+.table-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1.1rem 1.5rem;
+    border-bottom: 1px solid #f3f4f6;
+}
+
+.table-card-title {
+    font-size: 0.975rem;
+    font-weight: 600;
+    color: #111827;
+}
+
+.table-card-count {
+    font-size: 0.8rem;
+    color: #6b7280;
+    background: #f3f4f6;
+    padding: 0.2rem 0.65rem;
+    border-radius: 20px;
+    font-weight: 500;
+}
+
+/* ─── TABLE ──────────────────────────────────────────── */
+::ng-deep .manage-doctors-table .p-datatable-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+::ng-deep .manage-doctors-table .p-datatable-table {
+    width: 100%;
+    min-width: 700px;
+}
+
+::ng-deep .manage-doctors-table .p-datatable-thead>tr>th {
+    background: #f9fafb !important;
+    padding: 0.7rem 1.25rem !important;
+    font-weight: 600 !important;
+    font-size: 0.72rem !important;
+    color: #6b7280 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.5px !important;
+    border-bottom: 1px solid #e5e7eb !important;
+    border-top: none !important;
+    white-space: nowrap !important;
+}
+
+::ng-deep .manage-doctors-table .p-datatable-tbody>tr>td {
+    padding: 0.85rem 1.25rem !important;
+    border-bottom: 1px solid #f3f4f6 !important;
+    color: #374151 !important;
+    font-size: 0.875rem !important;
+    vertical-align: middle !important;
+}
+
+::ng-deep .manage-doctors-table .p-datatable-tbody>tr:last-child>td {
+    border-bottom: none !important;
+}
+
+::ng-deep .manage-doctors-table .p-datatable-tbody>tr:hover>td {
+    background: #f9fafb !important;
+}
+
+::ng-deep .manage-doctors-table .p-paginator {
+    padding: 0.65rem 1.25rem !important;
+    border-top: 1px solid #f3f4f6 !important;
+    background: #fff !important;
+    font-size: 0.8rem !important;
+}
+
+::ng-deep .manage-doctors-table .p-paginator .p-paginator-element {
+    min-width: 2rem !important;
+    height: 2rem !important;
+    font-size: 0.8rem !important;
+    border-radius: 6px !important;
+}
+
+::ng-deep .manage-doctors-table .p-paginator .p-highlight {
+    background: #111827 !important;
+    color: #fff !important;
+}
+
+/* ─── CELL STYLES ────────────────────────────────────── */
+.name-cell {
+    font-weight: 600 !important;
+    color: #111827 !important;
+}
+
+/* ─── STATUS BADGES ──────────────────────────────────── */
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.28rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.status-available {
+    background: #dcfce7;
+    color: #166534;
+    border: 1px solid #bbf7d0;
+}
+
+.status-offline {
+    background: #f3f4f6;
+    color: #6b7280;
+    border: 1px solid #e5e7eb;
+}
+
+.status-on-leave {
+    background: #fff7ed;
+    color: #c2410c;
+    border: 1px solid #fed7aa;
+}
+
+/* ─── ACTION BUTTONS ─────────────────────────────────── */
+.action-buttons {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.action-btn {
+    width: 32px;
+    height: 32px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    transition: background 0.15s;
+    font-size: 0.875rem;
+}
+
+.action-edit {
+    color: #10b981;
+}
+
+.action-edit:hover {
+    background: rgba(16, 185, 129, 0.1);
+}
+
+.action-delete {
+    color: #ef4444;
+}
+
+.action-delete:hover {
+    background: rgba(239, 68, 68, 0.1);
+}
+
+.action-view {
+    color: #3b82f6;
+}
+
+.action-view:hover {
+    background: rgba(59, 130, 246, 0.1);
+}
+
+.action-queue {
+    color: #8b5cf6;
+}
+
+.action-queue:hover {
+    background: rgba(139, 92, 246, 0.1);
+}
+
+/* ─── EMPTY ──────────────────────────────────────────── */
+.empty-message {
+    text-align: center !important;
+    padding: 3rem !important;
+    color: #9ca3af !important;
+    font-size: 0.875rem !important;
+}
+
+::ng-deep .manage-doctors-table .p-datatable-emptymessage>td {
+    text-align: center !important;
+}
+
+/* ─── DIALOG SHARED ──────────────────────────────────── */
+::ng-deep .doctor-edit-dialog .p-dialog-header,
+::ng-deep .doctor-add-dialog .p-dialog-header {
+    padding: 1.25rem 1.5rem 1rem !important;
+    border-bottom: 1px solid #f3f4f6 !important;
+}
+
+::ng-deep .doctor-edit-dialog .p-dialog-header .p-dialog-title,
+::ng-deep .doctor-add-dialog .p-dialog-header .p-dialog-title {
+    font-size: 1rem !important;
+    font-weight: 600 !important;
+    color: #111827 !important;
+}
+
+::ng-deep .doctor-edit-dialog .p-dialog-content,
+::ng-deep .doctor-add-dialog .p-dialog-content {
+    padding: 1.25rem 1.5rem !important;
+}
+
+::ng-deep .doctor-edit-dialog .p-dialog-footer,
+::ng-deep .doctor-add-dialog .p-dialog-footer {
+    padding: 1rem 1.5rem !important;
+    border-top: 1px solid #f3f4f6 !important;
+    display: flex !important;
+    justify-content: flex-end !important;
+    gap: 0.5rem !important;
+}
+
+.dialog-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1.1rem;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+}
+
+.form-group label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #374151;
+}
+
+.form-group input[pInputText] {
+    width: 100% !important;
+    height: 40px !important;
+    padding: 0.65rem 0.9rem !important;
+    font-size: 0.875rem !important;
+    border: 1px solid #d1d5db !important;
+    border-radius: 6px !important;
+}
+
+.form-group input[pInputText]:focus {
+    border-color: #3b82f6 !important;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.08) !important;
+}
+
+.form-group p-dropdown ::ng-deep .p-dropdown {
+    width: 100% !important;
+    height: 40px !important;
+    border-radius: 6px !important;
+}
+
+.form-group p-dropdown ::ng-deep .p-dropdown-label {
+    padding: 0.65rem 0.9rem !important;
+    font-size: 0.875rem !important;
+}
+
+.form-group-checkbox {
+    flex-direction: row !important;
+    align-items: center !important;
+    gap: 0.6rem !important;
+}
+
+.checkbox-label {
+    font-size: 0.875rem !important;
+    font-weight: 500 !important;
+    color: #374151 !important;
+    cursor: pointer;
+    margin: 0 !important;
+}
+
+/* ─── RADIO GROUP ────────────────────────────────────── */
+.radio-group {
+    display: flex;
+    gap: 1.1rem;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-top: 0.1rem;
+}
+
+.radio-option {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    cursor: pointer;
+    font-size: 0.875rem;
+    color: #374151;
+    font-weight: 500;
+    user-select: none;
+}
+
+.radio-option input[type="radio"] {
+    accent-color: #3b82f6;
+    width: 15px;
+    height: 15px;
+    cursor: pointer;
+}
+
+.radio-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+    flex-shrink: 0;
+}
+
+.available-dot {
+    background: #22c55e;
+}
+
+.unavailable-dot {
+    background: #9ca3af;
+}
+
+.leave-dot {
+    background: #f97316;
+}
+
+/* ─── DIALOG BUTTONS ─────────────────────────────────── */
+::ng-deep .doctor-edit-dialog .dialog-cancel-btn.p-button,
+::ng-deep .doctor-add-dialog .dialog-cancel-btn.p-button {
+    background: transparent !important;
+    color: #6b7280 !important;
+    border: 1px solid #e5e7eb !important;
+    border-radius: 6px !important;
+    height: 38px !important;
+    padding: 0 1rem !important;
+    font-size: 0.875rem !important;
+    font-weight: 500 !important;
+}
+
+::ng-deep .doctor-edit-dialog .dialog-cancel-btn.p-button:hover,
+::ng-deep .doctor-add-dialog .dialog-cancel-btn.p-button:hover {
+    background: #f9fafb !important;
+    border-color: #d1d5db !important;
+}
+
+::ng-deep .doctor-edit-dialog .dialog-save-btn.p-button,
+::ng-deep .doctor-add-dialog .dialog-save-btn.p-button {
+    background: #10b981 !important;
+    color: #fff !important;
+    border: none !important;
+    border-radius: 6px !important;
+    height: 38px !important;
+    padding: 0 1.25rem !important;
+    font-size: 0.875rem !important;
+    font-weight: 500 !important;
+}
+
+::ng-deep .doctor-edit-dialog .dialog-save-btn.p-button:hover,
+::ng-deep .doctor-add-dialog .dialog-save-btn.p-button:hover {
+    background: #059669 !important;
+}
+
+/* ─── DETAILS & QUEUE DIALOGS ────────────────────────── */
+.dialog-content {
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+    padding: 0.5rem 0;
+}
+
+.detail-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    border-bottom: 1px solid #f3f4f6;
+    padding-bottom: 0.5rem;
+    font-size: 0.9rem;
+}
+
+.detail-row:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+.detail-row strong {
+    color: #4b5563;
+    width: 40%;
+    font-weight: 600;
+}
+
+.detail-row span {
+    color: #111827;
+    width: 60%;
+    text-align: right;
+}
+
+::ng-deep .doctor-view-dialog .p-dialog-header,
+::ng-deep .doctor-queue-dialog .p-dialog-header {
+    padding: 1.25rem 1.5rem 1rem !important;
+    border-bottom: 1px solid #f3f4f6 !important;
+}
+
+::ng-deep .doctor-view-dialog .p-dialog-content,
+::ng-deep .doctor-queue-dialog .p-dialog-content {
+    padding: 1.25rem 1.5rem !important;
+}
+
+::ng-deep .doctor-view-dialog .p-dialog-footer,
+::ng-deep .doctor-queue-dialog .p-dialog-footer {
+    padding: 1rem 1.5rem !important;
+    border-top: 1px solid #f3f4f6 !important;
+    display: flex !important;
+    justify-content: flex-end !important;
+}
+
+/* ─── RESPONSIVE ─────────────────────────────────────── */
+@media (max-width: 1024px) {
+    .manage-doctors-main {
+        margin-left: 200px;
+        padding: 1.5rem 1.5rem 2rem;
+        max-width: calc(100% - 200px);
+    }
+
+    .page-title {
+        font-size: 1.5rem;
+    }
+
+    .search-filter-bar {
+        gap: 0.6rem;
+        margin-bottom: 1.25rem;
+    }
+
+    .search-box {
+        min-width: 150px;
+    }
+
+    ::ng-deep .manage-doctors-table .p-datatable-table {
+        min-width: 600px;
+    }
+}
+
+@media (max-width: 900px) {
+    .manage-doctors-main {
+        margin-left: 0;
+        max-width: 100%;
+        padding: 1.5rem 1.25rem 2rem;
+        padding-top: calc(56px + 1.5rem);
+    }
+}
+
+@media (max-width: 768px) {
+    .manage-doctors-layout {
+        flex-direction: column;
+    }
+
+    .manage-doctors-main {
+        margin-left: 0;
+        padding: 1rem;
+        padding-top: calc(56px + 1rem);
+        max-width: 100%;
+    }
+
+    .page-header {
+        flex-direction: column;
+        align-items: flex-start;
+        margin-bottom: 1.25rem;
+    }
+
+    .add-doctor-btn {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .page-title {
+        font-size: 1.35rem;
+    }
+
+    .page-subtitle {
+        font-size: 0.8rem;
+    }
+
+    .search-filter-bar {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+    }
+
+    .search-box {
+        width: 100%;
+        min-width: unset;
+    }
+
+    .search-input {
+        height: 36px;
+        padding: 0.55rem 0.8rem 0.55rem 2.25rem !important;
+        font-size: 0.8rem;
+    }
+
+    .dept-dropdown {
+        width: 100%;
+    }
+
+    .dept-dropdown ::ng-deep .p-dropdown {
+        width: 100% !important;
+        height: 36px !important;
+        min-width: unset !important;
+    }
+
+    .dept-dropdown ::ng-deep .p-dropdown-label {
+        padding: 0.55rem 0.8rem !important;
+        font-size: 0.8rem !important;
+    }
+
+    .table-card {
+        border-radius: 8px;
+    }
+
+    .table-card-header {
+        padding: 0.9rem 1rem;
+    }
+
+    .table-card-title {
+        font-size: 0.9rem;
+    }
+
+    ::ng-deep .manage-doctors-table .p-datatable-table {
+        min-width: 500px;
+        font-size: 0.8rem;
+    }
+
+    ::ng-deep .manage-doctors-table .p-datatable-thead>tr>th {
+        padding: 0.6rem 0.9rem !important;
+        font-size: 0.65rem !important;
+    }
+
+    ::ng-deep .manage-doctors-table .p-datatable-tbody>tr>td {
+        padding: 0.7rem 0.9rem !important;
+        font-size: 0.8rem !important;
+    }
+
+    .action-btn {
+        width: 28px;
+        height: 28px;
+        font-size: 0.8rem;
+    }
+
+    .radio-group {
+        gap: 0.75rem;
+    }
+
+    ::ng-deep .doctor-edit-dialog .p-dialog-header,
+    ::ng-deep .doctor-add-dialog .p-dialog-header {
+        padding: 1rem 1.25rem 0.85rem !important;
+    }
+
+    ::ng-deep .doctor-edit-dialog .p-dialog-content,
+    ::ng-deep .doctor-add-dialog .p-dialog-content {
+        padding: 1rem 1.25rem !important;
+    }
+
+    ::ng-deep .doctor-edit-dialog .p-dialog-footer,
+    ::ng-deep .doctor-add-dialog .p-dialog-footer {
+        padding: 0.85rem 1.25rem !important;
+    }
+
+    .form-group input[pInputText] {
+        height: 36px !important;
+        padding: 0.55rem 0.8rem !important;
+        font-size: 0.8rem !important;
+    }
+
+    .dialog-form {
+        gap: 0.9rem;
+    }
+
+    .form-group {
+        gap: 0.35rem;
+    }
+
+    .form-group label {
+        font-size: 0.8rem;
+    }
+
+    .detail-row {
+        padding-bottom: 0.4rem;
+        font-size: 0.85rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .manage-doctors-main {
+        padding: 0.75rem 0.75rem 1.5rem;
+    }
+
+    .page-header {
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+    }
+
+    .page-title {
+        font-size: 1.15rem;
+    }
+
+    .page-subtitle {
+        font-size: 0.75rem;
+    }
+
+    .add-doctor-btn {
+        height: 36px;
+        font-size: 0.8rem;
+        border-radius: 6px;
+    }
+
+    .search-filter-bar {
+        gap: 0.4rem;
+        margin-bottom: 0.75rem;
+    }
+
+    .search-input {
+        height: 32px;
+        padding: 0.5rem 0.7rem 0.5rem 2rem !important;
+        font-size: 0.75rem;
+    }
+
+    .search-icon {
+        left: 0.7rem;
+        font-size: 0.8rem;
+    }
+
+    .dept-dropdown ::ng-deep .p-dropdown {
+        height: 32px !important;
+    }
+
+    .dept-dropdown ::ng-deep .p-dropdown-label {
+        padding: 0.5rem 0.7rem !important;
+        font-size: 0.75rem !important;
+    }
+
+    .table-card-header {
+        padding: 0.8rem 0.85rem;
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .table-card-title {
+        font-size: 0.85rem;
+        margin-bottom: 0.4rem;
+    }
+
+    .table-card-count {
+        font-size: 0.7rem;
+        padding: 0.15rem 0.5rem;
+    }
+
+    ::ng-deep .manage-doctors-table .p-datatable-table {
+        min-width: 400px;
+        font-size: 0.75rem;
+    }
+
+    ::ng-deep .manage-doctors-table .p-datatable-thead>tr>th {
+        padding: 0.5rem 0.6rem !important;
+        font-size: 0.6rem !important;
+    }
+
+    ::ng-deep .manage-doctors-table .p-datatable-tbody>tr>td {
+        padding: 0.6rem 0.6rem !important;
+        font-size: 0.75rem !important;
+    }
+
+    ::ng-deep .manage-doctors-table .p-paginator {
+        padding: 0.5rem 0.8rem !important;
+        font-size: 0.7rem !important;
+    }
+
+    ::ng-deep .manage-doctors-table .p-paginator .p-paginator-element {
+        min-width: 1.75rem !important;
+        height: 1.75rem !important;
+        font-size: 0.7rem !important;
+    }
+
+    .action-buttons {
+        gap: 0.25rem;
+    }
+
+    .action-btn {
+        width: 24px;
+        height: 24px;
+        font-size: 0.7rem;
+    }
+
+    .status-badge {
+        padding: 0.2rem 0.5rem;
+        font-size: 0.7rem;
+    }
+
+    ::ng-deep .doctor-edit-dialog .p-dialog-header,
+    ::ng-deep .doctor-add-dialog .p-dialog-header {
+        padding: 0.9rem 1rem 0.75rem !important;
+    }
+
+    ::ng-deep .doctor-edit-dialog .p-dialog-content,
+    ::ng-deep .doctor-add-dialog .p-dialog-content {
+        padding: 0.9rem 1rem !important;
+    }
+
+    ::ng-deep .doctor-edit-dialog .p-dialog-footer,
+    ::ng-deep .doctor-add-dialog .p-dialog-footer {
+        padding: 0.75rem 1rem !important;
+        gap: 0.4rem !important;
+    }
+
+    .form-group input[pInputText] {
+        height: 32px !important;
+        padding: 0.5rem 0.7rem !important;
+        font-size: 0.75rem !important;
+    }
+
+    .form-group label {
+        font-size: 0.75rem;
+    }
+
+    .dialog-form {
+        gap: 0.75rem;
+    }
+
+    .form-group {
+        gap: 0.3rem;
+    }
+
+    .radio-group {
+        gap: 0.75rem;
+    }
+
+    .radio-option {
+        font-size: 0.75rem;
+    }
+
+    .radio-option input[type="radio"] {
+        width: 13px;
+        height: 13px;
+    }
+
+    .detail-row {
+        padding-bottom: 0.35rem;
+        font-size: 0.8rem;
+    }
+
+    .detail-row strong {
+        width: 45%;
+    }
+
+    .detail-row span {
+        width: 55%;
+    }
+
+    .empty-message {
+        padding: 2rem 1rem !important;
+        font-size: 0.8rem !important;
+    }
+
+    ::ng-deep .doctor-edit-dialog,
+    ::ng-deep .doctor-add-dialog,
+    ::ng-deep .doctor-view-dialog,
+    ::ng-deep .doctor-queue-dialog {
+        max-width: calc(100vw - 1.5rem) !important;
+    }
+}

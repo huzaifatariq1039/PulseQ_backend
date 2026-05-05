@@ -1,0 +1,150 @@
+<div class="page">
+    <app-patient-header></app-patient-header>
+
+    <main class="container">
+        <div class="intro">
+            <h1>Live Status Tracking</h1>
+            <p class="subtitle">Real-time updates for your token.</p>
+        </div>
+
+        <!-- No token -->
+        <div class="alert-wrapper" *ngIf="!hasToken">
+            <div class="alert alert-warning">
+                <i class="pi pi-exclamation-triangle"></i>
+                <span>You don't have an active token to track.</span>
+            </div>
+        </div>
+
+        <!-- Tokens section -->
+        <div *ngIf="hasToken">
+
+            <!-- Tabs — only when more than one token -->
+            <div class="token-tabs" *ngIf="tokenStatuses.length > 1">
+                <button *ngFor="let ts of tokenStatuses; let i = index" class="tab-btn"
+                    [class.active]="selectedIndex === i" (click)="selectTab(i)">
+                    {{ getTokenLabel(ts) }}
+                </button>
+            </div>
+
+            <!-- Card -->
+            <div class="tracking-wrapper" *ngIf="selected">
+                <p-card class="tracking-card">
+
+                    <!-- Loading skeleton -->
+                    <div class="skeleton-wrapper" *ngIf="selected.loading">
+                        <div class="skeleton-meta">
+                            <div class="skeleton-avatar"></div>
+                            <div class="skeleton-meta-lines">
+                                <div class="skeleton-line wide"></div>
+                                <div class="skeleton-line medium"></div>
+                                <div class="skeleton-line short"></div>
+                            </div>
+                        </div>
+                        <div class="skeleton-circle"></div>
+                        <div class="skeleton-line wide" style="align-self:center"></div>
+                        <div class="skeleton-line medium"></div>
+                        <div class="skeleton-line medium"></div>
+                        <div class="skeleton-line medium"></div>
+                        <div class="skeleton-line short"></div>
+                    </div>
+
+                    <!-- Content -->
+                    <ng-container *ngIf="!selected.loading">
+
+                        <!-- Doctor / Patient info banner -->
+                        <div class="info-banner">
+                            <div class="doctor-avatar">
+                                {{ getDoctorInitials(selected.token.doctor_name) }}
+                            </div>
+                            <div class="info-text">
+                                <span class="doctor-name">{{ selected.token.doctor_name ?? 'Doctor' }}</span>
+                                <span class="dept-name">{{ selected.token.department ??
+                                    selected.token.doctor_specialization ?? '—' }}</span>
+                                <span class="patient-chip">
+                                    <i class="pi pi-user"></i>
+                                    {{ selected.token.patient_name ?? 'Patient' }}
+                                </span>
+                            </div>
+                            <div class="token-badge">
+                                <span class="token-badge-label">Token</span>
+                                <span class="token-badge-value">{{ selected.token.display_code ??
+                                    selected.token.token_number }}</span>
+                            </div>
+                        </div>
+
+                        <!-- Divider -->
+                        <div class="section-divider"></div>
+
+                        <!-- Circular timer -->
+                        <div class="timer-section">
+                            <div class="circular-timer">
+                                <div class="status-indicator" [class.unavailable]="selected.doctorUnavailable"></div>
+                                <div class="timer-value">{{ selected.estimatedWaitMinutes }}</div>
+                                <div class="timer-label">min</div>
+                            </div>
+                        </div>
+
+                        <!-- Status alerts -->
+                        <div class="status-alerts" *ngIf="selected.isFutureAppointment || selected.doctorUnavailable">
+                            <div class="status-badge future" *ngIf="selected.isFutureAppointment">
+                                <i class="pi pi-calendar"></i>
+                                <span>Future Appointment</span>
+                            </div>
+                            <div class="status-badge unavailable" *ngIf="selected.doctorUnavailable">
+                                <i class="pi pi-exclamation-circle"></i>
+                                <span>Doctor currently unavailable</span>
+                            </div>
+                        </div>
+
+                        <!-- Queue heading -->
+                        <div class="queue-heading">
+                            <span class="queue-title-text">You are in queue</span>
+                        </div>
+
+                        <!-- Queue rows -->
+                        <div class="queue-rows">
+                            <div class="queue-row">
+                                <span class="row-label">Current Token Serving</span>
+                                <span class="row-value">{{ selected.currentServingToken }}</span>
+                            </div>
+                            <div class="queue-row">
+                                <span class="row-label">Your Token</span>
+                                <span class="row-value highlight">{{ selected.token.token_number }}</span>
+                            </div>
+                            <div class="queue-row">
+                                <span class="row-label">Total in Queue</span>
+                                <span class="row-value">{{ selected.totalQueue }}</span>
+                            </div>
+                            <div class="queue-row last">
+                                <span class="row-label">People Ahead</span>
+                                <span class="row-value">{{ selected.peopleAhead }}</span>
+                            </div>
+                        </div>
+
+                        <!-- Progress -->
+                        <div class="progress-section">
+                            <div class="progress-bar-container">
+                                <div class="progress-bar" [style.width.%]="selected.progressPercentage"></div>
+                            </div>
+                            <div class="progress-info">
+                                <span class="position">Position {{ selected.queuePosition }}</span>
+                                <span class="expected-time">
+                                    <i class="pi pi-clock"></i> Expected {{ selected.expectedTime }}
+                                </span>
+                            </div>
+                        </div>
+
+                    </ng-container>
+                </p-card>
+            </div>
+
+            <!-- Dot indicators -->
+            <div class="dot-indicators" *ngIf="tokenStatuses.length > 1">
+                <span *ngFor="let ts of tokenStatuses; let i = index" class="dot" [class.active]="selectedIndex === i"
+                    (click)="selectTab(i)">
+                </span>
+            </div>
+
+        </div>
+    </main>
+</div>

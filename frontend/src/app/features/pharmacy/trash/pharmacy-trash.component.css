@@ -1,0 +1,517 @@
+/* ── RESET ── */
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+/* ── LAYOUT ── */
+.layout {
+    display: flex;
+    min-height: 100vh;
+    background: #f3f4f6;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.main-content {
+    flex: 1;
+    min-width: 0;
+    margin-left: 240px;
+    padding: 28px 28px 24px;
+    overflow-x: hidden;
+    transition: margin-left 0.28s ease;
+}
+
+/* ── PAGE HEADER ── */
+.page-header {
+    margin-bottom: 4px;
+}
+
+.page-header h2 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #111827;
+}
+
+.subtitle {
+    color: #6b7280;
+    font-size: 0.875rem;
+    margin-top: 4px;
+}
+
+/* ── SEARCH CARD ── */
+.search-card {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    background: #fff;
+    padding: 12px 14px;
+    border-radius: 12px;
+    border: 1px solid #e5e7eb;
+    margin-top: 16px;
+    margin-bottom: 18px;
+    flex-wrap: wrap;
+}
+
+.search-wrapper {
+    flex: 1;
+    min-width: 160px;
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.search-wrapper i {
+    position: absolute;
+    left: 10px;
+    color: #9ca3af;
+    font-size: 14px;
+    pointer-events: none;
+}
+
+.search-input {
+    width: 100%;
+    padding: 9px 12px 9px 32px;
+    border-radius: 8px;
+    border: 1px solid #e5e7eb;
+    font-size: 0.875rem;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+.search-input:focus {
+    border-color: #6366f1;
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+:host ::ng-deep .sort-dropdown {
+    width: 190px !important;
+}
+
+:host ::ng-deep .sort-dropdown.p-dropdown {
+    border-radius: 8px !important;
+    border: 1px solid #e5e7eb !important;
+    font-size: 0.875rem !important;
+}
+
+/* ── BULK ACTION TOOLBAR ── */
+.bulk-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    background: #fff;
+    border: 1px solid #fca5a5;
+    border-radius: 10px;
+    padding: 10px 16px;
+    margin-bottom: 14px;
+
+    /* hidden by default */
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-6px);
+    max-height: 0;
+    overflow: hidden;
+    padding-top: 0;
+    padding-bottom: 0;
+    border-width: 0;
+    transition: opacity 0.22s ease, transform 0.22s ease, max-height 0.25s ease,
+        padding 0.22s ease, border-width 0.22s ease;
+}
+
+.bulk-toolbar--visible {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+    max-height: 80px;
+    padding: 10px 16px;
+    border-width: 1px;
+}
+
+.bulk-toolbar__info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.875rem;
+    color: #374151;
+}
+
+.bulk-toolbar__info i {
+    color: #ef4444;
+    font-size: 1rem;
+}
+
+.bulk-toolbar__actions {
+    display: flex;
+    gap: 8px;
+}
+
+.bulk-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 14px;
+    border-radius: 7px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    border: none;
+    cursor: pointer;
+    transition: background 0.15s, opacity 0.15s;
+}
+
+.bulk-btn--clear {
+    background: #f3f4f6;
+    color: #6b7280;
+}
+
+.bulk-btn--clear:hover {
+    background: #e5e7eb;
+}
+
+.bulk-btn--delete {
+    background: #ef4444;
+    color: #fff;
+}
+
+.bulk-btn--delete:hover:not(:disabled) {
+    background: #dc2626;
+}
+
+.bulk-btn--delete:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+}
+
+/* ── CHECKBOX COLUMN ── */
+.col-check {
+    width: 44px;
+    text-align: center;
+    padding-left: 12px !important;
+    padding-right: 4px !important;
+}
+
+.row-checkbox {
+    width: 16px;
+    height: 16px;
+    accent-color: #ef4444;
+    cursor: pointer;
+    vertical-align: middle;
+}
+
+/* ── SELECTED ROW HIGHLIGHT ── */
+.inventory-table tbody tr.row--selected td {
+    background: #fff5f5 !important;
+}
+
+.inventory-table tbody tr.row--selected td.sticky-col-right {
+    background: #fff5f5 !important;
+}
+
+/* ── INVENTORY CARD ── */
+.inventory-card {
+    background: #fff;
+    border-radius: 12px;
+    border: 1px solid #e5e7eb;
+    overflow: hidden;
+}
+
+.table-header {
+    padding: 16px 20px 10px;
+}
+
+.table-header h3 {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #111827;
+}
+
+.table-subtitle {
+    font-size: 0.78rem;
+    color: #9ca3af;
+    margin-top: 2px;
+    display: block;
+}
+
+/* ── HORIZONTAL SCROLL WRAPPER ── */
+.table-scroll-outer {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.table-scroll-outer::-webkit-scrollbar {
+    height: 6px;
+}
+
+.table-scroll-outer::-webkit-scrollbar-track {
+    background: #f1f5f9;
+}
+
+.table-scroll-outer::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 3px;
+}
+
+.table-scroll-outer::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+}
+
+/* ── TABLE ── */
+.inventory-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 1440px;
+    table-layout: auto;
+}
+
+.inventory-table th {
+    text-align: left;
+    padding: 10px 16px;
+    font-size: 11px;
+    color: #9ca3af;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    border-top: 1px solid #f1f1f1;
+    border-bottom: 1px solid #f1f1f1;
+    white-space: nowrap;
+    background: #fafafa;
+}
+
+.inventory-table td {
+    padding: 13px 16px;
+    font-size: 13.5px;
+    color: #374151;
+    border-bottom: 1px solid #f3f4f6;
+    white-space: nowrap;
+}
+
+.inventory-table td.bold {
+    font-weight: 700;
+    color: #111827;
+}
+
+.inventory-table tr:last-child td {
+    border-bottom: none;
+}
+
+.inventory-table tbody tr:hover td {
+    background: #f9fafb;
+}
+
+.inventory-table tbody tr.row--selected:hover td {
+    background: #fee2e2 !important;
+}
+
+.inventory-table tbody tr.row--selected:hover td.sticky-col-right {
+    background: #fee2e2 !important;
+}
+
+/* ── STICKY ACTIONS COLUMN ── */
+.sticky-col-right {
+    position: sticky;
+    right: 0;
+    z-index: 3;
+    background: #fafafa;
+    border-left: 1px solid #e5e7eb;
+    box-shadow: -3px 0 8px rgba(0, 0, 0, 0.08);
+    min-width: 90px;
+    text-align: center;
+}
+
+.inventory-table tbody td.sticky-col-right {
+    background: #ffffff;
+}
+
+.inventory-table tbody tr:hover td.sticky-col-right {
+    background: #f9fafb;
+}
+
+/* ── ACTION BUTTONS ── */
+.action-btn {
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    margin: 0 3px;
+    padding: 6px;
+    border-radius: 6px;
+    transition: background 0.15s;
+    line-height: 1;
+    vertical-align: middle;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.action-btn i {
+    font-size: 15px;
+}
+
+.action-btn.restore i {
+    color: #10b981;
+}
+
+.action-btn.delete i {
+    color: #ef4444;
+}
+
+.action-btn.restore:hover {
+    background: #ecfdf5;
+}
+
+.action-btn.delete:hover {
+    background: #fef2f2;
+}
+
+/* ── SCROLL HINT ── */
+.scroll-hint {
+    display: block;
+    text-align: center;
+    color: #bdbdbd;
+    font-size: 0.85rem;
+    padding: 6px 16px 10px;
+}
+
+/* ── EMPTY STATE ── */
+.empty-cell {
+    text-align: center;
+    padding: 48px 0;
+    vertical-align: middle;
+}
+
+.empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+.empty-icon {
+    font-size: 1.8rem;
+    color: #d1d5db;
+    margin-bottom: 10px;
+}
+
+.empty-title {
+    font-weight: 600;
+    color: #374151;
+    font-size: 1rem;
+    margin-bottom: 4px;
+}
+
+.empty-text {
+    color: #9ca3af;
+    font-size: 0.82rem;
+}
+
+/* ── RESPONSIVE ── */
+@media (max-width: 900px) {
+    .main-content {
+        margin-left: 0;
+        padding: 72px 16px 20px;
+    }
+
+    :host ::ng-deep .sort-dropdown {
+        width: 100% !important;
+    }
+}
+
+@media (max-width: 600px) {
+    .main-content {
+        padding: 64px 10px 16px;
+    }
+
+    .page-header h2 {
+        font-size: 1.2rem;
+    }
+
+    .subtitle {
+        font-size: 0.8rem;
+    }
+
+    .search-card {
+        padding: 10px;
+        gap: 8px;
+        border-radius: 10px;
+    }
+
+    .search-wrapper {
+        min-width: 100%;
+    }
+
+    .search-input {
+        font-size: 0.82rem;
+    }
+
+    .inventory-card {
+        border-radius: 10px;
+    }
+
+    .table-header {
+        padding: 12px 14px 8px;
+    }
+
+    .table-header h3 {
+        font-size: 0.875rem;
+    }
+
+    .inventory-table th {
+        padding: 9px 10px;
+        font-size: 10px;
+    }
+
+    .inventory-table td {
+        padding: 10px;
+        font-size: 12.5px;
+    }
+
+    .bulk-toolbar {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+    }
+
+    .bulk-toolbar__actions {
+        width: 100%;
+    }
+
+    .bulk-btn {
+        flex: 1;
+        justify-content: center;
+    }
+
+    .empty-cell {
+        padding: 32px 0;
+    }
+
+    .empty-icon {
+        font-size: 1.4rem;
+    }
+
+    .empty-title {
+        font-size: 0.9rem;
+    }
+
+    .empty-text {
+        font-size: 0.78rem;
+    }
+}
+
+@media (max-width: 420px) {
+    .main-content {
+        padding: 60px 6px 12px;
+    }
+
+    .search-card {
+        padding: 8px;
+    }
+
+    .inventory-table th {
+        padding: 8px;
+        font-size: 10px;
+    }
+
+    .inventory-table td {
+        padding: 8px;
+        font-size: 12px;
+    }
+}

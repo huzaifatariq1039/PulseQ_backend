@@ -1,0 +1,134 @@
+<div class="page">
+    <app-patient-header></app-patient-header>
+
+    <main class="container">
+
+        <!-- INTRO ROW -->
+        <div class="intro">
+            <div>
+                <h1>Welcome, {{ patientName }}</h1>
+                <p class="subtitle">Here is your current queue status.</p>
+            </div>
+            <button pButton label="Generate New Token" icon="pi pi-plus" class="btn-generate"
+                (click)="goGenerateToken()"></button>
+        </div>
+
+        <!-- LOADING -->
+        <div class="loading-state" *ngIf="dashboardLoading">
+            <i class="pi pi-spin pi-spinner"></i>
+            <span>Loading your tokens...</span>
+        </div>
+
+        <!-- EMPTY STATE -->
+        <div class="empty-state-card" *ngIf="!dashboardLoading && activeTokens.length === 0">
+            <i class="pi pi-inbox empty-icon"></i>
+            <h2 class="empty-title">No Active Token</h2>
+            <p class="empty-subtitle">You don't have an active token. Generate one to get started.</p>
+        </div>
+
+        <!-- THREE-CARD GRID -->
+        <div class="cards-grid" *ngIf="!dashboardLoading && activeTokens.length > 0">
+
+            <!-- ══ CARD 1: YOUR TOKEN ══ -->
+            <div class="card card-token">
+                <div class="slide-viewport">
+                    <div class="slide-track" [style.transform]="'translateX(-' + (focusedTokenIndex * 100) + '%)'">
+                        <div class="slide" *ngFor="let t of activeTokens">
+
+                            <span class="card-eyebrow">YOUR TOKEN</span>
+
+                            <div class="token-number">{{ t.display_code || t.token_number || '—' }}</div>
+
+                            <div class="status-row">
+                                <span class="status-dot" [ngClass]="getDotClass(t.status)"></span>
+                                <span class="status-label">{{ getStatusLabel(t.status) }}</span>
+                            </div>
+
+                            <!-- Dept + Doctor chip -->
+                            <div class="dept-chip">
+                                <span class="dept-name">{{ t.department || 'General' }}</span>
+                                <span class="dept-sep" *ngIf="t.doctor_name">·</span>
+                                <span class="dept-doctor" *ngIf="t.doctor_name">{{ t.doctor_name }}</span>
+                            </div>
+
+                            <!-- Wait + Position -->
+                            <div class="meta-row">
+                                <div class="meta-block">
+                                    <span class="meta-label">ESTIMATED WAIT</span>
+                                    <span class="meta-value">{{ getWaitDisplay(t) }}</span>
+                                </div>
+                                <div class="meta-block">
+                                    <span class="meta-label">QUEUE POSITION</span>
+                                    <span class="meta-value">{{ getPositionDisplay(t) }}</span>
+                                </div>
+                            </div>
+
+                            <a class="view-link" (click)="viewSpecificToken(t.id)">View Full Ticket</a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Pagination — only when multiple tokens -->
+                <div class="card-pagination" *ngIf="activeTokens.length > 1">
+                    <button class="page-btn" (click)="prevToken()" [disabled]="focusedTokenIndex === 0">
+                        <i class="pi pi-chevron-left"></i>
+                    </button>
+                    <span class="page-dots">
+                        <span class="page-dot" *ngFor="let t of activeTokens; let i = index"
+                            [class.active]="i === focusedTokenIndex" (click)="setFocusedToken(i)"></span>
+                    </span>
+                    <button class="page-btn" (click)="nextToken()"
+                        [disabled]="focusedTokenIndex === activeTokens.length - 1">
+                        <i class="pi pi-chevron-right"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- ══ CARD 2: CURRENTLY SERVING ══
+           Slides in sync with Card 1 so the number always
+           corresponds to the focused token's department queue. -->
+            <div class="card card-serving">
+                <div class="slide-viewport">
+                    <div class="slide-track" [style.transform]="'translateX(-' + (focusedTokenIndex * 100) + '%)'">
+                        <div class="slide slide-serving" *ngFor="let t of activeTokens">
+
+                            <div class="serving-header">
+                                <span class="card-eyebrow">CURRENTLY SERVING</span>
+                            </div>
+
+                            <!-- current_token_serving from data.queue -->
+                            <div class="serving-number">{{ getServingDisplay(t) }}</div>
+
+                            <!-- Dept pill -->
+                            <div class="serving-dept-pill">
+                                {{ t.department || 'General' }}
+                                <ng-container *ngIf="t.doctor_name"><br>{{ t.doctor_name }}</ng-container>
+                            </div>
+
+                            <a class="serving-live-link" (click)="viewLiveStatus()">
+                                <i class="pi pi-clock"></i>&nbsp;Live queue tracking
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Mirror dots (no nav buttons — just indicators) -->
+                <div class="card-pagination serving-pagination" *ngIf="activeTokens.length > 1">
+                    <span class="page-dots">
+                        <span class="page-dot serving-dot" *ngFor="let t of activeTokens; let i = index"
+                            [class.active]="i === focusedTokenIndex" (click)="setFocusedToken(i)"></span>
+                    </span>
+                </div>
+            </div>
+
+            <!-- ══ CARD 3: HOSPITAL UPDATES ══ -->
+            <div class="card card-updates">
+                <h3 class="updates-title">Hospital Updates</h3>
+                <!-- <p class="updates-body">{{ hospitalUpdates || 'No updates at this time.' }}</p> -->
+                <a class="updates-link" (click)="viewLiveStatus()">View Live Screen →</a>
+            </div>
+
+        </div><!-- /cards-grid -->
+
+    </main>
+</div>

@@ -1,0 +1,156 @@
+<div class="layout">
+    <app-admin-sidebar></app-admin-sidebar>
+    <main class="main-content">
+        <div class="page-header">
+            <h2>Pharmacy Sales & Revenue</h2>
+            <p class="subtitle">Monitor pharmacy performance and revenue analytics</p>
+        </div>
+        <div class="summary-grid">
+            <div class="summary-card">
+                <div class="card-inner">
+                    <div class="card-left">
+                        <div class="card-icon today-icon"><i class="pi pi-clock"></i></div>
+                        <div class="card-info">
+                            <div class="card-label">Today's Sales</div>
+                            <div class="card-value">{{ formatRs(todaySales) }}</div>
+                            <div class="card-sub">Today</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="summary-card">
+                <div class="card-inner">
+                    <div class="card-left">
+                        <div class="card-icon weekly-icon"><i class="pi pi-shopping-cart"></i></div>
+                        <div class="card-info">
+                            <div class="card-label">Weekly Sales</div>
+                            <div class="card-value">{{ formatRs(weeklySales) }}</div>
+                            <div class="card-sub">This week</div>
+                        </div>
+                    </div>
+                    <div class="card-badge" [ngClass]="weeklyGrowth >= 0 ? 'growth-badge' : 'decline-badge'" *ngIf="totalRevenue > 0">
+                        <i class="pi" [ngClass]="weeklyGrowth >= 0 ? 'pi-arrow-up' : 'pi-arrow-down'"></i>
+                        {{ weeklyGrowth >= 0 ? '+' : '' }}{{ weeklyGrowth }}%
+                    </div>
+                </div>
+            </div>
+            <div class="summary-card">
+                <div class="card-inner">
+                    <div class="card-left">
+                        <div class="card-icon monthly-icon"><i class="pi pi-calendar"></i></div>
+                        <div class="card-info">
+                            <div class="card-label">Monthly Sales</div>
+                            <div class="card-value">{{ formatRs(monthlySales) }}</div>
+                            <div class="card-sub">This month</div>
+                        </div>
+                    </div>
+                    <div class="card-badge" [ngClass]="monthlyGrowth >= 0 ? 'growth-badge' : 'decline-badge'" *ngIf="totalRevenue > 0">
+                        <i class="pi" [ngClass]="monthlyGrowth >= 0 ? 'pi-arrow-up' : 'pi-arrow-down'"></i>
+                        {{ monthlyGrowth >= 0 ? '+' : '' }}{{ monthlyGrowth }}%
+                    </div>
+                </div>
+            </div>
+            <div class="summary-card total-card">
+                <div class="card-inner">
+                    <div class="card-left">
+                        <div class="card-info">
+                            <div class="card-label">Total Revenue</div>
+                            <div class="card-value">{{ formatRs(totalRevenue) }}</div>
+                            <div class="card-sub">All time</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="summary-card stock-card">
+                <div class="card-inner">
+                    <div class="card-left">
+                        <div class="card-icon stock-icon"><i class="pi pi-box"></i></div>
+                        <div class="card-info">
+                            <div class="card-label">Total Stock</div>
+                            <div class="card-value">{{ totalStock }}</div>
+                            <div class="card-sub">{{ medicineTypes }} medicine types</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="summary-card inventory-card">
+                <div class="card-inner">
+                    <div class="card-left">
+                        <div class="card-icon inventory-icon"><i class="pi pi-chart-bar"></i></div>
+                        <div class="card-info">
+                            <div class="card-label">Inventory Value</div>
+                            <div class="card-value">{{ formatRs(inventoryValue) }}</div>
+                            <div class="card-sub">Current market value</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filter Row -->
+        <div class="filter-section">
+            <span class="filter-label">Time Period</span>
+            <div class="filter-buttons">
+                <button *ngFor="let opt of options" class="filter-btn" [class.active]="selectedOption === opt.value"
+                    (click)="selectedOption = opt.value; onPeriodChange()">
+                    {{ opt.label }}
+                </button>
+            </div>
+            <span class="search-bar">
+                <i class="pi pi-search"></i>
+                <input pInputText type="text" [(ngModel)]="searchTerm" placeholder="Search by medicine..."
+                    class="search-input" (input)="onSearch()" />
+            </span>
+        </div>
+
+        <!-- Custom Range Picker -->
+        <div *ngIf="selectedOption === 'custom'" class="calendar-row">
+            <div class="calendar-wrapper">
+                <i class="pi pi-calendar calendar-icon"></i>
+                <p-calendar [(ngModel)]="customRange" selectionMode="range" placeholder="Select start and end date"
+                    [showIcon]="false" [readonlyInput]="false" dateFormat="dd/mm/yy" (onSelect)="onCustomRangeChange()"
+                    styleClass="range-calendar">
+                </p-calendar>
+            </div>
+        </div>
+
+
+        <div class="table-card">
+            <div class="table-card-header">
+                <h3>Sales History</h3>
+                <span class="transaction-count">{{ sales.length }} transactions found</span>
+            </div>
+            <p-table [value]="sales" [responsiveLayout]="'scroll'" styleClass="sales-table">
+                <ng-template pTemplate="header">
+                    <tr>
+                        <th>DATE</th>
+                        <th>MEDICINE NAME</th>
+                        <th>QUANTITY SOLD</th>
+                        <th>UNIT PRICE</th>
+                        <th>TOTAL AMOUNT</th>
+                    </tr>
+                </ng-template>
+                <ng-template pTemplate="body" let-s>
+                    <tr>
+                        <td>{{ s.date | date:'MMM d, yyyy' }}</td>
+                        <td><strong>{{ s.medicineName }}</strong></td>
+                        <td>{{ s.quantity }} units</td>
+                        <td>{{ formatRs(s.unitPrice) }}</td>
+                        <td class="amount-cell">{{ formatRs(s.totalAmount) }}</td>
+                    </tr>
+                </ng-template>
+                <ng-template pTemplate="emptymessage">
+                    <tr>
+                        <td colspan="7">
+                            <div class="empty-state">
+                                <i class="pi pi-inbox"></i>
+                                <p>No sales found for this period</p>
+                            </div>
+                        </td>
+                    </tr>
+                </ng-template>
+            </p-table>
+        </div>
+    </main>
+</div>

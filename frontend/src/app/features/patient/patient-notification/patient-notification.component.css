@@ -1,0 +1,402 @@
+/* ── PAGE LAYOUT ── */
+.notifications-page {
+  min-height: 100vh;
+  background: #f8fafc;
+}
+
+.page-header {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem 0.5rem;
+}
+
+.page-header h1 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 0.25rem;
+}
+
+.page-header .subtitle {
+  color: #64748b;
+  font-size: 0.95rem;
+  margin: 0;
+}
+
+/* ── TABS ── */
+.tabs {
+  display: flex;
+  gap: 0;
+  max-width: 720px;
+  margin: 1.25rem auto 0;
+  padding: 0 1.5rem;
+  border-bottom: 2px solid #e2e8f0;
+}
+
+.tabs button {
+  background: none;
+  border: none;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
+  padding: 0.65rem 1.25rem;
+  font-size: 1rem;
+  font-weight: 500;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.2s;
+  border-radius: 0;
+}
+
+.tabs button.active {
+  color: #2563eb;
+  border-bottom-color: #2563eb;
+  font-weight: 600;
+}
+
+.tabs button:hover:not(.active) {
+  color: #334155;
+}
+
+/* ── CONTENT WRAP ── */
+.content-wrap {
+  max-width: 720px;
+  margin: 1.5rem auto 2rem;
+  padding: 0 1.5rem;
+}
+
+/* ── INBOX CARD ── */
+.inbox-card {
+  background: #fff;
+  border-radius: 14px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.06);
+  overflow: hidden;
+}
+
+.card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.1rem 1.5rem;
+  border-bottom: 1px solid #f1f5f9;
+  background: #f8fafc;
+}
+
+.card-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+/* ── MARK ALL READ BUTTON ── */
+.mark-read {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: #2563eb;
+  color: #fff;
+  font-size: 0.875rem;
+  font-weight: 600;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  cursor: pointer;
+  text-decoration: none;
+  border: none;
+  transition: background 0.2s, transform 0.1s;
+  min-height: 40px;
+  letter-spacing: 0.01em;
+}
+
+.mark-read:hover {
+  background: #1d4ed8;
+}
+
+.mark-read:active {
+  transform: scale(0.97);
+}
+
+/* ── NOTIFICATIONS LIST ── */
+.notifications-list {
+  padding: 0.5rem 0;
+}
+
+/* ── SINGLE NOTIFICATION ITEM ── */
+.notification-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 1.1rem 1.5rem;
+  border-bottom: 1px solid #f1f5f9;
+  background: #fff;
+  transition: background 0.15s;
+  position: relative;
+}
+
+.notification-item:last-child {
+  border-bottom: none;
+}
+
+.notification-item:not(.read) {
+  background: #eff6ff;
+  border-left: 4px solid #2563eb;
+}
+
+.notification-item.read {
+  background: #fff;
+  border-left: 4px solid transparent;
+  opacity: 0.75;
+}
+
+.notification-item:hover {
+  background: #f0f7ff;
+}
+
+/* ── ICON ── */
+.notification-item .icon {
+  flex-shrink: 0;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: #dbeafe;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 0.1rem;
+}
+
+.notification-item .icon i {
+  font-size: 1.1rem;
+  color: #2563eb;
+}
+
+.notification-item.read .icon {
+  background: #f1f5f9;
+}
+
+.notification-item.read .icon i {
+  color: #94a3b8;
+}
+
+/* ── BODY ── */
+.notification-item .body {
+  flex: 1;
+  min-width: 0;
+}
+
+.notification-item .body .title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 0.3rem;
+  line-height: 1.3;
+}
+
+.notification-item.read .body .title {
+  color: #64748b;
+  font-weight: 600;
+}
+
+.notification-item .body .message {
+  font-size: 0.925rem;
+  color: #475569;
+  line-height: 1.5;
+}
+
+.notification-item.read .body .message {
+  color: #94a3b8;
+}
+
+/* ── TIME ── */
+.notification-item .time {
+  flex-shrink: 0;
+  font-size: 0.8rem;
+  color: #94a3b8;
+  white-space: nowrap;
+  margin-top: 0.15rem;
+  font-weight: 500;
+}
+
+/* ── UNREAD DOT ── */
+.notification-item:not(.read)::after {
+  content: '';
+  position: absolute;
+  top: 1.2rem;
+  right: 1.2rem;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #2563eb;
+}
+
+/* ── EMPTY STATE ── */
+.empty-notif {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 1rem;
+  color: #94a3b8;
+  gap: 0.75rem;
+}
+
+.empty-notif i {
+  font-size: 2.5rem;
+  color: #cbd5e1;
+}
+
+.empty-notif p {
+  font-size: 1rem;
+  margin: 0;
+  color: #94a3b8;
+}
+
+/* ── SETTINGS CARD ── */
+.settings-card {
+  background: #fff;
+  border-radius: 14px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.06);
+  overflow: hidden;
+}
+
+.setting-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.1rem 1.5rem;
+  border-bottom: 1px solid #f1f5f9;
+  min-height: 52px;
+}
+
+.setting-row:last-of-type {
+  border-bottom: none;
+}
+
+.setting-icon {
+  width: 38px;
+  height: 38px;
+  background: #eff6ff;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.setting-icon i {
+  color: #2563eb;
+  font-size: 1rem;
+}
+
+.setting-info {
+  flex: 1;
+}
+
+.setting-title {
+  font-size: 0.975rem;
+  font-weight: 600;
+  color: #0f172a;
+  margin-bottom: 0.15rem;
+}
+
+.setting-sub {
+  font-size: 0.825rem;
+  color: #64748b;
+  line-height: 1.4;
+}
+
+/* ── INFO NOTE ── */
+.info-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 1rem 1.5rem;
+  background: #f0f9ff;
+  border-top: 1px solid #e0f2fe;
+}
+
+.info-icon {
+  color: #0ea5e9;
+  font-size: 1rem;
+  margin-top: 0.1rem;
+  flex-shrink: 0;
+}
+
+.info-note span {
+  font-size: 0.825rem;
+  color: #475569;
+  line-height: 1.6;
+}
+
+/* ── RESPONSIVE ── */
+@media (max-width: 768px) {
+  .page-header {
+    padding: 1.5rem 1rem 0.5rem;
+  }
+
+  .page-header h1 {
+    font-size: 1.4rem;
+  }
+
+  .tabs {
+    padding: 0 1rem;
+  }
+
+  .content-wrap {
+    padding: 0 1rem;
+    margin-top: 1rem;
+  }
+
+  .notification-item {
+    padding: 1rem;
+    gap: 0.75rem;
+  }
+
+  .notification-item .body .title {
+    font-size: 0.95rem;
+  }
+
+  .notification-item .body .message {
+    font-size: 0.875rem;
+  }
+
+  .card-top {
+    padding: 1rem;
+  }
+
+  .setting-row {
+    padding: 1rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .page-header h1 {
+    font-size: 1.25rem;
+  }
+
+  .tabs button {
+    font-size: 0.9rem;
+    padding: 0.6rem 1rem;
+  }
+
+  .notification-item .icon {
+    width: 36px;
+    height: 36px;
+  }
+
+  .notification-item .icon i {
+    font-size: 1rem;
+  }
+
+  .mark-read {
+    font-size: 0.8rem;
+    padding: 0.45rem 0.85rem;
+    min-height: 36px;
+  }
+
+  .notification-item:not(.read)::after {
+    top: 1rem;
+    right: 1rem;
+  }
+}

@@ -1,0 +1,502 @@
+:host {
+    display: block;
+    --primary: #2563eb;
+    --muted: #6b7a85;
+}
+
+/* ── PAGE ── */
+.page {
+    background: #f8fafc;
+    min-height: 100vh;
+}
+
+.container {
+    max-width: 780px;
+    margin: 0 auto;
+    padding: 1.5rem 1rem;
+}
+
+/* ── INTRO ── */
+.intro {
+    margin-bottom: 1.25rem;
+}
+
+.intro h1 {
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: #0b1419;
+    margin-bottom: 0.25rem;
+}
+
+.highlight {
+    background: #facc15;
+    padding: 0 4px;
+    border-radius: 4px;
+    color: #0b1419;
+}
+
+.subtitle {
+    color: var(--muted);
+    font-size: 0.88rem;
+}
+
+/* ── SEARCH & FILTER SECTION ── */
+.search-filter-section {
+    background: #fff;
+    border: 1px solid #e6ecf2;
+    border-radius: 14px;
+    padding: 1.25rem;
+    margin-bottom: 1.25rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.search-container {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr auto;
+    gap: 0.85rem;
+    align-items: flex-end;
+}
+
+.search-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.search-label {
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    text-transform: uppercase;
+}
+
+.search-input-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.search-icon {
+    position: absolute;
+    left: 0.75rem;
+    font-size: 0.9rem;
+    color: #9ca3af;
+    pointer-events: none;
+}
+
+.search-input {
+    width: 100%;
+    padding: 0.65rem 0.75rem 0.65rem 2.25rem;
+    border: 1px solid #e6ecf2;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.search-input:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.date-input {
+    padding: 0.65rem 0.75rem;
+    padding-left: 2.25rem;
+}
+
+.clear-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    background: #f3f4f6;
+    border: 1px solid #e6ecf2;
+    padding: 0.65rem 0.85rem;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #374151;
+    transition: background-color 0.2s ease, border-color 0.2s ease;
+    white-space: nowrap;
+}
+
+.clear-btn:hover {
+    background: #e5e7eb;
+    border-color: #d1d5db;
+}
+
+.reset-search-btn {
+    margin-top: 0.75rem;
+    background: var(--primary);
+    color: #fff;
+    border: none;
+    padding: 0.65rem 1.5rem;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.reset-search-btn:hover {
+    background: #1d4ed8;
+}
+
+/* ── STATS ROW ── */
+.stats-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.85rem;
+    margin-bottom: 1.25rem;
+}
+
+.stat-card {
+    background: #fff;
+    border: 1px solid #e6ecf2;
+    border-radius: 14px;
+    padding: 1.1rem 1.25rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.stat-label {
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 0.5rem;
+}
+
+.stat-value {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #0b1419;
+    line-height: 1;
+}
+
+/* ── VISIT CARDS LIST ── */
+.history-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+/* ── VISIT CARD ── */
+.visit-card {
+    display: flex;
+    align-items: center;
+    background: #fff;
+    border: 1px solid #e6ecf2;
+    border-radius: 14px;
+    padding: 1rem 1.1rem;
+    text-decoration: none;
+    color: inherit;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+    transition: box-shadow 0.2s ease, transform 0.15s ease;
+    gap: 0.85rem;
+    min-height: 72px;
+}
+
+.visit-card:hover {
+    box-shadow: 0 6px 20px rgba(37, 99, 235, 0.1);
+    transform: translateY(-1px);
+}
+
+/* ── CARD LEFT ── */
+.visit-card-left {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    flex: 1;
+    min-width: 0;
+}
+
+.avatar-circle {
+    width: 44px;
+    height: 44px;
+    background: #e0e7ff;
+    color: var(--primary);
+    font-weight: 700;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    flex-shrink: 0;
+}
+
+.visit-info {
+    min-width: 0;
+    flex: 1;
+}
+
+.doctor-name {
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: #0b1419;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.specialty {
+    font-size: 0.8rem;
+    color: var(--muted);
+    margin-top: 0.15rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.rating-mini {
+    margin-top: 0.3rem;
+    transform: scale(0.85);
+    transform-origin: left;
+}
+
+/* ── CARD RIGHT ── */
+.visit-card-right {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.4rem;
+    flex-shrink: 0;
+}
+
+.visit-date {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #374151;
+    white-space: nowrap;
+}
+
+.token-badge {
+    background: #1e293b;
+    color: #e0e7ff;
+    font-size: 0.7rem;
+    padding: 0.22rem 0.6rem;
+    border-radius: 20px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+}
+
+/* ── STATUS BADGES ── */
+.status-badge {
+    font-size: 0.7rem;
+    padding: 0.22rem 0.6rem;
+    border-radius: 20px;
+    font-weight: 600;
+    text-transform: lowercase;
+    border: 1px solid transparent;
+    white-space: nowrap;
+}
+
+.status-badge.completed {
+    background: #dcfce7;
+    color: #15803d;
+    border-color: #bbf7d0;
+}
+
+.status-badge.pending {
+    background: #fef9c3;
+    color: #92400e;
+    border-color: #fde68a;
+}
+
+.status-badge.cancelled {
+    background: #fee2e2;
+    color: #b91c1c;
+    border-color: #fecaca;
+}
+
+.status-badge.active {
+    background: #dbeafe;
+    color: #1d4ed8;
+    border-color: #bfdbfe;
+}
+
+.notes-badge {
+    background: #dcfce7;
+    color: #166534;
+    font-size: 0.68rem;
+    padding: 0.2rem 0.5rem;
+    border-radius: 6px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+/* ── CHEVRON ── */
+.chevron {
+    font-size: 1.3rem;
+    color: #9ca3af;
+    flex-shrink: 0;
+    margin-left: 0.25rem;
+    line-height: 1;
+}
+
+/* ── CALLOUT ── */
+.callout {
+    margin-top: 0.25rem;
+    padding: 0.85rem 1rem;
+    border-radius: 10px;
+    background: #eef4ff;
+    color: #1e3a8a;
+    font-size: 0.82rem;
+    line-height: 1.5;
+}
+
+/* ── LOADING ── */
+.history-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    color: var(--muted);
+    font-size: 0.95rem;
+    padding: 3rem 0;
+    background: #fff;
+    border-radius: 14px;
+    border: 1px solid #e6ecf2;
+}
+
+/* ── EMPTY ── */
+.history-empty {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: var(--muted);
+    background: #fff;
+    border-radius: 14px;
+    border: 1px solid #e6ecf2;
+}
+
+.history-empty .empty-icon {
+    font-size: 2.5rem;
+    color: #cbd5e1;
+    margin-bottom: 0.75rem;
+}
+
+.history-empty p {
+    font-size: 1rem;
+    margin: 0;
+}
+
+/* ── RESPONSIVE 600px ── */
+@media (max-width: 600px) {
+    .container {
+        padding: 1rem 0.75rem;
+    }
+
+    .intro h1 {
+        font-size: 1.3rem;
+    }
+
+    .stat-value {
+        font-size: 1.6rem;
+    }
+
+    .stat-card {
+        padding: 0.9rem 1rem;
+    }
+
+    .search-container {
+        grid-template-columns: 1fr;
+        gap: 0.65rem;
+    }
+
+    .search-group {
+        gap: 0.3rem;
+    }
+
+    .search-input {
+        padding: 0.55rem 0.65rem 0.55rem 2rem;
+        font-size: 0.85rem;
+    }
+
+    .clear-btn {
+        padding: 0.55rem 0.75rem;
+        font-size: 0.8rem;
+    }
+
+    .visit-card {
+        padding: 0.85rem 0.875rem;
+        gap: 0.65rem;
+    }
+
+    .avatar-circle {
+        width: 40px;
+        height: 40px;
+        font-size: 0.9rem;
+    }
+
+    .doctor-name {
+        font-size: 0.88rem;
+    }
+
+    .visit-date {
+        font-size: 0.75rem;
+    }
+
+    .token-badge,
+    .status-badge {
+        font-size: 0.65rem;
+        padding: 0.18rem 0.5rem;
+    }
+}
+
+/* ── RESPONSIVE 380px ── */
+@media (max-width: 380px) {
+    .stats-row {
+        gap: 0.5rem;
+    }
+
+    .stat-card {
+        padding: 0.75rem 0.875rem;
+    }
+
+    .stat-value {
+        font-size: 1.4rem;
+    }
+
+    .search-filter-section {
+        padding: 1rem 0.75rem;
+    }
+
+    .search-input-wrapper {
+        width: 100%;
+    }
+
+    .search-input,
+    .date-input {
+        font-size: 0.8rem;
+        padding: 0.5rem 0.6rem 0.5rem 2rem;
+    }
+
+    .search-label {
+        font-size: 0.65rem;
+    }
+
+    .clear-btn {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .visit-card-left {
+        gap: 0.55rem;
+    }
+
+    .avatar-circle {
+        width: 36px;
+        height: 36px;
+        font-size: 0.82rem;
+    }
+
+    .visit-card-right {
+        gap: 0.3rem;
+    }
+
+    .chevron {
+        font-size: 1.1rem;
+    }
+}

@@ -1,0 +1,221 @@
+<div class="page">
+    <p-toast position="top-right"></p-toast>
+
+    <!-- Simple demo header -->
+    <header style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); color: #fff; padding: 1rem 2rem; display: flex; align-items: center; justify-content: space-between;">
+        <div style="display: flex; align-items: center; gap: 0.75rem;">
+            <i class="pi pi-heart-fill" style="font-size: 1.5rem; color: #10b981;"></i>
+            <span style="font-size: 1.25rem; font-weight: 700;">PulseQ Demo</span>
+        </div>
+        <a routerLink="/" style="color: #94a3b8; text-decoration: none; font-size: 0.9rem; display: flex; align-items: center; gap: 0.4rem;">
+            <i class="pi pi-arrow-left" style="font-size: 0.85rem;"></i> Back to Home
+        </a>
+    </header>
+
+    <main class="container">
+        <div class="intro">
+            <h1>Book a Demo Appointment</h1>
+            <p class="subtitle">Experience how PulseQ works. Select a hospital, department, and doctor to book a demo token.</p>
+        </div>
+
+        <div class="wizard-wrap">
+            <!-- STEP DOTS -->
+            <div class="steps-bar">
+                <div class="dots">
+                    <span [class.active]="step === 1"></span>
+                    <span [class.active]="step === 2"></span>
+                    <span [class.active]="step === 3"></span>
+                    <span [class.active]="step === 4"></span>
+                </div>
+            </div>
+
+            <!-- STEP 1: SELECT HOSPITAL -->
+            <div class="wizard-card" *ngIf="step === 1">
+                <div class="step-header">
+                    <i class="pi pi-building step-icon"></i>
+                    <span class="step-title">Select Hospital</span>
+                </div>
+                <div class="card-grid card-grid-2">
+                    <div *ngFor="let h of hospitals" class="select-card"
+                        [class.selected]="selectedHospital?.id === h.id" (click)="selectHospital(h)">
+                        <div class="card-main-label">{{ h.name }}</div>
+                        <div class="card-sub-label">
+                            <i class="pi pi-map-marker" style="font-size:0.8rem;margin-right:3px;"></i>
+                            Location / Area
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- STEP 2: SELECT DEPARTMENT -->
+            <div class="wizard-card" *ngIf="step === 2">
+                <a class="back-link" (click)="previousStep()">
+                    <i class="pi pi-arrow-left"></i> Back to Hospitals
+                </a>
+                <div class="step-header">
+                    <i class="pi pi-heart step-icon"></i>
+                    <span class="step-title">Select Department</span>
+                </div>
+                <div class="card-grid card-grid-2">
+                    <div *ngFor="let d of departments" class="select-card"
+                        [class.selected]="selectedDepartment?.id === d.id" (click)="selectDepartment(d)">
+                        <div class="card-main-label">{{ d.label }}</div>
+                        <div class="card-sub-label">
+                            <i class="pi pi-user" style="font-size:0.8rem;margin-right:3px;"></i>
+                            {{ getDoctorCountForDepartment(d) }} Doctor(s) Available
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- STEP 3: SELECT DOCTOR -->
+            <div class="wizard-card" *ngIf="step === 3">
+                <a class="back-link" (click)="previousStep()">
+                    <i class="pi pi-arrow-left"></i> Back to Departments
+                </a>
+                <div class="step-header">
+                    <i class="pi pi-user step-icon"></i>
+                    <span class="step-title">Select Doctor</span>
+                </div>
+                <div class="doctor-list">
+                    <div *ngFor="let d of filteredDoctors" class="doctor-card"
+                        [class.selected]="selectedDoctor?.id === d.id" [class.unavailable]="!d.available || d.onLeave"
+                        (click)="selectDoctor(d)">
+
+                        <div class="doctor-header">
+                            <span class="doctor-name">{{ d.name }}</span>
+                            <!-- Badge: On Leave > Unavailable > Available -->
+                            <span class="doctor-badge" [ngClass]="{
+                                    'badge-on-leave':    d.onLeave,
+                                    'badge-unavailable': !d.onLeave && !d.available,
+                                    'badge-available':   !d.onLeave && d.available
+                                }">
+                                {{ d.onLeave ? 'On Leave' : (d.available ? 'Available' : 'Unavailable') }}
+                            </span>
+                        </div>
+
+                        <div class="doctor-qualifications">
+                            <i class="pi pi-verified" style="font-size:0.82rem;margin-right:4px;color:#64748b;"></i>
+                            {{ d.qualifications }}
+                        </div>
+                        <div class="doctor-timings">
+                            <i class="pi pi-clock" style="font-size:0.82rem;margin-right:4px;color:#64748b;"></i>
+                            {{ d.timings }}
+                        </div>
+                        <!-- Fee: stored as string e.g. "Rs. 1,500" — render directly, no pipe -->
+                        <div class="doctor-fee">
+                            <i class="pi pi-wallet" style="font-size:0.82rem;margin-right:4px;color:#64748b;"></i>
+                            {{ d.fee }}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Assign any available doctor -->
+                <div class="assign-any-row">
+                    <input type="checkbox" id="assignAnyDoc" [checked]="assignAnyDoctor"
+                        (change)="toggleAssignAnyDoctor()" class="form-checkbox" />
+                    <label for="assignAnyDoc" class="assign-any-label">Assign any available doctor</label>
+                </div>
+            </div>
+
+            <!-- STEP 4: PATIENT DETAILS -->
+            <div class="wizard-card" *ngIf="step === 4">
+                <a class="back-link" (click)="previousStep()">
+                    <i class="pi pi-arrow-left"></i> Back to Doctors
+                </a>
+                <div class="step-header">
+                    <i class="pi pi-id-card step-icon"></i>
+                    <span class="step-title">Patient Details</span>
+                </div>
+
+                <form [formGroup]="tokenForm" (ngSubmit)="submitForm()">
+                    <div class="two-col">
+                        <div class="form-group">
+                            <label class="form-label">Full Name <span class="required">*</span></label>
+                            <input pInputText type="text" formControlName="patientName" placeholder="Name"
+                                class="p-inputtext w-full" />
+                            <div class="error-message"
+                                *ngIf="f['patientName'].invalid && (f['patientName'].dirty || f['patientName'].touched)">
+                                <span>Name is required</span>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Phone Number <span class="required">*</span></label>
+                            <input pInputText type="text" formControlName="phone" placeholder="e.g. 03001234567"
+                                class="p-inputtext w-full" />
+                            <div class="error-message"
+                                *ngIf="f['phone'].invalid && (f['phone'].dirty || f['phone'].touched)">
+                                <span *ngIf="f['phone'].errors?.['required']">Phone number is required</span>
+                                <span *ngIf="f['phone'].errors?.['invalidPakistaniPhone']">
+                                    Enter a valid Pakistani number (e.g. 03XX-XXXXXXX)
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="two-col">
+                        <div class="form-group">
+                            <label class="form-label">Age <span class="optional">(optional)</span></label>
+                            <input pInputText type="number" formControlName="age" placeholder="Years"
+                                class="p-inputtext w-full" />
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Gender</label>
+                            <p-dropdown
+                                [options]="[{label:'Male',value:'Male'},{label:'Female',value:'Female'},{label:'Other',value:'Other'}]"
+                                formControlName="gender" styleClass="w-full">
+                            </p-dropdown>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Special Notes <span class="optional">(optional)</span></label>
+                        <textarea pInputTextarea formControlName="specialNotes" rows="3"
+                            placeholder="Any allergies or special notes..." class="w-full"></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Reason for Visit <span class="required">*</span></label>
+                        <textarea pInputTextarea formControlName="reason" rows="4"
+                            placeholder="Briefly describe your symptoms or reason for visit..."
+                            class="w-full"></textarea>
+                        <div class="error-message"
+                            *ngIf="f['reason'].invalid && (f['reason'].dirty || f['reason'].touched)">
+                            <span *ngIf="f['reason'].errors?.['required']">Reason is required</span>
+                            <span *ngIf="f['reason'].errors?.['minlength']">Minimum 5 characters required</span>
+                        </div>
+                    </div>
+
+                    <div class="form-actions">
+                        <button pButton label="Generate Token" icon="pi pi-check-circle" type="submit"
+                            class="submit-btn" [disabled]="tokenForm.invalid"></button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- STEP 5: SUCCESS MESSAGE -->
+            <div class="wizard-card success-card" *ngIf="step === 5" style="text-align: center; padding: 3rem;">
+                <i class="pi pi-check-circle" style="font-size: 4rem; color: #10b981; margin-bottom: 1rem;"></i>
+                <h2 style="color: #0f172a; margin-bottom: 0.5rem;">Token booked successfully!</h2>
+                <p style="color: #64748b; font-size: 1.1rem; margin-bottom: 2rem;">
+                    Now you will receive updates on WhatsApp.
+                </p>
+                <button pButton label="Back to Home" icon="pi pi-home" class="p-button-outlined" (click)="cancelForm()"></button>
+            </div>
+
+            <!-- INFO ALERT -->
+            <div class="info-alert">
+                <div class="alert-wrapper">
+                    <i class="pi pi-calendar alert-icon"></i>
+                    <div class="alert-content">
+                        <strong class="alert-title">Important Notice</strong>
+                        <p class="alert-message">
+                            Tokens are valid only for today. Please ensure you arrive at the hospital
+                            at least 15 minutes before your estimated time.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>

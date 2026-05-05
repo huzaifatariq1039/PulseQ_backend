@@ -1,0 +1,545 @@
+:host {
+    display: block;
+    --primary: #1a4fd6;
+    --muted: #6b7280;
+}
+
+/* ── PAGE ── */
+.page {
+    min-height: 100vh;
+    background: #f0f4f9;
+}
+
+.container {
+    padding: 1.75rem 1.75rem 3rem;
+    max-width: 1080px;
+    margin: 0 auto;
+}
+
+/* ── INTRO ── */
+.intro {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 2rem;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.intro h1 {
+    font-size: 1.9rem;
+    font-weight: 800;
+    color: #0b1730;
+    margin: 0 0 0.25rem;
+    letter-spacing: -0.3px;
+}
+
+.subtitle {
+    font-size: 0.92rem;
+    color: var(--muted);
+    margin: 0;
+}
+
+.btn-generate {
+    background: #1a4fd6 !important;
+    border: none !important;
+    color: #fff !important;
+    border-radius: 12px !important;
+    font-size: 0.95rem !important;
+    font-weight: 700 !important;
+    padding: 0.8rem 1.35rem !important;
+    min-height: 46px !important;
+    white-space: nowrap;
+    flex-shrink: 0;
+    cursor: pointer;
+    transition: background 0.15s, transform 0.15s !important;
+}
+
+.btn-generate:hover {
+    background: #1541b8 !important;
+    transform: translateY(-1px);
+}
+
+.btn-generate.mt {
+    margin-top: 0.5rem;
+}
+
+/* ── LOADING ── */
+.loading-state {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    padding: 5rem 2rem;
+    font-size: 1rem;
+    color: var(--muted);
+}
+
+.loading-state .pi-spinner {
+    font-size: 1.4rem;
+    color: var(--primary);
+}
+
+/* ── EMPTY STATE ── */
+.empty-state-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 1rem;
+    padding: 3rem 2rem;
+    background: #fff;
+    border-radius: 18px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 2px 16px rgba(15, 23, 42, 0.06);
+    max-width: 420px;
+    margin: 0 auto;
+}
+
+.empty-icon {
+    font-size: 2.4rem;
+    color: #93c5fd;
+}
+
+.empty-title {
+    font-size: 1.35rem;
+    font-weight: 800;
+    color: #0f172a;
+    margin: 0;
+}
+
+.empty-subtitle {
+    font-size: 0.9rem;
+    color: var(--muted);
+    max-width: 280px;
+    line-height: 1.6;
+    margin: 0;
+}
+
+/* ══════════════════════════════════════
+   THREE-CARD GRID
+══════════════════════════════════════ */
+.cards-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 1.25rem;
+    align-items: stretch;
+}
+
+/* ── SHARED CARD BASE ── */
+.card {
+    border-radius: 18px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+/* ══════════════════════════════════════
+   CARD 1 — YOUR TOKEN
+   White bg + thick blue TOP border
+══════════════════════════════════════ */
+.card-token {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-top: 5px solid #1a4fd6;
+    box-shadow: 0 2px 12px rgba(15, 23, 42, 0.06);
+}
+
+/* ══════════════════════════════════════
+   CARD 2 — CURRENTLY SERVING
+   Light blue bg, NO top accent border
+══════════════════════════════════════ */
+.card-serving {
+    background: #e8f0fd;
+    border: 1px solid #ccd9f8;
+    /* intentionally no border-top override — plain 1px border all around */
+    box-shadow: 0 2px 12px rgba(15, 23, 42, 0.05);
+}
+
+/* ══════════════════════════════════════
+   CARD 3 — HOSPITAL UPDATES
+   Dark navy
+══════════════════════════════════════ */
+.card-updates {
+    background: #0f2044;
+    border: 1px solid #1a3262;
+    box-shadow: 0 2px 12px rgba(15, 23, 42, 0.12);
+    padding: 1.75rem 1.6rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+}
+
+.updates-title {
+    font-size: 1.15rem;
+    font-weight: 800;
+    color: #ffffff;
+    margin: 0;
+}
+
+.updates-body {
+    font-size: 0.88rem;
+    color: #94a3b8;
+    line-height: 1.6;
+    margin: 0;
+    flex-grow: 1;
+}
+
+.updates-link {
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: #60a5fa;
+    cursor: pointer;
+    text-decoration: none;
+    margin-top: auto;
+    padding-top: 0.5rem;
+}
+
+.updates-link:hover {
+    color: #93c5fd;
+    text-decoration: underline;
+}
+
+/* ══════════════════════════════════════
+   SHARED SLIDE / SWIPE SYSTEM
+══════════════════════════════════════ */
+.slide-viewport {
+    overflow: hidden;
+    flex: 1;
+}
+
+.slide-track {
+    display: flex;
+    transition: transform 0.38s cubic-bezier(0.4, 0, 0.2, 1);
+    will-change: transform;
+    height: 100%;
+}
+
+.slide {
+    flex: 0 0 100%;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 1.6rem 1.6rem 1.3rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+}
+
+/* ── CARD 1 INTERNALS ── */
+.card-eyebrow {
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 2.5px;
+    color: #9ca3af;
+    text-transform: uppercase;
+}
+
+.token-number {
+    font-size: 2.9rem;
+    font-weight: 900;
+    color: #0b1730;
+    letter-spacing: -1.5px;
+    line-height: 1;
+    margin: 0.3rem 0 0.15rem;
+}
+
+.status-row {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+}
+
+.status-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.status-dot.dot-blue {
+    background: #1a4fd6;
+}
+
+.status-dot.dot-green {
+    background: #16a34a;
+}
+
+.status-dot.dot-amber {
+    background: #d97706;
+}
+
+.status-dot.dot-red {
+    background: #dc2626;
+}
+
+.status-label {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #374151;
+}
+
+/* Dept chip — shows "Physiotherapist · Dr Kehkashan" */
+.dept-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 0.5rem 0.9rem;
+    font-size: 0.82rem;
+    color: #374151;
+    font-weight: 500;
+    margin: 0.3rem 0 0.1rem;
+    width: 100%;
+    box-sizing: border-box;
+    flex-wrap: wrap;
+    row-gap: 0.15rem;
+}
+
+.dept-name {
+    font-weight: 600;
+    color: #1e293b;
+}
+
+.dept-sep {
+    color: #9ca3af;
+}
+
+.dept-doctor {
+    color: #475569;
+    font-weight: 500;
+}
+
+/* Two-column meta */
+.meta-row {
+    display: flex;
+    gap: 2rem;
+    margin-top: 0.4rem;
+}
+
+.meta-block {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+}
+
+.meta-label {
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    color: #9ca3af;
+    text-transform: uppercase;
+}
+
+.meta-value {
+    font-size: 1.05rem;
+    font-weight: 800;
+    color: #0b1419;
+}
+
+.view-link {
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: #1a4fd6;
+    cursor: pointer;
+    text-decoration: none;
+    margin-top: 0.5rem;
+}
+
+.view-link:hover {
+    text-decoration: underline;
+}
+
+/* ── CARD 2 INTERNALS ── */
+.slide-serving {
+    align-items: center;
+    text-align: center;
+    justify-content: center;
+    padding: 1.75rem 1.4rem 1.4rem;
+}
+
+.serving-header {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    margin-bottom: 0.25rem;
+}
+
+.serving-icon {
+    font-size: 0.85rem;
+    color: #6b7280;
+}
+
+.serving-number {
+    font-size: 5rem;
+    font-weight: 900;
+    color: #1a4fd6;
+    letter-spacing: -3px;
+    line-height: 1;
+    margin: 0.3rem 0 0.75rem;
+}
+
+.serving-dept-pill {
+    background: #ffffff;
+    border: 1px solid #dbe7ff;
+    border-radius: 12px;
+    padding: 0.65rem 1.1rem;
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: #162a4c;
+    line-height: 1.45;
+    width: 100%;
+    box-sizing: border-box;
+    margin-bottom: 0.75rem;
+}
+
+.serving-live-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.84rem;
+    font-weight: 600;
+    color: #4b5563;
+    cursor: pointer;
+    text-decoration: none;
+    margin-top: auto;
+}
+
+.serving-live-link:hover {
+    color: #1a4fd6;
+}
+
+/* ── PAGINATION ── */
+.card-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6rem;
+    padding: 0.8rem 1.5rem 1rem;
+    border-top: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.serving-pagination {
+    border-top: 1px solid rgba(26, 79, 214, 0.12);
+}
+
+.page-dots {
+    display: flex;
+    gap: 5px;
+}
+
+.page-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #d1d5db;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.2s;
+}
+
+.page-dot.active {
+    background: #1a4fd6;
+    transform: scale(1.3);
+}
+
+.serving-dot.active {
+    background: #1a4fd6;
+}
+
+.page-btn {
+    background: none;
+    border: 1px solid #d1d5db;
+    border-radius: 7px;
+    width: 28px;
+    height: 28px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #374151;
+    font-size: 0.7rem;
+    padding: 0;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.page-btn:not(:disabled):hover {
+    background: #eff6ff;
+    border-color: #1a4fd6;
+    color: #1a4fd6;
+}
+
+.page-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+
+/* ══════════════════════════════════════
+   RESPONSIVE
+══════════════════════════════════════ */
+@media (max-width: 900px) {
+    .cards-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .card-updates {
+        grid-column: 1 / -1;
+    }
+}
+
+@media (max-width: 580px) {
+    .container {
+        padding: 1rem 0.9rem 2rem;
+    }
+
+    .intro {
+        flex-direction: column;
+        align-items: flex-start;
+        margin-bottom: 1.25rem;
+    }
+
+    .intro h1 {
+        font-size: 1.45rem;
+    }
+
+    .btn-generate {
+        width: 100% !important;
+        justify-content: center;
+    }
+
+    .cards-grid {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+    }
+
+    .card-updates {
+        grid-column: auto;
+    }
+
+    .token-number {
+        font-size: 2.4rem;
+    }
+
+    .serving-number {
+        font-size: 4rem;
+    }
+
+    .meta-row {
+        gap: 1.25rem;
+    }
+}
+
+@media (max-width: 360px) {
+    .token-number {
+        font-size: 2rem;
+    }
+
+    .serving-number {
+        font-size: 3.2rem;
+    }
+
+    .slide {
+        padding: 1.2rem 1.1rem 1rem;
+    }
+}
