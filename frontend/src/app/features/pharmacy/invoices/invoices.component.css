@@ -1,0 +1,248 @@
+.invoices-container {
+  padding: 2rem;
+  background-color: #1a1a1a;
+  min-height: 100vh;
+}
+
+.header-section {
+  margin-bottom: 2rem;
+}
+
+.header-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 1rem;
+}
+
+.header-title h1 {
+  font-size: 2rem;
+  font-weight: 600;
+  color: #ffffff;
+  margin: 0;
+}
+
+.header-actions {
+  display: flex;
+  gap: 1rem;
+}
+
+.filter-tabs-section {
+  margin-bottom: 2rem;
+  padding: 1rem 0;
+}
+
+.status-buttons {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.status-button-content {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.ml-2 {
+  margin-left: 0.5rem;
+}
+
+.toolbar-section {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  align-items: center;
+}
+
+.search-input {
+  flex: 1;
+  max-width: 400px;
+}
+
+.search-input input {
+  background-color: #2a2a2a;
+  border: 1px solid #3a3a3a;
+  color: #ffffff;
+  padding: 0.75rem 1rem;
+  border-radius: 0.375rem;
+  width: 100%;
+}
+
+.search-input input::placeholder {
+  color: #888888;
+}
+
+.search-input input:focus {
+  outline: none;
+  border-color: #f59e0b;
+  background-color: #2a2a2a;
+  color: #ffffff;
+}
+
+.filter-panel {
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-width: 280px;
+  background-color: #1e1e2e;
+  border-radius: 0.5rem;
+}
+
+.filter-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.filter-row label {
+  color: #ffffff;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.filter-row input {
+  background-color: #2a2a2a;
+  border: 1px solid #3a3a3a;
+  color: #ffffff;
+  padding: 0.75rem;
+  border-radius: 0.375rem;
+}
+
+.filter-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.bulk-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem;
+  background-color: #2a2a2a;
+  border-radius: 0.375rem;
+  margin-bottom: 1.5rem;
+  border-left: 3px solid #f59e0b;
+}
+
+.bulk-text {
+  color: #ffffff;
+  font-weight: 500;
+}
+
+.bulk-buttons {
+  display: flex;
+  gap: 0.5rem;
+}
+
+:deep(.p-datatable) {
+  background-color: #1e1e2e;
+  color: #ffffff;
+}
+
+:deep(.p-datatable .p-datatable-thead > tr > th) {
+  background-color: #2a2a2a;
+  color: #ffffff;
+  border-color: #3a3a3a;
+  padding: 1rem;
+  text-align: left;
+}
+
+:deep(.p-datatable .p-datatable-tbody > tr) {
+  border-color: #3a3a3a;
+  background-color: #1e1e2e;
+}
+
+:deep(.p-datatable .p-datatable-tbody > tr > td) {
+  padding: 1rem;
+  color: #ffffff;
+}
+
+:deep(.p-datatable .p-datatable-tbody > tr:hover) {
+  background-color: #252535;
+}
+
+:deep(.p-paginator) {
+  background-color: #2a2a2a;
+  color: #ffffff;
+  border-color: #3a3a3a;
+}
+
+:deep(.p-paginator .p-paginator-pages .p-paginator-page) {
+  color: #ffffff;
+  background-color: transparent;
+  border-color: #3a3a3a;
+}
+
+:deep(.p-paginator .p-paginator-pages .p-paginator-page:hover) {
+  background-color: #3a3a3a;
+  border-color: #f59e0b;
+}
+
+:deep(.p-paginator .p-paginator-pages .p-paginator-page.p-highlight) {
+  background-color: #f59e0b;
+  color: #000;
+  border-color: #f59e0b;
+}
+
+.actions-cell {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.actions-cell p-button {
+  color: #ffffff;
+}
+
+:deep(.p-badge) {
+  background-color: #3a3a3a;
+  color: #ffffff;
+}
+
+:deep(.p-tag) {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+}
+
+.text-green-400 {
+  color: #4ade80;
+  font-weight: 500;
+}
+
+@media (max-width: 768px) {
+  .header-content {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+
+  .toolbar-section {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .search-input {
+    max-width: 100%;
+  }
+
+  .status-buttons {
+    flex-direction: column;
+  }
+
+  .bulk-actions {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+
+  :deep(.p-datatable) {
+    font-size: 0.875rem;
+  }
+
+  :deep(.p-datatable .p-datatable-thead > tr > th),
+  :deep(.p-datatable .p-datatable-tbody > tr > td) {
+    padding: 0.5rem;
+  }
+}
