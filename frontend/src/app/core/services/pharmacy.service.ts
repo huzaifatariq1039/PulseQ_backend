@@ -1,7 +1,7 @@
-import { Injectable } from '@angular/core';
+import { Injectable, signal } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { BehaviorSubject, Observable, of } from 'rxjs';
-import { tap, catchError } from 'rxjs/operators';
+import { tap, catchError, finalize } from 'rxjs/operators';
 import { environment } from '../../../environments/environment';
 import { Medicine } from '../../shared/models/medicine.model';
 
@@ -53,9 +53,8 @@ export class PharmacyService {
   private deletedMedicinesSubject = new BehaviorSubject<Medicine[]>(this.deletedMedicines);
   public deletedMedicines$ = this.deletedMedicinesSubject.asObservable();
 
-  private medicines: Medicine[] = [];
-  private medicinesSubject = new BehaviorSubject<Medicine[]>(this.medicines);
-  public medicines$ = this.medicinesSubject.asObservable();
+  readonly medicines = signal<Medicine[]>([]);
+  readonly loading = signal<boolean>(false);
 
   // Sales data
   private sales: Sale[] = [];
@@ -161,14 +160,17 @@ export class PharmacyService {
   /** Load ALL medicines from API into local state */
   loadMedicinesFromApi(hospitalId?: string): void {
     if (typeof window === 'undefined') return;
+    this.loading.set(true);
     this.fetchAllMedicines(hospitalId).pipe(
       tap((items: any[]) => {
-        this.medicines = items.map((m: any) => this.apiToMedicine(m));
-        this.medicinesSubject.next([...this.medicines]);
+        this.medicines.set(items.map((m: any) => this.apiToMedicine(m)));
       }),
       catchError(err => {
         console.error('[PharmacyService] Failed to load medicines:', err);
         return of(null);
+      }),
+      finalize(() => {
+        this.loading.set(false);
       })
     ).subscribe();
   }
@@ -211,8 +213,7 @@ export class PharmacyService {
     this.deletedMedicinesSubject.next([...this.deletedMedicines]);
     const restored = { ...med };
     delete restored.deletedOn;
-    this.medicines.push(restored);
-    this.medicinesSubject.next([...this.medicines]);
+    this.medicines.update(current => [...current, restored]);
   }
 
   deleteMedicinePermanently(med: Medicine) {
@@ -229,8 +230,8 @@ export class PharmacyService {
     };
     this.deletedMedicines.push(trashedMed);
     this.deletedMedicinesSubject.next([...this.deletedMedicines]);
-    this.medicines = this.medicines.filter(m => m.id !== med.id);
-    this.medicinesSubject.next([...this.medicines]);
+    this.medicines.update(current => current.filter(m => m.id !== med.id));
+    this.medicinesChanged.next(true);
   }
 
   getSales(): Sale[] {
@@ -259,37 +260,35 @@ export class PharmacyService {
   }
 
   getAll(): Medicine[] {
-    return this.medicines;
+    return this.medicines();
   }
 
   getAll$(): Observable<Medicine[]> {
-    return this.medicines$;
+    return of(this.medicines());
   }
 
   getById(id: string): Medicine | undefined {
-    return this.medicines.find(m => m.id === id);
+    return this.medicines().find(m => m.id === id);
   }
 
   add(medicine: Omit<Medicine, 'id'>): Medicine {
     const allIds = [
-      ...this.medicines.map(m => parseInt(m.id, 10)),
+      ...this.medicines().map(m => parseInt(m.id, 10)),
       ...this.deletedMedicines.map(m => parseInt(m.id, 10))
     ].filter(n => !isNaN(n));
     const nextId = allIds.length > 0 ? Math.max(...allIds) + 1 : 1;
     const idStr = nextId.toString();
     const newMedicine: Medicine = { ...medicine, id: idStr, productId: idStr };
-    this.medicines.push(newMedicine);
-    this.medicinesSubject.next([...this.medicines]);
+    this.medicines.update(current => [...current, newMedicine]);
     this.medicinesChanged.next(true);
     return newMedicine;
   }
 
   update(id: string, medicine: Omit<Medicine, 'id'>): Medicine | undefined {
-    const index = this.medicines.findIndex(m => m.id === id);
+    const index = this.medicines().findIndex(m => m.id === id);
     if (index !== -1) {
       const updatedMedicine: Medicine = { ...medicine, id };
-      this.medicines[index] = updatedMedicine;
-      this.medicinesSubject.next([...this.medicines]);
+      this.medicines.update(items => items.map(m => (m.id === id ? updatedMedicine : m)));
       this.medicinesChanged.next(true);
       return updatedMedicine;
     }
@@ -297,13 +296,13 @@ export class PharmacyService {
   }
 
   delete(id: string): boolean {
-    const index = this.medicines.findIndex(m => m.id === id);
+    const current = this.medicines();
+    const index = current.findIndex(m => m.id === id);
     if (index !== -1) {
-      const deleted = this.medicines[index];
+      const deleted = current[index];
       this.deletedMedicines.push({ ...deleted, deletedOn: new Date().toISOString() });
       this.deletedMedicinesSubject.next([...this.deletedMedicines]);
-      this.medicines.splice(index, 1);
-      this.medicinesSubject.next([...this.medicines]);
+      this.medicines.update(items => items.filter(m => m.id !== id));
       this.medicinesChanged.next(true);
       return true;
     }

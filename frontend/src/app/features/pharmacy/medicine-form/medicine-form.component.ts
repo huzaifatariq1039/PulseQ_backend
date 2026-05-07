@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { RouterModule, ActivatedRoute, Router } from '@angular/router';
@@ -20,6 +20,7 @@ import { PharmacySidebarComponent } from '../shared/components/pharmacy-sidebar/
 @Component({
     selector: 'app-medicine-form',
     standalone: true,
+    changeDetection: ChangeDetectionStrategy.OnPush,
     imports: [
         CommonModule, RouterModule, FormsModule, ReactiveFormsModule,
         CardModule, ButtonModule, InputTextModule, InputNumberModule,
@@ -64,7 +65,8 @@ export class MedicineFormComponent implements OnInit {
         private pharmacyService: PharmacyService,
         private messageService: MessageService,
         private route: ActivatedRoute,
-        private router: Router
+        private router: Router,
+        private cdr: ChangeDetectorRef
     ) { }
 
     ngOnInit(): void {
@@ -80,6 +82,7 @@ export class MedicineFormComponent implements OnInit {
                         if (!isNaN(pid) && pid > maxId) maxId = pid;
                     }
                     this.medicineForm.patchValue({ productId: (maxId + 1).toString() });
+                    this.cdr.markForCheck();
                 },
                 error: (err) => {
                     console.error('Failed to fetch medicines for productId generation', err);
@@ -132,6 +135,7 @@ export class MedicineFormComponent implements OnInit {
                     this.isEditing = true;
                 }
                 this.loadMedicineData();
+                this.cdr.markForCheck();
             }
         });
     }
@@ -168,6 +172,7 @@ export class MedicineFormComponent implements OnInit {
                             distributorMobile: '', // API doesn't provide mobile
                             distributorCompany: medicine.distributor || ''
                         });
+                        this.cdr.markForCheck();
                     } else {
                         this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Medicine not found', life: 3000 });
                         this.router.navigate(['/staff/pharmacy/inventory']);
@@ -221,6 +226,7 @@ export class MedicineFormComponent implements OnInit {
                     this.messageService.add({ severity: 'success', summary: 'Success', detail: 'Medicine updated successfully', life: 3000 });
                     // Update local state for immediate UI reflection
                     this.pharmacyService.update(this.medicineId!, medicineData);
+                    this.cdr.markForCheck();
                     setTimeout(() => { this.router.navigate(['/staff/pharmacy/inventory']); }, 1500);
                 },
                 error: (err) => {
@@ -251,6 +257,7 @@ export class MedicineFormComponent implements OnInit {
                     this.messageService.add({ severity: 'success', summary: 'Success', detail: 'Medicine added successfully', life: 3000 });
                     // Also update local state for immediate UI reflection if needed
                     this.pharmacyService.add(medicineData);
+                    this.cdr.markForCheck();
                     setTimeout(() => { this.router.navigate(['/staff/pharmacy/inventory']); }, 1500);
                 },
                 error: (err) => {

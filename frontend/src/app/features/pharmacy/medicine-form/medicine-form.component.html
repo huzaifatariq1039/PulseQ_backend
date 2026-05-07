@@ -6,13 +6,15 @@
     <main class="main-content">
         <div class="page-header">
             <div>
-                <h1 *ngIf="isViewMode">View Medicine</h1>
-                <h1 *ngIf="!isViewMode">{{ isEditing ? 'Edit Medicine' : 'Add New Medicine' }}</h1>
-                <p class="subtitle" *ngIf="isViewMode">Medicine details (read-only)</p>
-                <p class="subtitle" *ngIf="!isViewMode">
-                    {{ isEditing ? 'Update medicine details in inventory' : 'Enter medicine details to add to inventory'
-                    }}
+                @if (isViewMode) {
+                <h1>View Medicine</h1>
+                <p class="subtitle">Medicine details (read-only)</p>
+                } @else {
+                <h1>{{ isEditing ? 'Edit Medicine' : 'Add New Medicine' }}</h1>
+                <p class="subtitle">
+                    {{ isEditing ? 'Update medicine details in inventory' : 'Enter medicine details to add to inventory' }}
                 </p>
+                }
             </div>
         </div>
 
@@ -36,7 +38,9 @@
                             <input pInputText type="text" id="name" formControlName="name" class="form-control"
                                 [ngClass]="{ 'ng-invalid ng-touched': isFieldInvalid('name') }"
                                 placeholder="e.g. Paracetamol 500mg" />
-                            <div *ngIf="isFieldInvalid('name')" class="error-message">Medicine name is required</div>
+                            @if (isFieldInvalid('name')) {
+                            <div class="error-message">Medicine name is required</div>
+                            }
                         </div>
                     </div>
 
@@ -52,7 +56,9 @@
                             <input pInputText type="text" id="salt" formControlName="salt" class="form-control"
                                 [ngClass]="{ 'ng-invalid ng-touched': isFieldInvalid('salt') }"
                                 placeholder="e.g. Acetaminophen" />
-                            <div *ngIf="isFieldInvalid('salt')" class="error-message">Salt name is required</div>
+                            @if (isFieldInvalid('salt')) {
+                            <div class="error-message">Salt name is required</div>
+                            }
                         </div>
                     </div>
 
@@ -89,8 +95,9 @@
                                 class="form-control"
                                 [ngClass]="{ 'ng-invalid ng-touched': isFieldInvalid('batchNumber') }"
                                 placeholder="e.g. BATCH-A123" />
-                            <div *ngIf="isFieldInvalid('batchNumber')" class="error-message">Batch number is required
-                            </div>
+                            @if (isFieldInvalid('batchNumber')) {
+                            <div class="error-message">Batch number is required</div>
+                            }
                         </div>
                         <div class="form-group">
                             <label for="stockUnit" class="form-label">Stock Unit</label>
@@ -103,7 +110,9 @@
                                 [useGrouping]="false"
                                 [ngClass]="{ 'ng-invalid ng-touched': isFieldInvalid('quantity') }">
                             </p-inputNumber>
-                            <div *ngIf="isFieldInvalid('quantity')" class="error-message">Quantity is required</div>
+                            @if (isFieldInvalid('quantity')) {
+                            <div class="error-message">Quantity is required</div>
+                            }
                         </div>
                     </div>
 
@@ -116,8 +125,9 @@
                                 [showIcon]="true" [touchUI]="false" placeholder="DD/MM/YYYY"
                                 [ngClass]="{ 'ng-invalid ng-touched': isFieldInvalid('manufactureDate') }">
                             </p-calendar>
-                            <div *ngIf="isFieldInvalid('manufactureDate')" class="error-message">Manufacture date is
-                                required</div>
+                            @if (isFieldInvalid('manufactureDate')) {
+                            <div class="error-message">Manufacture date is required</div>
+                            }
                         </div>
                         <div class="form-group">
                             <label for="expiryDate" class="form-label">Expiry Date <span
@@ -126,8 +136,9 @@
                                 [showIcon]="true" [touchUI]="false" placeholder="DD/MM/YYYY"
                                 [ngClass]="{ 'ng-invalid ng-touched': isFieldInvalid('expiryDate') }">
                             </p-calendar>
-                            <div *ngIf="isFieldInvalid('expiryDate')" class="error-message">Expiry date is required
-                            </div>
+                            @if (isFieldInvalid('expiryDate')) {
+                            <div class="error-message">Expiry date is required</div>
+                            }
                         </div>
                     </div>
                 </div>
@@ -145,8 +156,9 @@
                                 [maxFractionDigits]="2" placeholder="0.00" [useGrouping]="false"
                                 [ngClass]="{ 'ng-invalid ng-touched': isFieldInvalid('purchasedPrice') }">
                             </p-inputNumber>
-                            <div *ngIf="isFieldInvalid('purchasedPrice')" class="error-message">Purchased price is
-                                required</div>
+                            @if (isFieldInvalid('purchasedPrice')) {
+                            <div class="error-message">Purchased price is required</div>
+                            }
                         </div>
                         <div class="form-group">
                             <label for="sellingPrice" class="form-label">Selling Price (Rs) <span
@@ -155,8 +167,9 @@
                                 [maxFractionDigits]="2" placeholder="0.00" [useGrouping]="false"
                                 [ngClass]="{ 'ng-invalid ng-touched': isFieldInvalid('sellingPrice') }">
                             </p-inputNumber>
-                            <div *ngIf="isFieldInvalid('sellingPrice')" class="error-message">Selling price is required
-                            </div>
+                            @if (isFieldInvalid('sellingPrice')) {
+                            <div class="error-message">Selling price is required</div>
+                            }
                         </div>
                     </div>
 
@@ -186,8 +199,9 @@
                                 class="form-control"
                                 [ngClass]="{ 'ng-invalid ng-touched': isFieldInvalid('supplierName') }"
                                 placeholder="Supplier company name" />
-                            <div *ngIf="isFieldInvalid('supplierName')" class="error-message">Supplier name is required
-                            </div>
+                            @if (isFieldInvalid('supplierName')) {
+                            <div class="error-message">Supplier name is required</div>
+                            }
                         </div>
                         <div class="form-group">
                             <label for="distributorName" class="form-label">Distributor Name <span
@@ -196,8 +210,9 @@
                                 class="form-control"
                                 [ngClass]="{ 'ng-invalid ng-touched': isFieldInvalid('distributorName') }"
                                 placeholder="Distributor full name" />
-                            <div *ngIf="isFieldInvalid('distributorName')" class="error-message">Distributor name is
-                                required</div>
+                            @if (isFieldInvalid('distributorName')) {
+                            <div class="error-message">Distributor name is required</div>
+                            }
                         </div>
                     </div>
 
@@ -210,8 +225,9 @@
                                 class="form-control"
                                 [ngClass]="{ 'ng-invalid ng-touched': isFieldInvalid('distributorMobile') }"
                                 placeholder="e.g. 03001234567" />
-                            <div *ngIf="isFieldInvalid('distributorMobile')" class="error-message">Distributor mobile is
-                                required</div>
+                            @if (isFieldInvalid('distributorMobile')) {
+                            <div class="error-message">Distributor mobile is required</div>
+                            }
                         </div>
                         <div class="form-group">
                             <label for="distributorCompany" class="form-label">Distributor Company <span
@@ -220,19 +236,22 @@
                                 class="form-control"
                                 [ngClass]="{ 'ng-invalid ng-touched': isFieldInvalid('distributorCompany') }"
                                 placeholder="e.g. Sheikh Brother Pharma" />
-                            <div *ngIf="isFieldInvalid('distributorCompany')" class="error-message">Distributor company
-                                is required</div>
+                            @if (isFieldInvalid('distributorCompany')) {
+                            <div class="error-message">Distributor company is required</div>
+                            }
                         </div>
                     </div>
                 </div>
 
                 <!-- ── ACTIONS ── -->
-                <div class="form-actions" *ngIf="!isViewMode">
+                @if (!isViewMode) {
+                <div class="form-actions">
                     <button type="button" (click)="onCancel()" class="cancel-btn">Cancel</button>
                     <button type="submit" class="submit-btn">
                         {{ isEditing ? 'Update Medicine' : 'Save Medicine' }}
                     </button>
                 </div>
+                }
 
             </form>
         </p-card>

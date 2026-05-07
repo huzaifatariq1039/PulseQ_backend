@@ -60,7 +60,8 @@
         </div>
 
         <!-- BULK ACTION BAR — only visible when something is selected -->
-        <div class="bulk-action-bar" *ngIf="selectedCount > 0">
+        @if (selectedCount > 0) {
+        <div class="bulk-action-bar">
             <span class="bulk-count">
                 <i class="pi pi-check-square"></i>
                 {{ selectedCount }} medicine{{ selectedCount > 1 ? 's' : '' }} selected
@@ -75,6 +76,7 @@
                 </button>
             </div>
         </div>
+        }
 
         <!-- INVENTORY TABLE CARD -->
         <div class="inventory-card">
@@ -164,8 +166,11 @@
                             <td colspan="18">
                                 <div class="empty-state">
                                     <i class="pi pi-inbox"></i>
-                                    <p *ngIf="medicineStatusFilter === 'active'">No active medicines</p>
-                                    <p *ngIf="medicineStatusFilter !== 'active'">No medicines found</p>
+                                    @if (medicineStatusFilter === 'active') {
+                                    <p>No active medicines</p>
+                                    } @else {
+                                    <p>No medicines found</p>
+                                    }
                                 </div>
                             </td>
                         </tr>

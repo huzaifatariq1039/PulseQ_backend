@@ -7,7 +7,8 @@ Provides:
 """
 
 import redis.asyncio as redis
-from redis.asyncio import Redis, ConnectionPool, PubSub
+from redis.asyncio import Redis, ConnectionPool
+from redis.asyncio.client import PubSub
 import logging
 from typing import Optional, Callable, Any
 

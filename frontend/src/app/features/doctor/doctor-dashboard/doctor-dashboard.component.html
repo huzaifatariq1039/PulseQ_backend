@@ -7,7 +7,9 @@
 </div>
 
 <!-- SIDEBAR OVERLAY -->
-<div class="sidebar-overlay" *ngIf="sidebarOpen" (click)="sidebarOpen = false"></div>
+@if (sidebarOpen) {
+    <div class="sidebar-overlay" (click)="sidebarOpen = false"></div>
+}
 
 <div class="doctor-layout">
     <!-- shared sidebar component -->
@@ -22,14 +24,20 @@
                 <h1>{{ doctorName }}</h1>
                 <div class="doctor-qualifications">{{ qualifications }}</div>
                 <p>{{ specialty }}</p>
-                <div class="doctor-rating" *ngIf="rating > 0">
+                @if (rating > 0) {
+                <div class="doctor-rating">
                     <span class="stars">
-                        <i class="pi pi-star-fill" *ngFor="let s of [1,2,3,4,5]"
+                        @for (s of [1, 2, 3, 4, 5]; track trackStar($index)) {
+                        <i class="pi pi-star-fill"
                             [ngClass]="{'active': s <= rating}"></i>
+                        }
                     </span>
                     <span class="rating-value">{{ rating | number:'1.1-1' }}</span>
-                    <span class="review-count" *ngIf="reviewCount > 0">({{ reviewCount }} reviews)</span>
+                    @if (reviewCount > 0) {
+                    <span class="review-count">({{ reviewCount }} reviews)</span>
+                    }
                 </div>
+                }
             </div>
             <div class="active-session">
                 <i class="pi pi-check-circle"></i>
@@ -68,10 +76,12 @@
             <section class="consultation-section">
                 <div class="section-header">
                     <h2>CURRENT CONSULTATION</h2>
-                    <span class="in-progress-badge" *ngIf="currentPatient">IN PROGRESS</span>
+                    @if (currentPatient) {
+                    <span class="in-progress-badge">IN PROGRESS</span>
+                    }
                 </div>
 
-                <ng-container *ngIf="currentPatient; else noPatient">
+                @if (currentPatient) {
                     <div class="consultation-card">
                         <!-- Patient Header -->
                         <div class="patient-header">
@@ -102,33 +112,33 @@
                             </button>
                         </div>
                         <!-- it must be visible only when consulation has started-->
-                        <div class="notes-section" *ngIf="isConsultationActive">
+                        @if (isConsultationActive) {
+                        <div class="notes-section">
                             <label class="notes-label">Consultation Notes (Optional)</label>
                             <textarea pInputTextarea [(ngModel)]="consultationNotes" rows="6"
                                 placeholder="Type clinical notes, diagnosis, or prescriptions here..."
                                 class="notes-textarea"></textarea>
                         </div>
+                        }
 
                         <div class="consultation-actions">
                             <!-- Start Consultation -->
-                            <ng-container *ngIf="!isConsultationActive">
+                            @if (!isConsultationActive) {
                                 <button pButton label="Start Consultation" icon="pi pi-play" class="start-btn"
                                     (click)="startConsultation()"></button>
-                            </ng-container>
+                            }
 
                             <!-- Finish Consultation -->
-                            <ng-container *ngIf="isConsultationActive">
+                            @if (isConsultationActive) {
                                 <button pButton label="Finish Consultation" icon="pi pi-check" class="finish-btn"
                                     (click)="finishConsultation()"></button>
-                            </ng-container>
+                            }
 
                             <button pButton label="Skip Patient" icon="pi pi-forward" class="skip-btn"
                                 (click)="skipPatient()"></button>
                         </div>
                     </div>
-                </ng-container>
-
-                <ng-template #noPatient>
+                } @else {
                     <div class="consultation-card empty">
                         <div class="patient-header">
                             <div>
@@ -137,7 +147,7 @@
                             </div>
                         </div>
                     </div>
-                </ng-template>
+                }
             </section>
 
             <!-- UPCOMING PATIENTS -->
@@ -148,7 +158,8 @@
                 </div>
 
                 <div class="upcoming-list">
-                    <div *ngFor="let patient of upcomingPatients" class="upcoming-card">
+                    @for (patient of upcomingPatients; track trackUpcomingPatient($index, patient)) {
+                    <div class="upcoming-card">
                         <div class="patient-token">{{ patient.token }}</div>
                         <div class="patient-info">
                             <h4>{{ patient.name }}</h4>
@@ -160,6 +171,7 @@
                             {{ patient.waitTime }}
                         </div>
                     </div>
+                    }
                 </div>
 
                 <!-- SKIPPED QUEUE -->
@@ -168,14 +180,18 @@
                     <span class="count">{{ skippedPatients.length }}</span>
                 </div>
                 <div class="skipped-list">
-                    <div *ngIf="skippedPatients.length === 0" class="queue-empty">No skipped patients</div>
-                    <div *ngFor="let s of skippedPatients; let si = index" class="skipped-card">
+                    @if (skippedPatients.length === 0) {
+                    <div class="queue-empty">No skipped patients</div>
+                    }
+                    @for (s of skippedPatients; track trackSkippedPatient(s); let si = $index) {
+                    <div class="skipped-card">
                         <div class="skipped-info">
                             <div class="skipped-token">{{ s.token }}</div>
                             <div class="skipped-name">{{ s.name }}</div>
                         </div>
                         <button pButton class="readd-btn" label="+ Re-add" (click)="reAddFromSkipped(s)"></button>
                     </div>
+                    }
                 </div>
             </aside>
         </div>

@@ -28,10 +28,10 @@
                 <!-- Password -->
                 <div class="form-group">
                     <label for="password" class="form-label">Password <span class="required">*</span></label>
-                    <input pInputText [type]="showPassword ? 'text' : 'password'" id="password"
+                    <input pInputText [type]="showPassword() ? 'text' : 'password'" id="password"
                         formControlName="password" placeholder="Enter your password" class="w-full" />
                     <div class="show-toggle">
-                        <label><input type="checkbox" (change)="showPassword = !showPassword" /> Show password</label>
+                        <label><input type="checkbox" (change)="showPassword.set(!showPassword())" /> Show password</label>
                     </div>
                     <div class="error-message"
                         *ngIf="f['password'].invalid && (f['password'].dirty || f['password'].touched)">

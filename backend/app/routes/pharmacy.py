@@ -19,11 +19,25 @@ from app.security import require_roles
 from app.utils.responses import ok
 from app.services.go_pos_service import go_pos_service
 from app.services.cache_service import CacheService, cached
+from app.routes.realtime import manager as RealTimeConnectionManager
 
 router = APIRouter()
 public_router = APIRouter()
 
 logger = logging.getLogger(__name__)
+
+
+async def _broadcast_inventory_update(hospital_id: Optional[str]) -> None:
+    if not hospital_id:
+        return
+
+    try:
+        await RealTimeConnectionManager.broadcast_via_redis(
+            f"hospital_{hospital_id}",
+            {"type": "INVENTORY_UPDATE"}
+        )
+    except Exception:
+        pass
 
 class AddMedicineRequest(BaseModel):
     product_id: int = Field(..., ge=0)
@@ -337,6 +351,7 @@ async def public_add_medicine(
         
         db.commit()
         db.refresh(existing)
+        await _broadcast_inventory_update(user_hospital)
         return ok(message="Medicine updated successfully", data={"id": existing.id, "product_id": existing.product_id})
 
     new_med = PharmacyMedicine(
@@ -359,6 +374,7 @@ async def public_add_medicine(
     )
     db.add(new_med)
     db.commit()
+    await _broadcast_inventory_update(user_hospital)
     return ok(message="Medicine added successfully", data={"id": new_med.id, "product_id": new_med.product_id})
 
 async def _sync_medicines_internal(db: Session, hospital_id: Optional[str] = None) -> Dict[str, int]:
@@ -406,6 +422,7 @@ async def _sync_medicines_internal(db: Session, hospital_id: Optional[str] = Non
         
     if synced_count > 0:
         db.commit()
+        await _broadcast_inventory_update(hospital_id)
         
     return {
         "synced": synced_count,
@@ -566,6 +583,7 @@ async def add_medicine(
         existing.is_deleted = False # Auto-revive
         db.commit()
         db.refresh(existing)
+        await _broadcast_inventory_update(current.hospital_id)
         return ok(data={"id": existing.id, "product_id": existing.product_id},
             message="Medicine updated successfully"
         )
@@ -591,6 +609,7 @@ async def add_medicine(
     db.add(new_med)
     db.commit()
     db.refresh(new_med)
+    await _broadcast_inventory_update(current.hospital_id)
     return ok(data={"id": new_med.id, "product_id": new_med.product_id},
         message="Medicine added successfully"
     )
@@ -703,6 +722,7 @@ async def delete_item(
     med.deleted_at = datetime.utcnow()
     
     db.commit()
+    await _broadcast_inventory_update(current.hospital_id)
     
     return ok(message=f"Medicine '{deleted_name}' deleted successfully", data={"deleted_id": deleted_id})
 
@@ -736,6 +756,8 @@ async def restore_item(
     med.deleted_at = None
     med.updated_at = datetime.utcnow()
     db.commit()
+
+    await _broadcast_inventory_update(current.hospital_id)
 
     return ok(
         message=f"Medicine '{med.name}' restored successfully",

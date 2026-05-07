@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router, ActivatedRoute, RouterModule } from '@angular/router';
 import { AdminSidebarComponent } from '../shared/components/admin-sidebar/admin-sidebar.component';
@@ -22,6 +22,7 @@ import { AuthService } from '../../../core/services/auth.service';
 @Component({
   selector: 'app-admin-dashboard',
   standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     CommonModule,
     RouterModule,
@@ -53,7 +54,8 @@ export class AdminDashboardComponent implements OnInit {
     public router: Router,
     private activatedRoute: ActivatedRoute,
     private staffService: StaffPortalService,
-    private authService: AuthService
+    private authService: AuthService,
+    private cdr: ChangeDetectorRef
   ) { }
 
   ngOnInit(): void {
@@ -127,6 +129,7 @@ export class AdminDashboardComponent implements OnInit {
             time: log.time_ago || log.created_at || ''
           }));
         }
+        this.cdr.markForCheck();
       },
       error: (err) => {
         console.error('Failed to load dashboard data', err);

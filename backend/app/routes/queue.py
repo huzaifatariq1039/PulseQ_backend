@@ -10,6 +10,7 @@ from app.security import require_roles
 from app.services.token_service import SmartTokenService
 from app.services.notification_scheduler_client import send_queue_alert, send_final_call
 from app.services.notification_service import NotificationService
+from app.routes.realtime import manager as RealTimeConnectionManager
 from datetime import datetime, date, time
 from app.utils.responses import ok, fail
 from app.utils.idempotency import Idempotency
@@ -20,6 +21,19 @@ router = APIRouter()
 
 # -------------------- Advanced queue management (queues collection) --------------------
 from app.services.queue_management_service import QueueManagementService, recalculate_queue_positions_sql
+
+
+async def _broadcast_queue_update(doctor_id: str) -> None:
+    if not doctor_id:
+        return
+
+    try:
+        await RealTimeConnectionManager.broadcast_via_redis(
+            f"doctor_{doctor_id}",
+            {"type": "QUEUE_UPDATE"}
+        )
+    except Exception:
+        pass
 
 
 @router.get("/doctor/{doctor_id}", response_model=QueueResponse)
@@ -86,6 +100,8 @@ async def test_advance_queue(
     t.status = "completed"
     t.completed_at = datetime.utcnow()
     db.commit()
+
+    await _broadcast_queue_update(doctor_id)
 
     # ── FIX: recalculate positions after debug advance ────────────────────────
     recalculate_queue_positions_sql(doctor_id, db)
@@ -162,6 +178,8 @@ async def advance_queue(
         current_token.duration_minutes = duration_minutes
         current_token.updated_at = datetime.utcnow()
         db.commit()
+
+        await _broadcast_queue_update(doctor_id)
 
         # ── FIX: recalculate queue_position for all remaining tokens ─────────
         recalculate_queue_positions_sql(doctor_id, db)
@@ -289,6 +307,8 @@ async def start_consultation(
         if hasattr(token, attr):
             setattr(token, attr, token.updated_at)
     db.commit()
+
+    await _broadcast_queue_update(token.doctor_id)
     
     try:
         log_action(current_user.user_id, role, action="START", token_id=token_id)
@@ -326,6 +346,8 @@ async def skip_patient(
     token.status = TokenStatusEnum.CANCELLED  # Using CANCELLED as skipped
     token.updated_at = datetime.utcnow()
     db.commit()
+
+    await _broadcast_queue_update(doctor_id)
 
     # ── FIX: recalculate positions after skip ────────────────────────────────
     recalculate_queue_positions_sql(doctor_id, db)
@@ -377,6 +399,8 @@ async def complete_consultation(
             pass
 
     db.commit()
+
+    await _broadcast_queue_update(doctor_id)
 
     # ── FIX: recalculate queue_position for all remaining tokens ─────────────
     recalculate_queue_positions_sql(doctor_id, db)

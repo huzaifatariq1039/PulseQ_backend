@@ -28,6 +28,7 @@ from app.services.whatsapp_service import send_template_message
 from app.services.refund_service import RefundService
 from app.services.message_scheduler import schedule_messages
 from app.services.confirmation_scheduler import schedule_confirmation_checks
+from app.routes.realtime import RealTimeConnectionManager, manager as realtime_manager
 from app.utils.mrn import get_or_create_patient_mrn
 from app.utils.state import is_transition_allowed
 from app.utils.responses import ok
@@ -100,51 +101,56 @@ def _to_smart_token_response(t: Token) -> SmartTokenResponse:
 
     is_active = status_val not in [TokenStatus.CANCELLED, TokenStatus.COMPLETED, TokenStatus.SKIPPED]
 
-    return SmartTokenResponse(
-        id=str(t.id),
-        patient_id=str(t.patient_id),
-        doctor_id=str(t.doctor_id),
-        hospital_id=str(t.hospital_id),
-        mrn=t.mrn,
-        token_number=t.token_number,
-        hex_code=t.hex_code,
-        display_code=t.display_code,
-        appointment_date=t.appointment_date,
-        status=status_val,           # ✅ now a proper enum value
-        payment_status=pay_status_val,  # ✅ now a proper enum value
-        payment_method=t.payment_method,
-        queue_position=t.queue_position,
-        total_queue=t.total_queue,
-        estimated_wait_time=t.estimated_wait_time,
-        consultation_fee=t.consultation_fee,
-        session_fee=t.session_fee,
-        total_fee=t.total_fee,
-        department=t.department,
-        created_at=t.created_at,
-        updated_at=t.updated_at,
-        is_active=is_active,
-        doctor_name=t.doctor_name,
-        doctor_specialization=t.doctor_specialization,
-        doctor_avatar_initials=t.doctor_avatar_initials,
-        hospital_name=t.hospital_name,
-        patient_name=t.patient_name,
-        patient_phone=t.patient_phone,
-        patient_age=t.patient_age,
-        patient_gender=t.patient_gender,
-        reason_for_visit=t.reason_for_visit,
-        patient={
+    data = {
+        "id": str(t.id),
+        "patient_id": str(t.patient_id),
+        "doctor_id": str(t.doctor_id),
+        "hospital_id": str(t.hospital_id),
+        "mrn": t.mrn,
+        "token_number": t.token_number,
+        "hex_code": t.hex_code,
+        "display_code": t.display_code,
+        "appointment_date": t.appointment_date,
+        "status": status_val,
+        "payment_status": pay_status_val,
+        "payment_method": t.payment_method,
+        "queue_position": t.queue_position,
+        "total_queue": t.total_queue,
+        "estimated_wait_time": t.estimated_wait_time,
+        "consultation_fee": t.consultation_fee,
+        "session_fee": t.session_fee,
+        "total_fee": t.total_fee,
+        "department": t.department,
+        "created_at": t.created_at,
+        "updated_at": t.updated_at,
+        "is_active": is_active,
+        "doctor_name": t.doctor_name,
+        "doctor_specialization": t.doctor_specialization,
+        "doctor_avatar_initials": t.doctor_avatar_initials,
+        "hospital_name": t.hospital_name,
+        "patient_name": t.patient_name,
+        "patient_phone": t.patient_phone,
+        "patient_age": t.patient_age,
+        "patient_gender": t.patient_gender,
+        "reason_for_visit": t.reason_for_visit,
+        "patient": {
             "name": t.patient_name,
             "phone": t.patient_phone,
             "age": t.patient_age,
             "gender": t.patient_gender,
         },
-        queue_opt_in=bool(t.queue_opt_in),
-        queue_opted_in_at=t.queue_opted_in_at,
-        confirmed=bool(t.confirmed),
-        confirmation_status=t.confirmation_status,
-        confirmed_at=t.confirmed_at,
-        cancelled_at=t.cancelled_at,
-    )
+        "queue_opt_in": bool(t.queue_opt_in),
+        "queue_opted_in_at": t.queue_opted_in_at,
+        "confirmed": bool(t.confirmed),
+        "confirmation_status": t.confirmation_status,
+        "confirmed_at": t.confirmed_at,
+        "cancelled_at": t.cancelled_at,
+    }
+
+    valid_keys = set(SmartTokenResponse.model_fields.keys())
+    filtered_data = {k: v for k, v in data.items() if k in valid_keys}
+    
+    return SmartTokenResponse(**filtered_data)
 
 
 def _local_day_for(dt_utc: datetime, tz_minutes: int) -> datetime.date:
@@ -738,10 +744,16 @@ async def generate_smart_token(
     db.commit()
     db.refresh(new_token)
 
-    out_dict = {k: v for k, v in new_token.__dict__.items() if not k.startswith('_')}
-    out_dict["estimated_wait_time"] = estimated_wait_time
+    await realtime_manager.broadcast_via_redis(
+        f"doctor_{new_token.doctor_id}",
+        {"type": "QUEUE_UPDATE"}
+    )
 
-    response_obj = SmartTokenResponse(**out_dict)
+    out_dict = {k: v for k, v in new_token.__dict__.items() if not k.startswith('_')}
+    valid_keys = set(SmartTokenResponse.model_fields.keys())
+    filtered_data = {k: v for k, v in out_dict.items() if k in valid_keys}
+    
+    response_obj = SmartTokenResponse(**filtered_data)
 
     await create_activity_log(
         current_user.user_id,

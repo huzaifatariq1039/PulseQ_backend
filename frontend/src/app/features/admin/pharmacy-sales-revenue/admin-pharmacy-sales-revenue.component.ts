@@ -12,6 +12,7 @@ import { ExternalPosService } from '../../../core/services/external-pos.service'
 import type { Sale } from '../../../core/services/pharmacy.service';
 import { AdminSidebarComponent } from '../shared/components/admin-sidebar/admin-sidebar.component';
 import { AuthService } from '../../../core/services/auth.service';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 
 @Component({
     selector: 'app-admin-pharmacy-sales-revenue',
@@ -44,12 +45,9 @@ export class AdminPharmacySalesRevenueComponent implements OnInit {
     sales: Sale[] = [];
 
     private readonly platformId = inject(PLATFORM_ID);
-
-    constructor(
-        private pharmacyService: PharmacyService,
-        private posService: ExternalPosService,
-        private authService: AuthService
-    ) { }
+    private pharmacyService = inject(PharmacyService);
+    private posService = inject(ExternalPosService);
+    private authService = inject(AuthService);
 
     ngOnInit(): void {
         // Skip HTTP calls during SSR — this page requires browser auth token
@@ -66,40 +64,44 @@ export class AdminPharmacySalesRevenueComponent implements OnInit {
         const hid = this.getHospitalId();
 
         // 1. Daily Sales
-        this.pharmacyService.getDailySalesReport(hid).subscribe({
-            next: (res: any) => {
-                const data = res?.data || res || {};
-                this.todaySales = data.total_sales || data.today_sales || 0;
-            },
-            error: () => {
-                this.todaySales = 0; // Removed local fallback
-            }
-        });
+        this.pharmacyService.getDailySalesReport(hid)
+            .pipe(takeUntilDestroyed())
+            .subscribe({
+                next: (res: any) => {
+                    const data = res?.data || res || {};
+                    this.todaySales = data.total_sales || data.today_sales || 0;
+                },
+                error: () => {
+                    this.todaySales = 0; // Removed local fallback
+                }
+            });
 
         // 2. Inventory Turnover & Aggregate Metrics
-        this.pharmacyService.getInventoryTurnoverReport(hid).subscribe({
-            next: (res: any) => {
-                const data = res?.data || res || {};
-                this.totalStock = data.total_stock || data.current_stock || 0;
-                this.medicineTypes = data.medicine_types || data.unique_items || 0;
-                this.inventoryValue = data.inventory_value || data.total_value || 0;
+        this.pharmacyService.getInventoryTurnoverReport(hid)
+            .pipe(takeUntilDestroyed())
+            .subscribe({
+                next: (res: any) => {
+                    const data = res?.data || res || {};
+                    this.totalStock = data.total_stock || data.current_stock || 0;
+                    this.medicineTypes = data.medicine_types || data.unique_items || 0;
+                    this.inventoryValue = data.inventory_value || data.total_value || 0;
 
-                if (data.weekly_sales || data.weekly_revenue) {
-                    this.weeklySales = data.weekly_sales ?? data.weekly_revenue;
+                    if (data.weekly_sales || data.weekly_revenue) {
+                        this.weeklySales = data.weekly_sales ?? data.weekly_revenue;
+                    }
+                    if (data.monthly_sales || data.monthly_revenue) {
+                        this.monthlySales = data.monthly_sales ?? data.monthly_revenue;
+                    }
+                    if (data.total_revenue || data.total_value) {
+                        this.totalRevenue = data.total_revenue ?? data.total_value;
+                    }
+                },
+                error: () => {
+                    this.totalStock = 0;
+                    this.medicineTypes = 0;
+                    this.inventoryValue = 0;
                 }
-                if (data.monthly_sales || data.monthly_revenue) {
-                    this.monthlySales = data.monthly_sales ?? data.monthly_revenue;
-                }
-                if (data.total_revenue || data.total_value) {
-                    this.totalRevenue = data.total_revenue ?? data.total_value;
-                }
-            },
-            error: () => {
-                this.totalStock = 0;
-                this.medicineTypes = 0;
-                this.inventoryValue = 0;
-            }
-        });
+            });
 
         // 3. Sales/Items Table
         this.loadTableData();
@@ -109,38 +111,46 @@ export class AdminPharmacySalesRevenueComponent implements OnInit {
         const hid = this.getHospitalId();
 
         if (this.searchTerm && this.searchTerm.trim()) {
-            this.pharmacyService.searchMedicineApi(this.searchTerm).subscribe({
-                next: (res: any) => {
-                    this.processApiItemsToSales(res?.data || res?.items || res || []);
-                },
-                error: () => this.fallbackLocalSales()
-            });
+            this.pharmacyService.searchMedicineApi(this.searchTerm)
+                .pipe(takeUntilDestroyed())
+                .subscribe({
+                    next: (res: any) => {
+                        this.processApiItemsToSales(res?.data || res?.items || res || []);
+                    },
+                    error: () => this.fallbackLocalSales()
+                });
             return;
         }
 
         // Primary: try daily sales report (real transactions with sale dates)
-        this.pharmacyService.getDailySalesReport(hid).subscribe({
-            next: (res: any) => {
-                const data = res?.data || res || {};
-                const txns = data.transactions || data.items || data.sales;
-                if (Array.isArray(txns) && txns.length > 0) {
-                    this.processApiItemsToSales(txns);
-                } else {
+        this.pharmacyService.getDailySalesReport(hid)
+            .pipe(takeUntilDestroyed())
+            .subscribe({
+                next: (res: any) => {
+                    const data = res?.data || res || {};
+                    const txns = data.transactions || data.items || data.sales;
+                    if (Array.isArray(txns) && txns.length > 0) {
+                        this.processApiItemsToSales(txns);
+                    } else {
+                        // Fallback: sales history endpoint
+                        this.posService.getSalesHistory(hid)
+                            .pipe(takeUntilDestroyed())
+                            .subscribe({
+                                next: (r: any) => this.processApiItemsToSales(r?.sales || r?.history || r?.data || r || []),
+                                error: () => this.fallbackLocalSales()
+                            });
+                    }
+                },
+                error: () => {
                     // Fallback: sales history endpoint
-                    this.posService.getSalesHistory(hid).subscribe({
-                        next: (r: any) => this.processApiItemsToSales(r?.sales || r?.history || r?.data || r || []),
-                        error: () => this.fallbackLocalSales()
-                    });
+                    this.posService.getSalesHistory(hid)
+                        .pipe(takeUntilDestroyed())
+                        .subscribe({
+                            next: (r: any) => this.processApiItemsToSales(r?.sales || r?.history || r?.data || r || []),
+                            error: () => this.fallbackLocalSales()
+                        });
                 }
-            },
-            error: () => {
-                // Fallback: sales history endpoint
-                this.posService.getSalesHistory(hid).subscribe({
-                    next: (r: any) => this.processApiItemsToSales(r?.sales || r?.history || r?.data || r || []),
-                    error: () => this.fallbackLocalSales()
-                });
-            }
-        });
+            });
     }
 
     private processApiItemsToSales(items: any[]): void {

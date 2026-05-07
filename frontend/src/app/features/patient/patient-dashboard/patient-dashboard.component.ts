@@ -9,6 +9,7 @@ import { QueueService } from '../../../core/services/queue.service';
 import { TokenService } from '../../../core/services/token.service';
 import { DashboardService } from '../../../core/services/dashboard.service';
 import { UserProfileService, UserProfile } from '../../../core/services/user-profile.service';
+import { RealtimeService } from '../../../core/services/realtime.service';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 
@@ -46,6 +47,7 @@ export class PatientDashboardComponent implements OnInit, OnDestroy {
   patientName = 'Patient';
   userProfile: UserProfile | null = null;
   private destroy$ = new Subject<void>();
+  private realtimeRooms = new Set<string>();
 
   activeTokens: ActiveToken[] = [];
   focusedTokenIndex = 0;
@@ -58,7 +60,8 @@ export class PatientDashboardComponent implements OnInit, OnDestroy {
     private queueService: QueueService,
     private tokenService: TokenService,
     private userProfileService: UserProfileService,
-    private dashboardService: DashboardService
+    private dashboardService: DashboardService,
+    private realtimeService: RealtimeService
   ) { }
 
   // ── Computed ────────────────────────────────────────────────────
@@ -114,6 +117,11 @@ export class PatientDashboardComponent implements OnInit, OnDestroy {
               people_ahead: queue?.people_ahead ?? null,
               is_future_appointment: queue?.is_future_appointment ?? false,
             });
+            
+            // Setup WebSocket listener for this doctor
+            if (token.doctor_id) {
+              this.setupRealtimeListener(token.doctor_id);
+            }
           }
         },
         error: (err) => console.error('active-token error', err)
@@ -181,7 +189,46 @@ export class PatientDashboardComponent implements OnInit, OnDestroy {
     }
   }
 
+  private setupRealtimeListener(doctorId: string): void {
+    const room = `doctor_${doctorId}`;
+    
+    if (this.realtimeRooms.has(room)) return;
+    
+    this.realtimeService.connect(room)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (message: any) => {
+          if (message && ['QUEUE_UPDATE', 'TOKEN_UPDATE'].includes(message.type)) {
+            this.dashboardService.getActiveToken().pipe(takeUntil(this.destroy$)).subscribe({
+              next: (res: any) => {
+                const token = res?.data?.token;
+                const queue = res?.data?.queue;
+                if (token && !['cancelled', 'completed'].includes(token.status) && !token.doctor_unavailable) {
+                  this.mergeToken({
+                    ...token,
+                    queue_position: queue?.queue_position ?? null,
+                    estimated_wait_time: queue?.estimated_wait_time ?? token.estimated_wait_time ?? null,
+                    current_token_serving: queue?.current_token_serving ?? null,
+                    total_queue: queue?.total_queue ?? null,
+                    people_ahead: queue?.people_ahead ?? null,
+                    is_future_appointment: queue?.is_future_appointment ?? false,
+                  });
+                }
+              },
+              error: (err) => console.error('realtime refresh error', err)
+            });
+          }
+        },
+        error: (err) => {
+          console.error(`WebSocket error for room ${room}:`, err);
+        }
+      });
+    
+    this.realtimeRooms.add(room);
+  }
+
   ngOnDestroy(): void {
+    this.realtimeRooms.forEach(room => this.realtimeService.disconnect(room));
     this.destroy$.next();
     this.destroy$.complete();
   }

@@ -19,6 +19,27 @@ This repository contains the backend and frontend for PulseQ in a single monorep
 - Frontend env values are managed through Angular environment files in `frontend/src/environments/`
 
 The backend loads `backend/.env` automatically.
+Setup (One-time)
+Backend Setup
+cd /home/saif/Downloads/PulseQ_backend/backend
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+pip install -r requirements.txt
+Frontend Setup
+cd /home/saif/Downloads/PulseQ_backend/frontend
+npm install
+
+Running the Project
+Option 1: Run in Separate Terminals (Recommended)
+Terminal 1 - Backend (Port 8000):
+cd /home/saif/Downloads/PulseQ_backend/backend
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+source .venv/bin/activate && uvicorn main:app --reload --host 127.0.0.1 --port 8000
+Terminal 2 - Frontend (Port 4200):
+cd /home/saif/Downloads/PulseQ_backend/frontend
+npm start
+Then open your browser to: http://localhost:4200
+
 
 ## First-Time Setup
 

@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, DestroyRef, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule, Router, ActivatedRoute } from '@angular/router';
 import { FormsModule } from '@angular/forms';
@@ -10,12 +10,13 @@ import { ToastModule } from 'primeng/toast';
 import { MessageService } from 'primeng/api';
 import { ConsultationService } from '../../../core/services/consultation.service';
 import { QueueService } from '../../../core/services/queue.service';
-import { Subscription, interval } from 'rxjs';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { DoctorSidebarComponent } from '../shared/components/doctor-sidebar/doctor-sidebar.component';
 import { StaffPortalService } from '../../../core/services/staff-portal.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { NotificationService } from '../../../core/services/notification.service';
 import { DoctorService } from '../../../core/services';
+import { RealtimeService } from '../../../core/services/realtime.service';
 
 interface Patient {
   name: string;
@@ -45,6 +46,7 @@ interface UpcomingPatient {
 @Component({
   selector: 'app-doctor-dashboard',
   standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     CommonModule,
     RouterModule,
@@ -60,7 +62,7 @@ interface UpcomingPatient {
   templateUrl: './doctor-dashboard.component.html',
   styleUrl: './doctor-dashboard.component.css'
 })
-export class DoctorDashboardComponent implements OnInit, OnDestroy {
+export class DoctorDashboardComponent implements OnInit {
 
   doctorName = '';
   doctorId = '';
@@ -80,24 +82,37 @@ export class DoctorDashboardComponent implements OnInit, OnDestroy {
 
   upcomingPatients: UpcomingPatient[] = [];
   skippedPatients: UpcomingPatient[] = [];
+  private realtimeRoom: string | null = null;
 
-  private sub: Subscription | null = null;
+  private route = inject(ActivatedRoute);
+  private router = inject(Router);
+  private messageService = inject(MessageService);
+  private consultationService = inject(ConsultationService);
+  private queueService = inject(QueueService);
+  private staffService = inject(StaffPortalService);
+  private authService = inject(AuthService);
+  private doctorService = inject(DoctorService);
+  private notificationService = inject(NotificationService);
+  private realtimeService = inject(RealtimeService);
+  private destroyRef = inject(DestroyRef);
 
-  constructor(
-    private route: ActivatedRoute,
-    private router: Router,
-    private messageService: MessageService,
-    private consultationService: ConsultationService,
-    private queueService: QueueService,
-    private staffService: StaffPortalService,
-    private authService: AuthService,
-    private doctorService: DoctorService,
-    private notificationService: NotificationService
-  ) { }
+  constructor(private cdr: ChangeDetectorRef) { }
 
   // =========================
   // START CONSULTATION
   // =========================
+  trackStar(index: number): number {
+    return index;
+  }
+
+  trackUpcomingPatient(index: number, patient: UpcomingPatient): string | number {
+    return patient.tokenId || patient.token || index;
+  }
+
+  trackSkippedPatient(patient: UpcomingPatient): string | number {
+    return patient.tokenId || patient.token || patient.name;
+  }
+
   startConsultation(): void {
     if (!this.currentPatient) return;
 
@@ -126,36 +141,39 @@ export class DoctorDashboardComponent implements OnInit, OnDestroy {
     const payload = { token_id: tokenId, doctor_id: this.doctorId };
     console.log('START consultation payload:', payload);
 
-    this.consultationService.startConsultationApi(payload).subscribe({
-      next: (res: any) => {
-        console.log('Start consultation response:', res);
-        this.consultationStartTime = new Date();
-        this.isConsultationActive = true;
+    this.consultationService.startConsultationApi(payload)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (res: any) => {
+          console.log('Start consultation response:', res);
+          this.consultationStartTime = new Date();
+          this.isConsultationActive = true;
 
-        // ✅ Remove current patient from upcoming queue immediately on start
-        if (this.currentPatient?.tokenId) {
-          this.upcomingPatients = this.upcomingPatients.filter(
-            p => p.tokenId !== this.currentPatient!.tokenId &&
-              p.token !== this.currentPatient!.token
-          );
-          console.log('[START] Removed serving patient from upcoming queue:', this.currentPatient.tokenId);
+          // ✅ Remove current patient from upcoming queue immediately on start
+          if (this.currentPatient?.tokenId) {
+            this.upcomingPatients = this.upcomingPatients.filter(
+              p => p.tokenId !== this.currentPatient!.tokenId &&
+                p.token !== this.currentPatient!.token
+            );
+            console.log('[START] Removed serving patient from upcoming queue:', this.currentPatient.tokenId);
+          }
+
+          this.messageService.add({
+            severity: 'info',
+            summary: 'Consultation Started',
+            detail: `With ${this.currentPatient?.name}`
+          });
+          this.cdr.markForCheck();
+        },
+        error: (err) => {
+          console.error('Start consultation error', err);
+          this.messageService.add({
+            severity: 'error',
+            summary: 'Failed to Start',
+            detail: err?.error?.message || 'Could not start consultation. Please try again.'
+          });
         }
-
-        this.messageService.add({
-          severity: 'info',
-          summary: 'Consultation Started',
-          detail: `With ${this.currentPatient?.name}`
-        });
-      },
-      error: (err) => {
-        console.error('Start consultation error', err);
-        this.messageService.add({
-          severity: 'error',
-          summary: 'Failed to Start',
-          detail: err?.error?.message || 'Could not start consultation. Please try again.'
-        });
-      }
-    });
+      });
   }
 
   // =========================
@@ -194,28 +212,31 @@ export class DoctorDashboardComponent implements OnInit, OnDestroy {
 
     console.log('END consultation payload:', payload);
 
-    this.consultationService.endConsultationApi(payload).subscribe({
-      next: (res: any) => {
-        console.log('End consultation response:', res);
-        this.messageService.add({
-          severity: 'success',
-          summary: 'Completed',
-          detail: 'Consultation finished successfully'
-        });
+    this.consultationService.endConsultationApi(payload)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (res: any) => {
+          console.log('End consultation response:', res);
+          this.messageService.add({
+            severity: 'success',
+            summary: 'Completed',
+            detail: 'Consultation finished successfully'
+          });
 
-        this.patientsServed++;
-        this.resetConsultation();
-        this.fetchDashboard();
-      },
-      error: (err) => {
-        console.error('End consultation error', err);
-        this.messageService.add({
-          severity: 'error',
-          summary: 'Failed to Finish',
-          detail: err?.error?.message || 'Could not finish consultation. Please try again.'
-        });
-      }
-    });
+          this.patientsServed++;
+          this.resetConsultation();
+          this.fetchDashboard();
+          this.cdr.markForCheck();
+        },
+        error: (err) => {
+          console.error('End consultation error', err);
+          this.messageService.add({
+            severity: 'error',
+            summary: 'Failed to Finish',
+            detail: err?.error?.message || 'Could not finish consultation. Please try again.'
+          });
+        }
+      });
   }
 
   // =========================
@@ -227,30 +248,33 @@ export class DoctorDashboardComponent implements OnInit, OnDestroy {
     const tokenId = this.currentPatient.tokenId;
     console.log('SKIP token_id:', tokenId);
 
-    this.queueService.skipPatient(tokenId).subscribe({
-      next: (res: any) => {
-        console.log('Skip patient response:', res);
-        this.messageService.add({
-          severity: 'info',
-          summary: 'Patient Skipped',
-          detail: `${this.currentPatient?.name} has been moved to skipped queue`
-        });
-        // Send notification to patient about token being skipped
-        if (this.currentPatient?.token) {
-          this.notificationService.sendTokenSkipped(this.currentPatient.token, 'the doctor');
+    this.queueService.skipPatient(tokenId)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (res: any) => {
+          console.log('Skip patient response:', res);
+          this.messageService.add({
+            severity: 'info',
+            summary: 'Patient Skipped',
+            detail: `${this.currentPatient?.name} has been moved to skipped queue`
+          });
+          // Send notification to patient about token being skipped
+          if (this.currentPatient?.token) {
+            this.notificationService.sendTokenSkipped(this.currentPatient.token, 'the doctor');
+          }
+          this.resetConsultation();
+          this.fetchDashboard();
+          this.cdr.markForCheck();
+        },
+        error: (err) => {
+          console.error('Skip patient error', err);
+          this.messageService.add({
+            severity: 'error',
+            summary: 'Skip Failed',
+            detail: err?.error?.message || 'Could not skip patient. Please try again.'
+          });
         }
-        this.resetConsultation();
-        this.fetchDashboard();
-      },
-      error: (err) => {
-        console.error('Skip patient error', err);
-        this.messageService.add({
-          severity: 'error',
-          summary: 'Skip Failed',
-          detail: err?.error?.message || 'Could not skip patient. Please try again.'
-        });
-      }
-    });
+      });
   }
 
   // =========================
@@ -268,25 +292,28 @@ export class DoctorDashboardComponent implements OnInit, OnDestroy {
 
     console.log('RE-ADD token_id:', patient.tokenId);
 
-    this.queueService.reAddToQueue(patient.tokenId).subscribe({
-      next: (res: any) => {
-        console.log('Re-add patient response:', res);
-        this.messageService.add({
-          severity: 'success',
-          summary: 'Re-added',
-          detail: `${patient.token} - ${patient.name} added back to queue`
-        });
-        this.fetchDashboard();
-      },
-      error: (err) => {
-        console.error('Re-add patient error', err);
-        this.messageService.add({
-          severity: 'error',
-          summary: 'Re-add Failed',
-          detail: err?.error?.message || 'Could not re-add patient. Please try again.'
-        });
-      }
-    });
+    this.queueService.reAddToQueue(patient.tokenId)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (res: any) => {
+          console.log('Re-add patient response:', res);
+          this.messageService.add({
+            severity: 'success',
+            summary: 'Re-added',
+            detail: `${patient.token} - ${patient.name} added back to queue`
+          });
+          this.fetchDashboard();
+          this.cdr.markForCheck();
+        },
+        error: (err) => {
+          console.error('Re-add patient error', err);
+          this.messageService.add({
+            severity: 'error',
+            summary: 'Re-add Failed',
+            detail: err?.error?.message || 'Could not re-add patient. Please try again.'
+          });
+        }
+      });
   }
 
   // =========================
@@ -304,7 +331,6 @@ export class DoctorDashboardComponent implements OnInit, OnDestroy {
   // =========================
   ngOnInit(): void {
     this.fetchDashboard();
-    this.sub = interval(30000).subscribe(() => this.fetchDashboard());
   }
 
   // =========================
@@ -320,7 +346,11 @@ export class DoctorDashboardComponent implements OnInit, OnDestroy {
       this.doctorId = currentUser.id || '';
     }
 
-    this.staffService.getDoctorDashboard(20, 20).subscribe({
+    this.ensureRealtimeConnection();
+
+    this.staffService.getDoctorDashboard(20, 20)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
       next: (res: any) => {
         if (!res.success) return;
 
@@ -331,6 +361,7 @@ export class DoctorDashboardComponent implements OnInit, OnDestroy {
           this.doctorId = d.doctor.id;
           this.doctorName = d.doctor.name || this.doctorName;
           this.specialty = d.doctor.department || '';
+          this.ensureRealtimeConnection();
         }
 
         console.log('Doctor ID from API:', this.doctorId);
@@ -428,6 +459,7 @@ export class DoctorDashboardComponent implements OnInit, OnDestroy {
           this.waitingPatients = d.cards.waiting_in_queue || 0;
           this.patientsServed = d.cards.patients_served || 0;
         }
+        this.cdr.markForCheck();
       },
       error: (err) => {
         console.error('Error fetching doctor dashboard:', err);
@@ -460,7 +492,25 @@ export class DoctorDashboardComponent implements OnInit, OnDestroy {
     this.router.navigate(['../history'], { relativeTo: this.route });
   }
 
-  ngOnDestroy(): void {
-    this.sub?.unsubscribe();
+  private ensureRealtimeConnection(): void {
+    if (!this.doctorId) {
+      return;
+    }
+
+    const room = `doctor_${this.doctorId}`;
+    if (this.realtimeRoom === room) {
+      return;
+    }
+
+    this.realtimeRoom = room;
+    this.realtimeService.connect(room)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(message => {
+        if (message?.type === 'ack') {
+          return;
+        }
+
+        this.fetchDashboard();
+      });
   }
 }

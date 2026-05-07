@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -29,17 +29,16 @@ import { AuthService } from '../../../core/services/auth.service';
 })
 export class DoctorAuthComponent implements OnInit {
   loginForm!: FormGroup;
-  showPassword = false;
-  isLoginMode = true; // toggle between login and register
-  isLoading = false;
+  
+  // ✅ Signals replace isLoading state variable
+  readonly showPassword = signal(false);
+  readonly isLoading = signal(false);
 
-  constructor(
-    private fb: FormBuilder,
-    private route: ActivatedRoute,
-    private router: Router,
-    private messageService: MessageService,
-    private authService: AuthService
-  ) { }
+  private authService = inject(AuthService);
+  private fb = inject(FormBuilder);
+  private route = inject(ActivatedRoute);
+  private router = inject(Router);
+  private messageService = inject(MessageService);
 
   ngOnInit(): void {
     this.loginForm = this.fb.group({
@@ -58,41 +57,44 @@ export class DoctorAuthComponent implements OnInit {
       return;
     }
 
-    this.isLoading = true;
+    this.isLoading.set(true);
     const { email, password } = this.loginForm.value;
 
-    this.authService.login(email, password, 'email', 'doctor').subscribe({
-      next: (success) => {
-        this.isLoading = false;
-        if (success) {
-          this.messageService.add({
-            severity: 'success',
-            summary: 'Login Successful',
-            detail: `Welcome, Doctor!`,
-            life: 2000
-          });
-          setTimeout(() => {
-            this.router.navigate(['../dashboard'], { relativeTo: this.route });
-          }, 500);
-        } else {
+    // ✅ HttpClient Observable automatically completes after response
+    // No manual cleanup needed—subscribe safely without takeUntilDestroyed()
+    this.authService.login(email, password, 'email', 'doctor')
+      .subscribe({
+        next: (success) => {
+          this.isLoading.set(false);
+          if (success) {
+            this.messageService.add({
+              severity: 'success',
+              summary: 'Login Successful',
+              detail: `Welcome, Doctor!`,
+              life: 2000
+            });
+            setTimeout(() => {
+              this.router.navigate(['../dashboard'], { relativeTo: this.route });
+            }, 500);
+          } else {
+            this.messageService.add({
+              severity: 'error',
+              summary: 'Login Failed',
+              detail: 'Invalid email or password.',
+              life: 4000
+            });
+          }
+        },
+        error: (err) => {
+          this.isLoading.set(false);
           this.messageService.add({
             severity: 'error',
             summary: 'Login Failed',
-            detail: 'Invalid email or password.',
+            detail: err?.error?.detail || 'Something went wrong. Please try again.',
             life: 4000
           });
         }
-      },
-      error: (err) => {
-        this.isLoading = false;
-        this.messageService.add({
-          severity: 'error',
-          summary: 'Login Failed',
-          detail: err?.error?.detail || 'Something went wrong. Please try again.',
-          life: 4000
-        });
-      }
-    });
+      });
   }
 
   goBack(): void {

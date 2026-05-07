@@ -125,6 +125,36 @@ async def lifespan(app: FastAPI):
         logger.info("APScheduler started (used by legacy services only)")
     except Exception as e:
         logger.error(f"APScheduler failed to start: {e}")
+
+    yield  # App is now ready to serve requests
+
+    # Shutdown sequence
+    logger.info("🛑 Shutting down PulseQ Backend...")
+    try:
+        if autoskip_task:
+            autoskip_task.cancel()
+    except Exception as e:
+        logger.error(f"Error cancelling autoskip task: {e}")
+
+    try:
+        if pos_sync_task:
+            pos_sync_task.cancel()
+    except Exception as e:
+        logger.error(f"Error cancelling POS sync task: {e}")
+
+    try:
+        shutdown_scheduler()
+        logger.info("APScheduler shut down")
+    except Exception as e:
+        logger.error(f"Error shutting down APScheduler: {e}")
+
+    try:
+        await close_redis()
+        logger.info("Redis connection closed")
+    except Exception as e:
+        logger.error(f"Error closing Redis: {e}")
+
+    logger.info("✅ Backend shutdown complete")
  
  
 # FIX 1: redirect_slashes=False prevents 301 redirects that break CORS preflight

@@ -16,7 +16,7 @@ import json
 import logging
 from typing import Dict, List, Optional
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, HTTPException, status
-from redis.asyncio import PubSub
+from redis.asyncio.client import PubSub
 
 from app.security import require_roles
 from app.services.redis_service import get_redis_service

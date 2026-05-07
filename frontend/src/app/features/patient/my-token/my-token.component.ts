@@ -10,6 +10,7 @@ import { MessageService, ConfirmationService } from 'primeng/api';
 import { TokenService } from '../../../core/services/token.service';
 import { NotificationService } from '../../../core/services/notification.service';
 import { UserProfileService, UserProfile } from '../../../core/services/user-profile.service';
+import { RealtimeService } from '../../../core/services/realtime.service';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 
@@ -66,6 +67,8 @@ export class MyTokenComponent implements OnInit, OnDestroy {
 
   userProfile: UserProfile | null = null;
   private destroy$ = new Subject<void>();
+  private realtimeConnected = false;
+  private currentDoctorId: string | null = null;
 
   constructor(
     private messageService: MessageService,
@@ -74,7 +77,8 @@ export class MyTokenComponent implements OnInit, OnDestroy {
     private route: ActivatedRoute,
     private tokenService: TokenService,
     private userProfileService: UserProfileService,
-    private notificationService: NotificationService
+    private notificationService: NotificationService,
+    private realtimeService: RealtimeService
   ) { }
 
   ngOnInit(): void {
@@ -124,13 +128,46 @@ export class MyTokenComponent implements OnInit, OnDestroy {
         next: (res: any) => {
           if (res && res.token) {
             const mapped = this.mapToken(res.token, res.queue);
-            this.mergeToken(mapped); // mergeToken updates existing by id
+            this.mergeToken(mapped);
+            
+            // Setup WebSocket for this token's doctor
+            const doctorId = res.token.doctor_id;
+            if (doctorId && doctorId !== this.currentDoctorId) {
+              this.setupRealtimeListener(doctorId);
+            }
           }
         },
         error: (err) => {
           console.error('Failed to get active token details', err);
         }
       });
+  }
+
+  private setupRealtimeListener(doctorId: string): void {
+    if (this.realtimeConnected && this.currentDoctorId === doctorId) return;
+    
+    // Clean up old connection if switching doctors
+    if (this.currentDoctorId && this.currentDoctorId !== doctorId) {
+      this.realtimeService.disconnect(`doctor_${this.currentDoctorId}`);
+    }
+    
+    this.currentDoctorId = doctorId;
+    const room = `doctor_${doctorId}`;
+    
+    this.realtimeService.connect(room)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (message: any) => {
+          if (message && ['QUEUE_UPDATE', 'TOKEN_UPDATE'].includes(message.type)) {
+            this.loadActiveTokenDetails();
+          }
+        },
+        error: (err) => {
+          console.error(`WebSocket error for room ${room}:`, err);
+        }
+      });
+    
+    this.realtimeConnected = true;
   }
 
 
@@ -174,6 +211,9 @@ export class MyTokenComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    if (this.realtimeConnected && this.currentDoctorId) {
+      this.realtimeService.disconnect(`doctor_${this.currentDoctorId}`);
+    }
     this.destroy$.next();
     this.destroy$.complete();
   }

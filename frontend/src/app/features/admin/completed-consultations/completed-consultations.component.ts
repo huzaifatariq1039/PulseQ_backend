@@ -1,5 +1,4 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
-import { Subscription } from 'rxjs';
+import { Component, OnInit, inject } from '@angular/core';
 import { Router, RouterModule } from '@angular/router';
 import { ConsultationService } from '../../../core/services/consultation.service';
 import { StaffPortalService } from '../../../core/services/staff-portal.service';
@@ -13,6 +12,7 @@ import { DialogModule } from 'primeng/dialog';
 import { ButtonModule } from 'primeng/button';
 import { ToastModule } from 'primeng/toast';
 import { RippleModule } from 'primeng/ripple';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 
 export interface CompletedToken {
     id: string;
@@ -52,7 +52,7 @@ export interface CompletedToken {
     templateUrl: './completed-consultations.component.html',
     styleUrls: ['./completed-consultations.component.css']
 })
-export class CompletedConsultationsComponent implements OnInit, OnDestroy {
+export class CompletedConsultationsComponent implements OnInit {
     tokens: CompletedToken[] = [];
     selectedToken: CompletedToken | null = null;
     displayDialog: boolean = false;
@@ -61,57 +61,51 @@ export class CompletedConsultationsComponent implements OnInit, OnDestroy {
     averageDuration = 0;
     completedThisMonth = 0;
 
-    private subs: Subscription = new Subscription();
-
-    constructor(
-        private consultationService: ConsultationService,
-        private staffService: StaffPortalService,
-        private router: Router
-    ) { }
+    private consultationService = inject(ConsultationService);
+    private staffService = inject(StaffPortalService);
+    private router = inject(Router);
 
     ngOnInit(): void {
         this.loadFromApi();
     }
 
-    ngOnDestroy(): void {
-        this.subs.unsubscribe();
-    }
-
     private loadFromApi(): void {
-        this.staffService.getCompletedTokens(1, 100).subscribe({
-            next: (res: any) => {
-                const raw: any[] = Array.isArray(res)
-                    ? res
-                    : Array.isArray(res?.data)
-                        ? res.data
-                        : [];
+        this.staffService.getCompletedTokens(1, 100)
+            .pipe(takeUntilDestroyed())
+            .subscribe({
+                next: (res: any) => {
+                    const raw: any[] = Array.isArray(res)
+                        ? res
+                        : Array.isArray(res?.data)
+                            ? res.data
+                            : [];
 
-                this.tokens = raw.map((t: any) => this.mapApiTokenToCompletedToken(t));
+                    this.tokens = raw.map((t: any) => this.mapApiTokenToCompletedToken(t));
 
-                if (res?.meta) {
-                    this.completedToday = res.meta.completed_today ?? 0;
-                    this.completedThisMonth = res.meta.completed_this_month ?? 0;
-                    this.averageDuration = res.meta.avg_consultation_time ?? 0;
-                } else {
-                    this.computeMetrics();
+                    if (res?.meta) {
+                        this.completedToday = res.meta.completed_today ?? 0;
+                        this.completedThisMonth = res.meta.completed_this_month ?? 0;
+                        this.averageDuration = res.meta.avg_consultation_time ?? 0;
+                    } else {
+                        this.computeMetrics();
+                    }
+                },
+                error: (err) => {
+                    console.error('Failed to load completed consultations from API, falling back to local', err);
+                    this.loadFromLocal();
                 }
-            },
-            error: (err) => {
-                console.error('Failed to load completed consultations from API, falling back to local', err);
-                this.loadFromLocal();
-            }
-        });
+            });
     }
 
     private loadFromLocal(): void {
-        this.subs.add(
-            this.consultationService.consultations$.subscribe(list => {
+        this.consultationService.consultations$
+            .pipe(takeUntilDestroyed())
+            .subscribe(list => {
                 this.tokens = list
                     .filter(c => !!c.endTime)
                     .map(c => this.mapConsultationToToken(c));
                 this.computeMetrics();
-            })
-        );
+            });
     }
 
     private computeMetrics(): void {

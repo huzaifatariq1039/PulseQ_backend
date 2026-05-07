@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -11,6 +11,7 @@ import { InputTextModule } from 'primeng/inputtext';
 import { CalendarModule } from 'primeng/calendar';
 import { DoctorSidebarComponent } from '../shared/components/doctor-sidebar/doctor-sidebar.component';
 import { ConsultationService } from '../../../core/services/consultation.service';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 
 interface PatientGroup {
   patientId: string;
@@ -35,19 +36,19 @@ export class PatientHistoryComponent implements OnInit {
   patientGroups: PatientGroup[] = [];
   filteredPatientId: string | null = null;
 
-  constructor(
-    private staffService: StaffPortalService,
-    private consultationService: ConsultationService,
-    private activatedRoute: ActivatedRoute,
-    private router: Router
-  ) { }
+  private staffService = inject(StaffPortalService);
+  private consultationService = inject(ConsultationService);
+  private activatedRoute = inject(ActivatedRoute);
+  private router = inject(Router);
 
   ngOnInit(): void {
     //filter by specific patient
-    this.activatedRoute.queryParams.subscribe(params => {
-      this.filteredPatientId = params['patientId'] || null;
-      this.loadConsultations();
-    });
+    this.activatedRoute.queryParams
+      .pipe(takeUntilDestroyed())
+      .subscribe(params => {
+        this.filteredPatientId = params['patientId'] || null;
+        this.loadConsultations();
+      });
   }
 
   toggleSidebar(): void {
@@ -77,40 +78,44 @@ export class PatientHistoryComponent implements OnInit {
     if (typeof window === 'undefined') return;
 
     if (this.filteredPatientId) {
-      this.consultationService.getPatientHistoryApi(this.filteredPatientId).subscribe({
-        next: (res: any) => {
-          if (res && res.data) {
-            const consultations = Array.isArray(res.data) ? res.data : [res.data];
-            const patientName = consultations.length > 0
-              ? (consultations[0].patient_name || consultations[0].patient_id || 'Unknown')
-              : 'Unknown';
+      this.consultationService.getPatientHistoryApi(this.filteredPatientId)
+        .pipe(takeUntilDestroyed())
+        .subscribe({
+          next: (res: any) => {
+            if (res && res.data) {
+              const consultations = Array.isArray(res.data) ? res.data : [res.data];
+              const patientName = consultations.length > 0
+                ? (consultations[0].patient_name || consultations[0].patient_id || 'Unknown')
+                : 'Unknown';
 
-            const mapped = consultations.map((t: any) => ({
-              tokenNumber: t.token_number || t.id,
-              startTime: t.created_at || t.start_time,
-              endTime: t.updated_at || t.end_time,
-              reason: t.visit_reason || t.reason || '',
-              doctorName: t.doctor_name || 'Dr.',
-              phone: t.patient_phone || '',
-              notes: t.consultation_notes || t.notes || t.special_instructions || '',
-              patientName: t.patient_name || t.patient_id || 'Unknown'
-            })).sort((a: any, b: any) =>
-              this.parseDate(b.startTime).getTime() - this.parseDate(a.startTime).getTime()
-            );
+              const mapped = consultations.map((t: any) => ({
+                tokenNumber: t.token_number || t.id,
+                startTime: t.created_at || t.start_time,
+                endTime: t.updated_at || t.end_time,
+                reason: t.visit_reason || t.reason || '',
+                doctorName: t.doctor_name || 'Dr.',
+                phone: t.patient_phone || '',
+                notes: t.consultation_notes || t.notes || t.special_instructions || '',
+                patientName: t.patient_name || t.patient_id || 'Unknown'
+              })).sort((a: any, b: any) =>
+                this.parseDate(b.startTime).getTime() - this.parseDate(a.startTime).getTime()
+              );
 
-            this.patientGroups = [{
-              patientId: this.filteredPatientId!,
-              patientName,
-              consultations: mapped,
-              isExpanded: true
-            }];
-          }
-        },
-        error: (err) => console.error('Failed to load specific patient history', err)
-      });
+              this.patientGroups = [{
+                patientId: this.filteredPatientId!,
+                patientName,
+                consultations: mapped,
+                isExpanded: true
+              }];
+            }
+          },
+          error: (err) => console.error('Failed to load specific patient history', err)
+        });
       return;
     }
-    this.staffService.getDoctorTokens('completed', 1, 100).subscribe({
+    this.staffService.getDoctorTokens('completed', 1, 100)
+      .pipe(takeUntilDestroyed())
+      .subscribe({
       next: (res: any) => {
         if (res.success && Array.isArray(res.data)) {
           const grouped = new Map<string, any[]>();

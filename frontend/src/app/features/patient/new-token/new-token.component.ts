@@ -340,7 +340,7 @@ export class NewTokenComponent implements OnInit, OnDestroy {
             patient_phone: value.phone,
             patient_age: value.age || null,
             patient_gender: value.gender || null,
-            special_notes: value.specialNotes || null
+            consultation_notes: value.specialNotes || null
         };
 
         this.tokenService.generateTokenWithDetails(requestData).subscribe({
