@@ -121,24 +121,10 @@ async def lifespan(app: FastAPI):
         logger.warning("⚠️ WebSocket broadcast across instances will be unavailable")
 
     try:
-        yield
-    finally:
-        logger.info("Shutting down Smart Token Backend...")
-
-        if autoskip_task:
-            autoskip_task.cancel()
-        if pos_sync_task:
-            pos_sync_task.cancel()
-
-        try:
-            await close_redis()
-        except Exception as e:
-            logger.error(f"Error closing Redis: {e}")
-
-        try:
-            shutdown_scheduler()
-        except Exception:
-            pass
+        start_scheduler()
+        logger.info("APScheduler started (used by legacy services only)")
+    except Exception as e:
+        logger.error(f"APScheduler failed to start: {e}")
  
  
 # FIX 1: redirect_slashes=False prevents 301 redirects that break CORS preflight

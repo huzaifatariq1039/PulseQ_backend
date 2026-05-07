@@ -27,6 +27,7 @@ twilio==9.1.0
 
 # Scheduling
 apscheduler==3.10.4
+arq>=0.25.0
 
 # Data Processing
 pydantic>=2.5.0
