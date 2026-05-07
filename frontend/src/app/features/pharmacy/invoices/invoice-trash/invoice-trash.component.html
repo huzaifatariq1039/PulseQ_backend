@@ -1,0 +1,52 @@
+<app-pharmacy-sidebar></app-pharmacy-sidebar>
+<div class="trash-container">
+    <div class="header-section">
+        <p-breadcrumb [model]="breadcrumbs" [home]="{ icon: 'pi pi-home' }"></p-breadcrumb>
+        <div class="header-content">
+            <div class="header-title">
+                <h1>Invoice Trash</h1>
+            </div>
+            <div class="header-actions">
+                <p-button label="Back to Invoices" icon="pi pi-arrow-left" [outlined]="true"
+                    (onClick)="goBack()"></p-button>
+            </div>
+        </div>
+    </div>
+    <p-table [value]="trashedInvoices" [loading]="loading" [paginator]="true" [rows]="10"
+        [rowsPerPageOptions]="[10, 25, 50]" dataKey="id" [showCurrentPageReport]="true"
+        currentPageReportTemplate="Showing {first} to {last} of {totalRecords} trashed invoices"
+        styleClass="p-datatable-sm p-datatable-gridlines" responsiveLayout="scroll">
+        <ng-template pTemplate="header">
+            <tr>
+                <th pSortableColumn="invoice_number" style="width: 12%">Invoice # <p-sortIcon
+                        field="invoice_number"></p-sortIcon></th>
+                <th pSortableColumn="customer_name" style="width: 18%">Customer <p-sortIcon
+                        field="customer_name"></p-sortIcon></th>
+                <th style="width: 12%">Total</th>
+                <th style="width: 12%">Status</th>
+                <th style="width: 18%">Deleted At</th>
+                <th style="width: 12%">Actions</th>
+            </tr>
+        </ng-template>
+        <ng-template pTemplate="body" let-invoice>
+            <tr>
+                <td>{{ invoice.invoice_number }}</td>
+                <td>{{ invoice.customer_name }}</td>
+                <td><span class="text-green-400">PKR {{ invoice.total | number:'1.2-2' }}</span></td>
+                <td><p-tag [value]="invoice.status" [severity]="getStatusSeverity(invoice.status)"></p-tag></td>
+                <td>{{ invoice.deleted_at | date:'MMM dd, yyyy HH:mm' }}</td>
+                <td>
+                    <p-button icon="pi pi-refresh" [text]="true" severity="success" pTooltip="Restore"
+                        tooltipPosition="bottom" (onClick)="restore(invoice.id)">
+                    </p-button>
+                </td>
+            </tr>
+        </ng-template>
+        <ng-template pTemplate="emptymessage">
+            <tr>
+                <td colspan="6">No trashed invoices found.</td>
+            </tr>
+        </ng-template>
+    </p-table>
+</div>
+<p-toast></p-toast>

@@ -1,0 +1,232 @@
+.create-invoice-container {
+  padding: 2rem;
+  background-color: #1a1a1a;
+  min-height: 100vh;
+}
+
+.header-section {
+  margin-bottom: 2rem;
+}
+
+.header-title h1 {
+  font-size: 2rem;
+  font-weight: 600;
+  color: #ffffff;
+  margin: 0;
+}
+
+.invoice-section {
+  margin-bottom: 1.5rem;
+}
+
+:deep(.p-panel) {
+  background-color: #1e1e2e;
+  border: 1px solid #3a3a3a;
+  border-radius: 0.375rem;
+}
+
+:deep(.p-panel .p-panel-header) {
+  background-color: #2a2a2a;
+  color: #ffffff;
+  border-bottom: 1px solid #3a3a3a;
+  padding: 1rem;
+}
+
+:deep(.p-panel .p-panel-content) {
+  background-color: #1e1e2e;
+  color: #ffffff;
+  padding: 1.5rem;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.form-label,
+.field-label {
+  color: #ffffff;
+  font-weight: 500;
+  font-size: 0.875rem;
+}
+
+:deep(.p-autocomplete .p-autocomplete-input),
+:deep(.p-inputnumber .p-inputnumber-input) {
+  background-color: #2a2a2a;
+  border: 1px solid #3a3a3a;
+  color: #ffffff;
+  padding: 0.75rem;
+  border-radius: 0.375rem;
+  width: 100%;
+}
+
+:deep(.p-autocomplete .p-autocomplete-input:focus),
+:deep(.p-inputnumber .p-inputnumber-input:focus) {
+  outline: none;
+  border-color: #f59e0b;
+}
+
+:deep(.p-autocomplete .p-autocomplete-list),
+:deep(.p-dropdown-panel .p-dropdown-items .p-dropdown-item) {
+  background-color: #2a2a2a;
+  border: 1px solid #3a3a3a;
+  color: #ffffff;
+}
+
+:deep(.p-autocomplete .p-autocomplete-list .p-autocomplete-item:hover),
+:deep(.p-dropdown-panel .p-dropdown-items .p-dropdown-item:hover) {
+  background-color: #3a3a3a;
+}
+
+.items-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.item-card {
+  background-color: #252535;
+  border: 1px solid #3a3a3a;
+  border-radius: 0.375rem;
+  padding: 1rem;
+  position: relative;
+}
+
+.item-delete {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+}
+
+.item-row,
+.payment-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1rem;
+  margin-top: 0.5rem;
+}
+
+.item-field,
+.payment-field,
+.notes-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.item-field.full-width {
+  grid-column: 1 / -1;
+}
+
+.add-item-container {
+  display: flex;
+  justify-content: center;
+  margin-top: 1rem;
+}
+
+.add-item-btn {
+  width: 100%;
+  max-width: 300px;
+}
+
+:deep(.p-datatable) {
+  background-color: #1e1e2e;
+  color: #ffffff;
+}
+
+:deep(.p-datatable .p-datatable-thead > tr > th),
+:deep(.p-datatable .p-datatable-tbody > tr > td),
+:deep(.p-datatable .p-datatable-footer > tr > td) {
+  background-color: #2a2a2a;
+  color: #ffffff;
+  border-color: #3a3a3a;
+  padding: 1rem;
+}
+
+.payment-section {
+  background-color: #1e1e2e;
+  border: 1px solid #3a3a3a;
+  border-radius: 0.375rem;
+  padding: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.payment-section h3 {
+  color: #ffffff;
+  font-size: 1.125rem;
+  font-weight: 600;
+  margin: 0 0 1.5rem 0;
+}
+
+.total-amount-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  background-color: #252535;
+  border: 1.5px solid #f59e0b;
+  border-radius: 0.375rem;
+}
+
+.total-amount-field :deep(.p-inputnumber-input) {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #4ade80;
+}
+
+.textarea {
+  background-color: #2a2a2a;
+  border: 1px solid #3a3a3a;
+  color: #ffffff;
+  padding: 0.75rem;
+  border-radius: 0.375rem;
+  font-family: inherit;
+  resize: vertical;
+}
+
+.textarea:focus {
+  outline: none;
+  border-color: #f59e0b;
+}
+
+.textarea::placeholder {
+  color: #888888;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 1rem;
+  margin-top: 2rem;
+  flex-wrap: wrap;
+}
+
+.action-buttons p-button {
+  flex: 1;
+  min-width: 150px;
+}
+
+@media (max-width: 768px) {
+  .create-invoice-container {
+    padding: 1rem;
+  }
+
+  .header-title h1 {
+    font-size: 1.5rem;
+  }
+
+  .item-row,
+  .payment-row {
+    grid-template-columns: 1fr;
+  }
+
+  .action-buttons {
+    flex-direction: column;
+  }
+
+  .action-buttons p-button {
+    width: 100%;
+  }
+}
