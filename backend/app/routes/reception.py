@@ -11,12 +11,13 @@ from app.database import get_db
 from app.services.token_service import SmartTokenService
 from app.utils.responses import ok
 from app.utils.mrn import get_or_create_patient_mrn
+from app.utils.date_utils import to_dt
 import uuid
 import logging
 
 # --- AI Engine Imports ---
 from app.services.ai_engine import ai_engine
-from app.routes.ai import (
+from app.services.queue_management_service import (
     get_current_hour, get_current_day, calculate_queue_velocity, get_last_patient_duration,
     avg_last_5, avg_last_10, count_available_doctors, get_hour_history,
     get_weekday_history, get_doctor_history
@@ -85,15 +86,7 @@ async def create_receptionist(
     )
 
 
-def _to_dt(v: Any) -> Optional[datetime]:
-    try:
-        if v is None:
-            return None
-        if isinstance(v, datetime):
-            return v
-        return datetime.fromisoformat(str(v).replace("Z", "+00:00"))
-    except Exception:
-        return None
+# Use centralized helper from app.utils.date_utils
 
 
 def _infer_has_session(dept_text: str) -> bool:

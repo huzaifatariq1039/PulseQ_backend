@@ -4,6 +4,7 @@ from datetime import datetime
 from app.config import COLLECTIONS
 from app.database import get_db
 from app.models import PharmacyMedicineCreate, PharmacyMedicineUpdate
+from app.utils.date_utils import to_dt
 
 
 def _snap_exists(snap: Any) -> bool:
@@ -15,19 +16,6 @@ def _snap_exists(snap: Any) -> bool:
     except Exception:
         return False
 
-
-def _to_dt(v: Any) -> Optional[datetime]:
-    try:
-        if v is None:
-            return None
-        if isinstance(v, datetime):
-            return v
-        to_dt = getattr(v, "to_datetime", None)
-        if callable(to_dt):
-            return to_dt()
-        return datetime.fromisoformat(str(v))
-    except Exception:
-        return None
 
 
 def create_medicine(payload: PharmacyMedicineCreate) -> Dict[str, Any]:
@@ -83,10 +71,10 @@ def get_medicine(medicine_id: str) -> Dict[str, Any]:
     data = snap.to_dict() or {}
     data["id"] = data.get("id") or medicine_id
 
-    exp = _to_dt(data.get("expiration_date"))
+    exp = to_dt(data.get("expiration_date"))
     if exp is not None:
         data["expiration_date"] = exp
-    created = _to_dt(data.get("created_at"))
+    created = to_dt(data.get("created_at"))
     if created is not None:
         data["created_at"] = created
 
@@ -127,14 +115,14 @@ def list_medicines(
             if name_norm not in nm and name_norm not in gn and name_norm != pid:
                 continue
 
-        exp = _to_dt(it.get("expiration_date"))
+        exp = to_dt(it.get("expiration_date"))
         if exp is not None:
             it["expiration_date"] = exp
-        created = _to_dt(it.get("created_at"))
+        created = to_dt(it.get("created_at"))
         if created is not None:
             it["created_at"] = created
 
         out.append(it)
 
-    out.sort(key=lambda x: _to_dt(x.get("created_at")) or datetime.min, reverse=True)
+    out.sort(key=lambda x: to_dt(x.get("created_at")) or datetime.min, reverse=True)
     return out

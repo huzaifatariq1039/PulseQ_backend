@@ -11,23 +11,11 @@ from sqlalchemy import func
 from app.db_models import User, Doctor, Hospital, Token, ActivityLog
 from app.utils.responses import ok
 from app.services.token_service import SmartTokenService
+from app.utils.date_utils import to_dt
 
 
 router = APIRouter()
 
-
-def _to_dt(v: Any) -> Optional[datetime]:
-    try:
-        if v is None:
-            return None
-        if isinstance(v, datetime):
-            return v
-        to_dt = getattr(v, "to_datetime", None)
-        if callable(to_dt):
-            return to_dt()
-        return datetime.fromisoformat(str(v))
-    except Exception:
-        return None
 
 
 def _status_val(token_obj: Token) -> str:

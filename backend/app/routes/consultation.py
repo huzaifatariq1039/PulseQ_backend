@@ -14,6 +14,7 @@ from app.utils.audit import get_user_role, log_action
 from app.services.notification_service import NotificationService
 from app.services.whatsapp_service import send_template_message
 from app.templates import TEMPLATES
+from app.utils.date_utils import to_dt, is_empty
 
 
 router = APIRouter()
@@ -21,22 +22,7 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-def _to_dt(v: Any) -> Optional[datetime]:
-    try:
-        if v is None:
-            return None
-        if isinstance(v, datetime):
-            return v
-        to_dt = getattr(v, "to_datetime", None)
-        if callable(to_dt):
-            return to_dt()
-        return datetime.fromisoformat(str(v))
-    except Exception:
-        return None
-
-
-def _is_empty(v: Any) -> bool:
-    return v is None or str(v).strip() == ""
+# Use centralized helpers from app.utils.date_utils
 
 
 def _auto_skip_called_tokens(db: Session, hospital_id: Optional[str] = None, doctor_id: Optional[str] = None) -> int:

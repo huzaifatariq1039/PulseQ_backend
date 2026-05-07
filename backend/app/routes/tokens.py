@@ -34,7 +34,7 @@ from app.utils.responses import ok
 from app.services.fee_calculator import compute_total_amount
 
 # Use avg_last_10 to match AI model expectations
-from app.routes.ai import (
+from app.services.queue_management_service import (
     get_current_hour, get_current_day, calculate_patients_ahead,
     calculate_queue_length, calculate_queue_velocity, get_last_patient_duration,
     avg_last_5, avg_last_10, count_available_doctors, get_hour_history,

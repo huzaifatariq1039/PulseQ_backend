@@ -19,32 +19,7 @@ from app.utils.audit import log_action, get_user_role
 router = APIRouter()
 
 # -------------------- Advanced queue management (queues collection) --------------------
-from app.services.queue_management_service import QueueManagementService
-
-
-# ─── Helper: recalculate queue_position for all active tokens of a doctor today ───────
-def _recalculate_queue_positions(doctor_id: str, db: Session):
-    """
-    After any token is completed/cancelled, recalculate queue_position
-    for all remaining active tokens so the frontend always shows correct positions.
-    """
-    today = date.today()
-    today_start = datetime.combine(today, time.min)
-    today_end   = datetime.combine(today, time.max)
-
-    remaining_tokens = db.query(Token).filter(
-        and_(
-            Token.doctor_id == doctor_id,
-            Token.appointment_date >= today_start,
-            Token.appointment_date <= today_end,
-            Token.status.notin_(["completed", "cancelled"])
-        )
-    ).order_by(Token.token_number).all()
-
-    for position, token in enumerate(remaining_tokens, start=1):
-        token.queue_position = position
-
-    db.commit()
+from app.services.queue_management_service import QueueManagementService, recalculate_queue_positions_sql
 
 
 @router.get("/doctor/{doctor_id}", response_model=QueueResponse)
@@ -113,7 +88,7 @@ async def test_advance_queue(
     db.commit()
 
     # ── FIX: recalculate positions after debug advance ────────────────────────
-    _recalculate_queue_positions(doctor_id, db)
+    recalculate_queue_positions_sql(doctor_id, db)
     # ─────────────────────────────────────────────────────────────────────────
     
     return {"message": "Queue advanced", "completed_token": t.token_number, "next_token": tokens[1].token_number if len(tokens) > 1 else None}
@@ -189,7 +164,7 @@ async def advance_queue(
         db.commit()
 
         # ── FIX: recalculate queue_position for all remaining tokens ─────────
-        _recalculate_queue_positions(doctor_id, db)
+        recalculate_queue_positions_sql(doctor_id, db)
         # ─────────────────────────────────────────────────────────────────────
         
         # Send thankyou message on completion
@@ -353,7 +328,7 @@ async def skip_patient(
     db.commit()
 
     # ── FIX: recalculate positions after skip ────────────────────────────────
-    _recalculate_queue_positions(doctor_id, db)
+    recalculate_queue_positions_sql(doctor_id, db)
     # ─────────────────────────────────────────────────────────────────────────
     
     try:
@@ -404,7 +379,7 @@ async def complete_consultation(
     db.commit()
 
     # ── FIX: recalculate queue_position for all remaining tokens ─────────────
-    _recalculate_queue_positions(doctor_id, db)
+    recalculate_queue_positions_sql(doctor_id, db)
     # ─────────────────────────────────────────────────────────────────────────
      
     # Send thankyou message on completion

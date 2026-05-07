@@ -18,7 +18,7 @@ import logging
 
 # --- 🚀 AI Engine Imports ---
 from app.services.ai_engine import ai_engine
-from app.routes.ai import (
+from app.services.queue_management_service import (
     get_current_hour, get_current_day, calculate_queue_velocity, get_last_patient_duration,
     avg_last_5, avg_last_10, count_available_doctors, get_hour_history,
     get_weekday_history, get_doctor_history

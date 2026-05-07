@@ -1,14 +1,27 @@
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any, Dict
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
-from sqlalchemy import func
 
 from app.services.ai_engine import ai_engine
 from app.database import get_db
-from app.db_models import Token, Doctor
+from app.services.queue_management_service import (
+    get_current_hour,
+    get_current_day,
+    calculate_patients_ahead,
+    calculate_queue_length,
+    calculate_completed_today,
+    calculate_queue_velocity,
+    get_last_patient_duration,
+    avg_last_5,
+    avg_last_10,
+    count_available_doctors,
+    get_hour_history,
+    get_weekday_history,
+    get_doctor_history,
+)
 
 router = APIRouter()
 
@@ -20,115 +33,6 @@ class AIPredictRequest(BaseModel):
     age: int
     doctor: str
     disease_type: str
-
-# --- Helper Functions ---
-def get_current_hour() -> int:
-    return datetime.now().hour
-
-def get_current_day() -> int:
-    # Monday=0 .. Sunday=6
-    return datetime.now().weekday()
-
-def calculate_patients_ahead(doctor_id: str, db: Session) -> int:
-    today = datetime.utcnow().date()
-    return db.query(Token).filter(
-        Token.doctor_id == doctor_id,
-        Token.status.in_(["waiting", "confirmed", "pending"]),
-        func.date(Token.appointment_date) == today
-    ).count()
-
-def calculate_queue_length(doctor_id: str, db: Session) -> int:
-    today = datetime.utcnow().date()
-    return db.query(Token).filter(
-        Token.doctor_id == doctor_id,
-        Token.status.in_(["waiting", "confirmed", "pending", "called", "in_consultation"]),
-        func.date(Token.appointment_date) == today
-    ).count()
-
-def calculate_completed_today(doctor_id: str, db: Session) -> int:
-    today = datetime.utcnow().date()
-    return db.query(Token).filter(
-        Token.doctor_id == doctor_id,
-        Token.status == "completed",
-        func.date(Token.appointment_date) == today
-    ).count()
-
-def calculate_queue_velocity(doctor_id: str, db: Session) -> float:
-    now = datetime.utcnow()
-    window_start = now - timedelta(hours=2)
-    completed_count = db.query(Token).filter(
-        Token.doctor_id == doctor_id,
-        Token.status == "completed",
-        Token.completed_at >= window_start
-    ).count()
-    hours = max((now - window_start).total_seconds() / 3600.0, 0.01)
-    return float(completed_count) / float(hours)
-
-def get_last_patient_duration(doctor_id: str, db: Session) -> float:
-    last_token = db.query(Token).filter(
-        Token.doctor_id == doctor_id,
-        Token.status == "completed"
-    ).order_by(Token.completed_at.desc()).first()
-    if last_token:
-        return _extract_duration_minutes(last_token)
-    return 0.0
-
-def avg_last_5(doctor_id: str, db: Session) -> float:
-    return _avg_last_n(doctor_id, 5, db)
-
-def avg_last_10(doctor_id: str, db: Session) -> float:
-    return _avg_last_n(doctor_id, 10, db)
-
-def count_available_doctors(db: Session) -> int:
-    try:
-        count = db.query(Doctor).filter(Doctor.status == "available").count()
-        return max(count, 1)
-    except Exception:
-        return 1
-
-def get_hour_history(db: Session) -> float:
-    current_hour = get_current_hour()
-    tokens = db.query(Token).filter(
-        Token.status == "completed",
-        func.extract('hour', Token.completed_at) == current_hour
-    ).limit(100).all()
-    durations = [_extract_duration_minutes(t) for t in tokens]
-    return float(sum(durations) / len(durations)) if durations else 12.0
-
-def get_weekday_history(db: Session) -> float:
-    current_day = get_current_day()
-    tokens = db.query(Token).filter(
-        Token.status == "completed",
-        func.extract('dow', Token.completed_at) == current_day
-    ).limit(100).all()
-    durations = [_extract_duration_minutes(t) for t in tokens]
-    return float(sum(durations) / len(durations)) if durations else 15.0
-
-def get_doctor_history(doctor_id: str, db: Session) -> float:
-    tokens = db.query(Token).filter(
-        Token.doctor_id == doctor_id,
-        Token.status == "completed"
-    ).order_by(Token.completed_at.desc()).limit(200).all()
-    durations = [_extract_duration_minutes(t) for t in tokens]
-    return float(sum(durations) / len(durations)) if durations else 0.0
-
-def _extract_duration_minutes(t: Token) -> float:
-    if hasattr(t, 'duration_minutes') and t.duration_minutes:
-        return float(t.duration_minutes)
-    if t.started_at and t.completed_at:
-        try:
-            return float((t.completed_at - t.started_at).total_seconds() / 60.0)
-        except Exception:
-            return 0.0
-    return 0.0
-
-def _avg_last_n(doctor_id: str, n: int, db: Session) -> float:
-    tokens = db.query(Token).filter(
-        Token.doctor_id == doctor_id,
-        Token.status == "completed"
-    ).order_by(Token.completed_at.desc()).limit(n).all()
-    durations = [_extract_duration_minutes(t) for t in tokens]
-    return float(sum(durations) / len(durations)) if durations else 0.0
 
 # --- Endpoint ---
 @router.post("/predict-wait-time")
