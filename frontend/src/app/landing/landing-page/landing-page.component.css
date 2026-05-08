@@ -1,0 +1,219 @@
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+.landing-container {
+    min-height: 100vh;
+    text-align: center;
+    padding: 3rem 2rem;
+    background: #f9fafb;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+.logo-icon {
+    width: 64px;
+    height: 64px;
+    background: #2563eb;
+    border-radius: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto;
+}
+
+.logo-icon i {
+    font-size: 28px;
+    color: #ffffff;
+}
+
+.landing-logo {
+    width: 64px;
+    height: 64px;
+    margin: 0 auto;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.15);
+}
+
+.title {
+    margin-top: 1rem;
+    font-size: 2.5rem;
+    font-weight: 800;
+    color: #111827;
+}
+
+.subtitle {
+    color: #6b7280;
+    margin-top: 0.5rem;
+    margin-bottom: 3rem;
+    font-size: 1rem;
+}
+
+.card-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.5rem;
+    max-width: 500px;
+    width: 100%;
+    margin: 0 auto;
+}
+
+.role-card {
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 16px;
+    padding: 2rem 1.5rem;
+    cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+}
+
+.role-card:hover {
+    transform: translateY(-6px);
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.09);
+}
+
+.icon {
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 1rem;
+    flex-shrink: 0;
+}
+
+.icon i {
+    font-size: 28px;
+}
+
+.patient {
+    background: #e0edff;
+    color: #2563eb;
+}
+
+.reception {
+    background: #dcfce7;
+    color: #16a34a;
+}
+
+.doctor {
+    background: #e0e7ff;
+    color: #6366f1;
+}
+
+.admin {
+    background: #f1f5f9;
+    color: #475569;
+}
+
+.pharmacy {
+    background: #fef3c7;
+    color: #d97706;
+}
+
+.head {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #111827;
+    margin-bottom: 0.25rem;
+}
+
+.desc {
+    font-size: 0.85rem;
+    color: #6b7280;
+    line-height: 1.4;
+}
+
+/* Demo appointment button */
+.demo-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.85rem 2rem;
+    font-size: 1rem;
+    font-weight: 700;
+    color: #ffffff;
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    box-shadow: 0 4px 14px rgba(16, 185, 129, 0.35);
+}
+
+.demo-btn:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 24px rgba(16, 185, 129, 0.45);
+}
+
+.demo-btn:active {
+    transform: translateY(0);
+}
+
+.footer {
+    margin-top: 4rem;
+    font-size: 0.85rem;
+    color: #9ca3af;
+}
+
+@media (max-width: 600px) {
+    .landing-container {
+        padding: 2rem 1.25rem;
+    }
+
+    .title {
+        font-size: 1.9rem;
+    }
+
+    .subtitle {
+        font-size: 0.9rem;
+        margin-bottom: 2rem;
+    }
+
+    .card-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1rem;
+        max-width: 100%;
+    }
+
+    .role-card {
+        padding: 1.25rem 1rem;
+    }
+
+    .icon {
+        width: 56px;
+        height: 56px;
+    }
+
+    .icon i {
+        font-size: 22px;
+    }
+
+    .head {
+        font-size: 0.9rem;
+    }
+
+    .desc {
+        font-size: 0.78rem;
+    }
+}
+
+@media (max-width: 360px) {
+    .card-grid {
+        grid-template-columns: 1fr;
+        max-width: 280px;
+    }
+
+    .title {
+        font-size: 1.6rem;
+    }
+}

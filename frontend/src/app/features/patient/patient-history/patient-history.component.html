@@ -1,0 +1,111 @@
+<app-patient-header></app-patient-header>
+
+<main class="page">
+    <div class="container">
+        <section class="intro">
+            <h1>Visit History</h1>
+            <p class="subtitle">Your past consultations and appointments</p>
+        </section>
+
+        <!-- Search and Filter Section -->
+        <section class="search-filter-section">
+            <div class="search-container">
+                <div class="search-group">
+                    <label for="searchInput" class="search-label">Search Visit Reason</label>
+                    <div class="search-input-wrapper">
+                        <i class="pi pi-search search-icon"></i>
+                        <input id="searchInput" type="text" [(ngModel)]="searchTerm"
+                            placeholder="Search by reason or token..." class="search-input" />
+                    </div>
+                </div>
+
+                <div class="search-group">
+                    <label for="doctorFilter" class="search-label">Doctor Name</label>
+                    <div class="search-input-wrapper">
+                        <i class="pi pi-user search-icon"></i>
+                        <input id="doctorFilter" type="text" [(ngModel)]="doctorNameFilter"
+                            placeholder="Search doctor or specialty..." class="search-input" />
+                    </div>
+                </div>
+
+                <div class="search-group">
+                    <label for="dateFilter" class="search-label">Filter by Date</label>
+                    <div class="search-input-wrapper">
+                        <i class="pi pi-calendar search-icon"></i>
+                        <input id="dateFilter" type="date" [(ngModel)]="dateFilter" class="search-input date-input" />
+                    </div>
+                </div>
+
+                <button *ngIf="searchTerm || doctorNameFilter || dateFilter" (click)="clearFilters()" class="clear-btn"
+                    title="Clear all filters">
+                    <i class="pi pi-times"></i> Clear
+                </button>
+            </div>
+        </section>
+
+        <!-- Stats Row -->
+        <div class="stats-row" *ngIf="!loading">
+            <div class="stat-card">
+                <div class="stat-label">TOTAL VISITS</div>
+                <div class="stat-value">{{ visits.length }}</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">COMPLETED</div>
+                <div class="stat-value">{{ completedCount }}</div>
+            </div>
+            <div class="stat-card" *ngIf="searchTerm || doctorNameFilter || dateFilter">
+                <div class="stat-label">FILTERED RESULTS</div>
+                <div class="stat-value">{{ filteredVisits.length }}</div>
+            </div>
+        </div>
+
+        <section class="history-list">
+
+            <div class="history-loading" *ngIf="loading">
+                <i class="pi pi-spin pi-spinner"></i>
+                <span>Loading visit history...</span>
+            </div>
+
+            <div class="history-empty" *ngIf="!loading && visits.length === 0">
+                <i class="pi pi-folder-open empty-icon"></i>
+                <p>No visit history found.</p>
+            </div>
+
+            <div class="history-empty" *ngIf="!loading && visits.length > 0 && filteredVisits.length === 0">
+                <i class="pi pi-search empty-icon"></i>
+                <p>No visits match your search criteria.</p>
+                <button (click)="clearFilters()" class="reset-search-btn">Clear Filters</button>
+            </div>
+
+            <ng-container *ngIf="!loading && filteredVisits.length > 0">
+                <a class="visit-card" *ngFor="let v of filteredVisits" [routerLink]="['/history', v.id]">
+
+                    <div class="visit-card-left">
+                        <div class="avatar-circle">{{ getInitial(v.doctor) }}</div>
+                        <div class="visit-info">
+                            <div class="doctor-name">{{ v.doctor }}</div>
+                            <div class="specialty">{{ v.specialty }}</div>
+                            <div *ngIf="v.rating" class="rating-mini">
+                                <app-star-rating [interactive]="false" [rating]="v.rating.stars"></app-star-rating>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="visit-card-right">
+                        <div class="visit-date">{{ v.date ? (v.date | date:'d MMM yyyy') : '—' }}</div>
+                        <span class="token-badge">Token: {{ v.token }}</span>
+                        <span class="status-badge" [ngClass]="v.status">{{ v.status || 'completed' }}</span>
+                        <span class="notes-badge" *ngIf="v.hasNotes">Has Notes</span>
+                    </div>
+
+                    <div class="chevron">›</div>
+                </a>
+            </ng-container>
+
+            <div class="callout" *ngIf="!loading && filteredVisits.length > 0">
+                Click on any visit to view detailed consultation notes and complete medical records.
+            </div>
+
+        </section>
+    </div>
+</main>

@@ -1,0 +1,267 @@
+<p-toast position="top-right"></p-toast>
+
+<app-reception-sidebar [currentNav]="currentNav" [sidebarOpen]="sidebarOpen" (toggleSidebar)="toggleSidebar()"
+    (navigate)="navigateTo($event)" (signOut)="signOut()">
+
+    <div class="header-row">
+        <div>
+            <h2>Queue List</h2>
+            <p class="subtitle">View and manage all tokens.</p>
+        </div>
+    </div>
+
+    <!-- SEARCH & FILTER -->
+    <div class="search-bar">
+        <i class="pi pi-search"></i>
+        <input type="text" placeholder="Search by name or token..." [(ngModel)]="searchText"
+            (ngModelChange)="onSearchChange($event)" />
+        <i class="pi pi-filter"></i>
+        <p-dropdown [options]="statuses" [(ngModel)]="selectedStatus" (onChange)="onStatusChange()">
+        </p-dropdown>
+        <p-dropdown [options]="paymentOptions" [(ngModel)]="paymentFilter" (onChange)="onPaymentChange()">
+        </p-dropdown>
+    </div>
+
+    <!-- TABLE -->
+    <p-card class="table-card">
+        <p-table [value]="filteredTokens" [paginator]="true" [rows]="10">
+            <ng-template pTemplate="header">
+                <tr>
+                    <th>Token</th>
+                    <th>MRN</th>
+                    <th>Patient Details</th>
+                    <th>Doctor</th>
+                    <th>Department</th>
+                    <th>Payment</th>
+                    <th>Status</th>
+                    <th>Reason</th>
+                    <th>Actions</th>
+                </tr>
+            </ng-template>
+            <ng-template pTemplate="body" let-row>
+                <tr [ngClass]="{'skipped-row': row.status === 'skipped'}">
+                    <td>
+                        <strong>{{row.token}}</strong>
+                        <span *ngIf="row.status === 'skipped'" class="skipped-badge-inline">SKIPPED</span>
+                    </td>
+                    <td>
+                        <span class="mrn-badge">{{ row.mrn || '-' }}</span>
+                    </td>
+                    <td>
+                        <div class="name">{{row.name}}</div>
+                        <div class="small">{{row.age}} • {{row.gender}}</div>
+                    </td>
+                    <td>
+                        <span *ngIf="row.doctorName; else noDoctor">{{ row.doctorName }}</span>
+                        <ng-template #noDoctor><span style="color:#9ca3af">-</span></ng-template>
+                    </td>
+                    <td>{{row.department}}</td>
+                    <td>
+                        <span [ngClass]="{
+                            'payment-badge': true,
+                            'payment-paid': (row.paymentStatus || 'unpaid') === 'paid',
+                            'payment-unpaid': (row.paymentStatus || 'unpaid') !== 'paid'
+                        }">{{ (row.paymentStatus || 'unpaid') | titlecase }}</span>
+                    </td>
+                    <td>
+                        <span [ngClass]="{
+                            'status-badge': true,
+                            'status-pending': row.status === 'pending',
+                            'status-completed': row.status === 'completed',
+                            'status-skipped': row.status === 'skipped'
+                        }">
+                            {{ row.status || 'pending' | titlecase }}
+                        </span>
+                    </td>
+                    <td>{{row.reason}}</td>
+                    <td>
+                        <div class="action-btns">
+                            <button pButton icon="pi pi-print" severity="secondary"
+                                class="p-button-text p-button-plain action-btn" pTooltip="Print Slip"
+                                tooltipPosition="top" (click)="downloadSlip(row)"></button>
+                            <button pButton icon="pi pi-eye" severity="info"
+                                class="p-button-text p-button-plain action-btn" pTooltip="View" tooltipPosition="top"
+                                (click)="view(row)"></button>
+                            <button pButton icon="pi pi-pencil" severity="success"
+                                class="p-button-text p-button-plain action-btn" pTooltip="Edit" tooltipPosition="top"
+                                (click)="edit(row)"></button>
+                            <button pButton icon="pi pi-step-forward" severity="warning"
+                                class="p-button-text p-button-plain action-btn" pTooltip="Skip Token"
+                                tooltipPosition="top" (click)="skipToken(row)"
+                                [disabled]="row.status === 'skipped' || row.status === 'completed'"></button>
+                            <button pButton icon="pi pi-trash" severity="danger"
+                                class="p-button-text p-button-plain action-btn" pTooltip="Delete" tooltipPosition="top"
+                                (click)="delete(row)"></button>
+                            <!---BUTTON for skipped tokens — warning color for visibility -->
+                            <button pButton icon="pi pi-undo" label="Re-add" severity="warning"
+                                class="p-button-sm re-add-btn" pTooltip="Re-add to Queue" tooltipPosition="top"
+                                (click)="reAddToken(row)" *ngIf="row.status === 'skipped'"></button>
+                        </div>
+                    </td>
+                </tr>
+            </ng-template>
+            <ng-template pTemplate="emptymessage">
+                <tr>
+                    <td colspan="9" style="text-align:center; padding:2rem; color:#9ca3af; font-size:0.95rem;">
+                        NO ITEMS FOUND
+                    </td>
+                </tr>
+            </ng-template>
+        </p-table>
+    </p-card>
+</app-reception-sidebar>
+
+<!-- VIEW DIALOG (READ ONLY) -->
+<p-dialog header="View Token" [(visible)]="viewVisible" [modal]="true" [style]="{width:'480px'}">
+    <div *ngIf="viewModel" class="p-fluid queue-dialog">
+        <div class="dialog-grid">
+            <div class="p-field">
+                <label>Token</label>
+                <input pInputText [value]="viewModel.token" disabled />
+            </div>
+            <div class="p-field">
+                <label>MRN</label>
+                <input pInputText [value]="viewModel.mrn || '-'" disabled />
+            </div>
+        </div>
+        <div class="dialog-grid">
+            <div class="p-field">
+                <label>Name</label>
+                <input pInputText [value]="viewModel.name" disabled />
+            </div>
+            <div class="p-field">
+                <label>Age</label>
+                <input pInputText [value]="viewModel.age" disabled />
+            </div>
+        </div>
+        <div class="dialog-grid">
+            <div class="p-field">
+                <label>Gender</label>
+                <input pInputText [value]="viewModel.gender" disabled />
+            </div>
+            <div class="p-field">
+                <label>Phone</label>
+                <input pInputText [value]="viewModel.phone || '-'" disabled />
+            </div>
+        </div>
+        <div class="dialog-grid">
+            <div class="p-field">
+                <label>Doctor</label>
+                <input pInputText [value]="viewModel.doctorName || 'Any'" disabled />
+            </div>
+            <div class="p-field">
+                <label>Department</label>
+                <input pInputText [value]="viewModel.department" disabled />
+            </div>
+        </div>
+        <div class="p-field">
+            <label>Reason</label>
+            <textarea pInputTextarea [value]="viewModel.reason" disabled rows="3"
+                style="width:100%; border-radius:10px; resize:none;"></textarea>
+        </div>
+        <div style="display:flex; gap:0.5rem; margin-top:1rem;">
+            <button pButton label="Close" (click)="viewVisible=false" class="p-button-secondary"
+                style="flex:1;"></button>
+        </div>
+    </div>
+</p-dialog>
+
+<!-- EDIT DIALOG -->
+<p-dialog header="Edit Token Details" [(visible)]="editVisible" [modal]="true" [style]="{width:'500px'}">
+    <div *ngIf="editModel" class="p-fluid queue-dialog">
+
+        <!-- Token (read-only) + Status badge -->
+        <div class="dialog-grid">
+            <div class="p-field">
+                <label>Token</label>
+                <input pInputText [value]="editModel.token" disabled />
+            </div>
+            <div class="p-field">
+                <label>MRN</label>
+                <input pInputText [value]="editModel.mrn || '-'" disabled />
+            </div>
+        </div>
+
+        <div class="dialog-grid">
+            <div class="p-field">
+                <label>Name</label>
+                <input pInputText [(ngModel)]="editModel.name" placeholder="Patient name" />
+            </div>
+            <div class="p-field">
+                <label>Age</label>
+                <input type="number" pInputText min="0" max="150" [ngModel]="editModel.age"
+                    (ngModelChange)="onAgeChange($event)" placeholder="Age" />
+            </div>
+        </div>
+
+        <div class="dialog-grid">
+            <div class="p-field">
+                <label>Gender</label>
+                <p-dropdown [(ngModel)]="editModel.gender" [options]="genderOptions"
+                    placeholder="Select gender"></p-dropdown>
+            </div>
+            <div class="p-field">
+                <label>Phone</label>
+                <input pInputText [(ngModel)]="editModel.phone" placeholder="Phone number" />
+            </div>
+        </div>
+
+        <div class="dialog-grid">
+            <div class="p-field">
+                <label>Department</label>
+                <p-dropdown [(ngModel)]="editModel.department" [options]="departments"
+                    placeholder="Select department"></p-dropdown>
+            </div>
+            <div class="p-field">
+                <label>Payment</label>
+                <p-dropdown [(ngModel)]="editModel!.paymentStatus" [options]="paymentOptionsNoAll"
+                    placeholder="Select payment"></p-dropdown>
+            </div>
+        </div>
+
+        <!-- Reason — full width, properly isolated -->
+        <div class="p-field reason-field">
+            <label>Reason for Visit</label>
+            <textarea pInputTextarea [(ngModel)]="editModel.reason" rows="3" placeholder="Reason for visit"
+                style="width:100%; display:block; resize:vertical; border-radius:10px;">
+            </textarea>
+        </div>
+
+        <!-- Re-add button — only shown for skipped patients -->
+        <div *ngIf="editModel.status === 'skipped'" class="readd-section">
+            <div class="skipped-notice">
+                <i class="pi pi-exclamation-triangle"></i>
+                This patient has been skipped.
+            </div>
+            <button pButton icon="pi pi-undo" label="Re-add to Queue" (click)="reAddToken(editModel); editVisible=false"
+                class="p-button-success readd-full-btn">
+            </button>
+        </div>
+
+        <div class="dialog-actions">
+            <button pButton label="Save Changes" icon="pi pi-check" (click)="saveEdit()" class="p-button-success"
+                style="flex:1;"></button>
+            <button pButton label="Cancel" icon="pi pi-times" (click)="editVisible=false" class="p-button-secondary"
+                style="flex:1;"></button>
+        </div>
+    </div>
+</p-dialog>
+
+<!-- DELETE CONFIRMATION DIALOG -->
+<p-dialog header="Confirm Delete" [(visible)]="deleteConfirmVisible" [modal]="true" [style]="{width:'400px'}">
+    <div *ngIf="deleteModel">
+        <div class="delete-warning">
+            <i class="pi pi-trash" style="font-size:2rem; color:#ef4444; margin-bottom:0.5rem;"></i>
+            <p>Are you sure you want to delete token
+                <strong>{{deleteModel.token}}</strong> for <strong>{{deleteModel.name}}</strong>?
+            </p>
+            <p style="color:#9ca3af; font-size:0.82rem;">This action cannot be undone.</p>
+        </div>
+        <div style="display:flex; gap:0.5rem; margin-top:1rem;">
+            <button pButton label="Delete" icon="pi pi-trash" (click)="confirmDelete()" class="p-button-danger"
+                style="flex:1;"></button>
+            <button pButton label="Cancel" icon="pi pi-times" (click)="deleteConfirmVisible=false"
+                class="p-button-secondary" style="flex:1;"></button>
+        </div>
+    </div>
+</p-dialog>

@@ -1,0 +1,60 @@
+<!-- MOBILE TOPBAR -->
+<div class="mobile-topbar">
+    <button class="hamburger" (click)="toggleSidebar()">
+        <i [ngClass]="sidebarOpen ? 'pi pi-times' : 'pi pi-bars'"></i>
+    </button>
+    <div class="brand-name">Pharmacy</div>
+</div>
+
+<!-- SIDEBAR OVERLAY -->
+@if (sidebarOpen) {
+<div class="sidebar-overlay" (click)="toggleSidebar()"></div>
+}
+
+<!-- SIDEBAR -->
+<aside class="sidebar" [class.open]="sidebarOpen">
+    <div class="sidebar-header">
+        <i class="pi pi-shopping-cart"></i>
+        <span>Pharmacy</span>
+    </div>
+
+    <nav class="sidebar-menu">
+        <a routerLink="/staff/pharmacy/dashboard" routerLinkActive="active" class="menu-item"
+            [routerLinkActiveOptions]="{ exact: false }" (click)="sidebarOpen = false">
+            <i class="pi pi-th-large"></i>
+            <span>Dashboard</span>
+        </a>
+        <a routerLink="/staff/pharmacy/inventory" routerLinkActive="active" class="menu-item"
+            [routerLinkActiveOptions]="{ exact: false }" (click)="sidebarOpen = false">
+            <i class="pi pi-box"></i>
+            <span>Inventory</span>
+        </a>
+        <a routerLink="/staff/pharmacy/sales" routerLinkActive="active" class="menu-item"
+            [routerLinkActiveOptions]="{ exact: false }" (click)="sidebarOpen = false">
+            <i class="pi pi-chart-line"></i>
+            <span>Sales & Revenue</span>
+        </a>
+        <a routerLink="/staff/pharmacy/invoices" routerLinkActive="active" class="menu-item"
+            [routerLinkActiveOptions]="{ exact: false }" (click)="sidebarOpen = false">
+            <i class="pi pi-receipt"></i>
+            <span>Invoices</span>
+        </a>
+        <a routerLink="/staff/pharmacy/add" routerLinkActive="active" class="menu-item"
+            [routerLinkActiveOptions]="{ exact: false }" (click)="sidebarOpen = false">
+            <i class="pi pi-plus-circle"></i>
+            <span>Add Medicine</span>
+        </a>
+        <a routerLink="/staff/pharmacy/trash" routerLinkActive="active" class="menu-item"
+            [routerLinkActiveOptions]="{ exact: false }" (click)="sidebarOpen = false">
+            <i class="pi pi-trash"></i>
+            <span>Trash</span>
+        </a>
+    </nav>
+
+    <div class="sidebar-footer">
+        <button class="signout-btn" (click)="signOut()">
+            <i class="pi pi-sign-out"></i>
+            <span>Sign Out</span>
+        </button>
+    </div>
+</aside>

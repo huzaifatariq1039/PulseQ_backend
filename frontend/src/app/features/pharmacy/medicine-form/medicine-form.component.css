@@ -1,0 +1,441 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+*::selection {
+    background-color: #3b82f6;
+    color: white !important;
+}
+
+.layout {
+    display: flex;
+    min-height: 100vh;
+    background: #f3f4f6;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.main-content {
+    flex: 1;
+    margin-left: 240px;
+    padding: 1.75rem 2rem;
+    min-height: 100vh;
+}
+
+.page-header {
+    margin-bottom: 1.5rem;
+}
+
+.page-header h1 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #111827;
+    margin-bottom: 0.25rem;
+}
+
+.subtitle {
+    color: #6b7280;
+    font-size: 0.85rem;
+}
+
+/* ── CARD ── */
+.form-card {
+    width: 100%;
+}
+
+:host ::ng-deep .form-card .p-card {
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+    border-radius: 12px;
+    border: none;
+    width: 100%;
+}
+
+:host ::ng-deep .form-card .p-card .p-card-body {
+    padding: 0;
+}
+
+:host ::ng-deep .form-card .p-card .p-card-content {
+    padding: 2rem 2.25rem;
+}
+
+/* ── FORM STRUCTURE ── */
+form {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+/* ── SECTION ── */
+.form-section {
+    padding-bottom: 2rem;
+    margin-bottom: 2rem;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.form-section:last-of-type {
+    border-bottom: none;
+    padding-bottom: 0;
+    margin-bottom: 0;
+}
+
+.section-heading {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    margin-bottom: 1.25rem;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+
+.section-heading::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: #e5e7eb;
+}
+
+/* ── GRID LAYOUTS ── */
+.grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.25rem 1.5rem;
+}
+
+.grid-3 {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 1.25rem 1.5rem;
+}
+
+.col-span-2 {
+    grid-column: span 2;
+}
+
+.col-span-3 {
+    grid-column: span 3;
+}
+
+/* ── FORM GROUP ── */
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.form-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #374151;
+    line-height: 1.4;
+}
+
+.required {
+    color: #ef4444;
+}
+
+/* ── INPUTS ── */
+.form-control {
+    padding: 0.65rem 0.875rem !important;
+    border: 1px solid #e5e7eb !important;
+    border-radius: 8px !important;
+    font-size: 0.875rem !important;
+    width: 100% !important;
+    transition: border-color 0.2s, box-shadow 0.2s !important;
+    background: #fff !important;
+    color: #111827 !important;
+    height: 40px !important;
+}
+
+.form-control:focus {
+    outline: none !important;
+    border-color: #3b82f6 !important;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
+}
+
+.form-control.ng-invalid.ng-touched {
+    border-color: #ef4444 !important;
+    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.08) !important;
+}
+
+/* read-only product ID */
+input[readonly].form-control {
+    background: #f9fafb !important;
+    color: #9ca3af !important;
+    cursor: default;
+}
+
+/* ── PRIMENG INPUTNUMBER ── */
+:host ::ng-deep .p-inputnumber {
+    width: 100%;
+    display: block;
+}
+
+:host ::ng-deep .p-inputnumber .p-inputnumber-input {
+    width: 100% !important;
+    height: 40px !important;
+    padding: 0.65rem 0.875rem !important;
+    border: 1px solid #e5e7eb !important;
+    border-radius: 8px !important;
+    font-size: 0.875rem !important;
+    color: #111827 !important;
+    transition: border-color 0.2s, box-shadow 0.2s !important;
+}
+
+:host ::ng-deep .p-inputnumber .p-inputnumber-input:focus {
+    border-color: #3b82f6 !important;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
+    outline: none !important;
+}
+
+:host ::ng-deep .p-inputnumber .p-inputnumber-button-group {
+    display: none;
+}
+
+/* ── PRIMENG DROPDOWN ── */
+:host ::ng-deep p-dropdown .p-dropdown {
+    width: 100% !important;
+    height: 40px !important;
+    border: 1px solid #e5e7eb !important;
+    border-radius: 8px !important;
+    background: #fff !important;
+    display: flex !important;
+    align-items: center !important;
+    transition: border-color 0.2s, box-shadow 0.2s !important;
+}
+
+:host ::ng-deep p-dropdown .p-dropdown:not(.p-disabled).p-focus {
+    border-color: #3b82f6 !important;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
+    outline: none !important;
+}
+
+:host ::ng-deep p-dropdown .p-dropdown-label {
+    font-size: 0.875rem !important;
+    color: #374151 !important;
+    padding: 0 0.875rem !important;
+    line-height: 40px !important;
+}
+
+:host ::ng-deep p-dropdown .p-dropdown-trigger {
+    width: 2.25rem !important;
+    color: #9ca3af !important;
+}
+
+:host ::ng-deep .p-dropdown-panel .p-dropdown-item {
+    font-size: 0.875rem;
+    padding: 0.5rem 0.875rem;
+}
+
+/* ── PRIMENG CALENDAR ── */
+:host ::ng-deep .p-calendar {
+    width: 100%;
+    display: block;
+}
+
+:host ::ng-deep .p-calendar.p-calendar-w-btn {
+    display: flex !important;
+    width: 100% !important;
+    height: 40px !important;
+}
+
+:host ::ng-deep .p-calendar.p-calendar-w-btn .p-inputtext {
+    flex: 1 !important;
+    height: 40px !important;
+    padding: 0.65rem 0.875rem !important;
+    border: 1px solid #e5e7eb !important;
+    border-right: none !important;
+    border-radius: 8px 0 0 8px !important;
+    font-size: 0.875rem !important;
+    color: #111827 !important;
+    transition: border-color 0.2s, box-shadow 0.2s !important;
+}
+
+:host ::ng-deep .p-calendar.p-calendar-w-btn .p-inputtext:focus {
+    border-color: #3b82f6 !important;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
+    outline: none !important;
+}
+
+:host ::ng-deep .p-calendar.p-calendar-w-btn .p-datepicker-trigger {
+    height: 40px !important;
+    width: 40px !important;
+    flex-shrink: 0;
+    border-radius: 0 8px 8px 0 !important;
+    background: #2563eb !important;
+    border-color: #2563eb !important;
+    color: #fff !important;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+:host ::ng-deep .p-calendar.p-calendar-w-btn .p-datepicker-trigger:hover {
+    background: #1d4ed8 !important;
+    border-color: #1d4ed8 !important;
+}
+
+:host ::ng-deep .p-datepicker {
+    border-radius: 10px !important;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12) !important;
+}
+
+:host ::ng-deep .p-datepicker .p-highlight {
+    background: #2563eb !important;
+    color: #fff !important;
+}
+
+/* ── TOTAL PRICE CARDS ── */
+.totals-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.25rem 1.5rem;
+    margin-top: 0.25rem;
+}
+
+.total-card {
+    border-radius: 10px;
+    padding: 1rem 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+}
+
+.total-card-purchase {
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+}
+
+.total-card-selling {
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+}
+
+.total-card-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.total-card-purchase .total-card-label {
+    color: #16a34a;
+}
+
+.total-card-selling .total-card-label {
+    color: #2563eb;
+}
+
+.total-card-value {
+    font-size: 1.3rem;
+    font-weight: 700;
+}
+
+.total-card-purchase .total-card-value {
+    color: #15803d;
+}
+
+.total-card-selling .total-card-value {
+    color: #1d4ed8;
+}
+
+/* ── ERROR MESSAGE ── */
+.error-message {
+    font-size: 0.75rem;
+    color: #ef4444;
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    margin-top: 0.1rem;
+}
+
+.error-message::before {
+    content: '⚠';
+}
+
+/* ── FORM ACTIONS ── */
+.form-actions {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: flex-end;
+    margin-top: 2rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid #f0f0f0;
+    flex-wrap: wrap;
+}
+
+.cancel-btn,
+.submit-btn {
+    padding: 0.6rem 2rem;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    min-width: 130px;
+    border: none;
+}
+
+.cancel-btn {
+    background: #f9fafb;
+    color: #374151;
+    border: 1px solid #e5e7eb;
+}
+
+.cancel-btn:hover {
+    background: #f3f4f6;
+}
+
+.submit-btn {
+    background: #2563eb;
+    color: #fff;
+}
+
+.submit-btn:hover {
+    background: #1d4ed8;
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+}
+
+/* ── RESPONSIVE ── */
+@media (max-width: 900px) {
+    .main-content {
+        margin-left: 0;
+        padding: 1.25rem 1rem;
+        padding-top: calc(56px + 1.25rem);
+    }
+}
+
+@media (max-width: 768px) {
+    .main-content {
+        padding: 1rem;
+        padding-top: calc(56px + 1rem);
+    }
+
+    :host ::ng-deep .form-card .p-card .p-card-content {
+        padding: 1.25rem;
+    }
+
+    .grid-2,
+    .grid-3,
+    .totals-row {
+        grid-template-columns: 1fr;
+    }
+
+    .col-span-2,
+    .col-span-3 {
+        grid-column: span 1;
+    }
+
+    .form-actions {
+        flex-direction: column-reverse;
+    }
+
+    .cancel-btn,
+    .submit-btn {
+        width: 100%;
+        text-align: center;
+    }
+}

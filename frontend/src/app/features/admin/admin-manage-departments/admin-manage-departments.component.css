@@ -1,0 +1,413 @@
+/* ─── Layout ─────────────────────────────────────────────────────────────── */
+/*
+  The sidebar is position:fixed, width:220px.
+  We must give .main-content a matching margin-left so content
+  is never hidden behind it — same pattern as manage-doctors-main.
+*/
+.layout {
+    display: flex;
+    min-height: 100vh;
+    background-color: #f3f4f6;
+}
+
+.main-content {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    margin-left: 220px;
+    /* ← clears the fixed sidebar */
+    max-width: calc(100% - 220px);
+}
+
+.page-container {
+    flex: 1;
+    padding: 1.5rem 1.75rem;
+    max-width: 1200px;
+    width: 100%;
+    margin: 0 auto;
+    box-sizing: border-box;
+}
+
+/* ─── Header ─────────────────────────────────────────────────────────────── */
+.admin-header {
+    margin-bottom: 1.25rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.admin-header h1 {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: #111827;
+    margin: 0;
+    letter-spacing: -0.01em;
+}
+
+.admin-header .subtitle {
+    color: #6b7280;
+    font-size: 0.82rem;
+    margin: 0.2rem 0 0 0;
+}
+
+/* ─── Search & Action Bar ────────────────────────────────────────────────── */
+.search-action-bar {
+    display: flex;
+    gap: 0.75rem;
+    margin-bottom: 1.25rem;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.search-box {
+    flex: 1;
+    min-width: 200px;
+    position: relative;
+    display: flex;
+    align-items: center;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 7px;
+    padding: 0 0.875rem;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.search-box i {
+    color: #9ca3af;
+    font-size: 0.82rem;
+    flex-shrink: 0;
+}
+
+.search-input {
+    flex: 1;
+    border: none !important;
+    padding: 0.55rem 0.5rem !important;
+    outline: none;
+    background: transparent;
+    font-size: 0.875rem;
+    color: #374151;
+}
+
+.search-input::placeholder {
+    color: #c4c9d4;
+}
+
+.add-btn {
+    background: #2563eb !important;
+    border: none !important;
+    padding: 0.55rem 1.1rem !important;
+    border-radius: 7px;
+    color: #fff !important;
+    font-weight: 600;
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: background 0.2s, box-shadow 0.2s;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.add-btn:hover {
+    background: #1d4ed8 !important;
+    box-shadow: 0 3px 10px rgba(37, 99, 235, 0.35);
+}
+
+/* ─── Departments Grid ───────────────────────────────────────────────────── */
+.departments-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 1rem;
+}
+
+/* ─── Department Card ────────────────────────────────────────────────────── */
+.department-card {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    padding: 1rem 1.1rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    transition: box-shadow 0.2s, transform 0.2s;
+    display: flex;
+    flex-direction: column;
+}
+
+.department-card:hover {
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
+    transform: translateY(-2px);
+}
+
+.dept-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 0.65rem;
+}
+
+/* ─── Icon — minimal grey, NO purple ────────────────────────────────────── */
+.dept-icon-section {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    background: #f3f4f6;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    flex-shrink: 0;
+}
+
+.dept-icon {
+    font-size: 1rem;
+    color: #6b7280;
+}
+
+/* ─── Action Buttons ─────────────────────────────────────────────────────── */
+.dept-actions {
+    display: flex;
+    gap: 0.3rem;
+}
+
+.action-btn {
+    background: transparent !important;
+    border: 1px solid #e5e7eb !important;
+    color: #9ca3af !important;
+    width: 28px !important;
+    height: 28px !important;
+    padding: 0 !important;
+    border-radius: 6px;
+    font-size: 0.75rem !important;
+    transition: all 0.15s ease;
+    cursor: pointer;
+}
+
+.action-btn:hover {
+    background: #f9fafb !important;
+    border-color: #d1d5db !important;
+    color: #374151 !important;
+}
+
+.action-btn.delete-btn:hover {
+    background: #fef2f2 !important;
+    border-color: #fecaca !important;
+    color: #dc2626 !important;
+}
+
+.action-btn.edit-btn:hover {
+    background: #eff6ff !important;
+    border-color: #bfdbfe !important;
+    color: #2563eb !important;
+}
+
+/* ─── Department Content ─────────────────────────────────────────────────── */
+.dept-content {
+    flex: 1;
+}
+
+.dept-name {
+    font-size: 0.97rem;
+    font-weight: 600;
+    color: #111827;
+    margin: 0 0 0.2rem 0;
+    word-break: break-word;
+    line-height: 1.4;
+}
+
+.dept-description {
+    color: #6b7280;
+    font-size: 0.8rem;
+    margin: 0.2rem 0 0.4rem 0;
+    line-height: 1.5;
+}
+
+.dept-stats {
+    display: flex;
+    gap: 0.75rem;
+    margin-top: 0.6rem;
+    padding-top: 0.6rem;
+    border-top: 1px solid #f3f4f6;
+}
+
+.stat-item {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.8rem;
+    color: #6b7280;
+}
+
+.stat-item i {
+    color: #9ca3af;
+    font-size: 0.75rem;
+}
+
+/* ─── Empty State ────────────────────────────────────────────────────────── */
+.empty-state {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 3rem 2rem;
+    background: #fff;
+    border: 2px dashed #e5e7eb;
+    border-radius: 10px;
+    color: #9ca3af;
+}
+
+.empty-state i {
+    font-size: 2rem;
+    margin-bottom: 0.75rem;
+    color: #d1d5db;
+}
+
+.empty-state p {
+    font-size: 0.9rem;
+    margin: 0;
+}
+
+/* ─── Dialog / Form ──────────────────────────────────────────────────────── */
+.dialog-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+}
+
+.form-group label {
+    font-weight: 600;
+    color: #374151;
+    margin-bottom: 0.35rem;
+    font-size: 0.85rem;
+}
+
+.form-group input,
+.form-group textarea {
+    padding: 0.6rem 0.75rem;
+    border: 1px solid #e5e7eb !important;
+    border-radius: 6px;
+    font-size: 0.875rem;
+    color: #374151;
+    background: #f9fafb;
+    transition: border-color 0.15s, background 0.15s;
+}
+
+.form-group input:focus,
+.form-group textarea:focus {
+    border-color: #2563eb !important;
+    background: #fff;
+    outline: none;
+}
+
+.full-width {
+    width: 100% !important;
+    box-sizing: border-box;
+}
+
+/* ─── Responsive ─────────────────────────────────────────────────────────── */
+
+/* Large tablet — sidebar slightly narrower at 1200px breakpoint */
+@media (max-width: 1200px) {
+    .main-content {
+        margin-left: 220px;
+        max-width: calc(100% - 220px);
+    }
+}
+
+/* When sidebar collapses (mobile topbar shown at 900px per sidebar CSS) */
+@media (max-width: 900px) {
+    .main-content {
+        margin-left: 0;
+        max-width: 100%;
+        padding-top: 56px;
+        /* height of mobile topbar */
+    }
+
+    .page-container {
+        padding: 1.25rem;
+        padding-top: calc(56px + 0.75rem);
+    }
+}
+
+@media (max-width: 768px) {
+    .layout {
+        flex-direction: column;
+    }
+
+    .main-content {
+        margin-left: 0;
+        max-width: 100%;
+    }
+
+    .page-container {
+        padding: 1rem;
+        padding-top: calc(56px + 0.75rem);
+    }
+
+    .admin-header {
+        margin-bottom: 1rem;
+    }
+
+    .admin-header h1 {
+        font-size: 1.2rem;
+    }
+
+    .search-action-bar {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.6rem;
+    }
+
+    .search-box {
+        width: 100%;
+        min-width: unset;
+    }
+
+    .add-btn {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .departments-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.75rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .page-container {
+        padding: 0.75rem;
+        padding-top: calc(56px + 0.5rem);
+    }
+
+    .departments-grid {
+        grid-template-columns: 1fr;
+        gap: 0.6rem;
+    }
+
+    .department-card {
+        padding: 0.85rem 1rem;
+    }
+
+    .dept-name {
+        font-size: 0.9rem;
+    }
+
+    .dept-icon-section {
+        width: 32px;
+        height: 32px;
+    }
+
+    .dept-icon {
+        font-size: 0.875rem;
+    }
+
+    .action-btn {
+        width: 24px !important;
+        height: 24px !important;
+    }
+}

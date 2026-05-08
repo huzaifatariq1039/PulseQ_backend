@@ -1,0 +1,189 @@
+::ng-deep .rating-dialog.p-dialog {
+  .p-dialog-content {
+    padding: 0;
+  }
+
+  .p-dialog-header {
+    display: none;
+  }
+}
+
+.rating-modal {
+  position: relative;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: flex-end;
+  padding: 16px 24px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 20px;
+  color: #6b7280;
+  padding: 4px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &:hover {
+    background-color: #f3f4f6;
+    color: #111827;
+  }
+}
+
+.modal-content {
+  padding: 32px 24px;
+}
+
+.doctor-info {
+  text-align: center;
+  margin-bottom: 32px;
+
+  h2 {
+    font-size: 22px;
+    font-weight: 600;
+    color: #111827;
+    margin: 0 0 8px 0;
+  }
+}
+
+.doctor-name {
+  font-size: 14px;
+  color: #6b7280;
+  margin: 0;
+}
+
+.star-section {
+  margin-bottom: 32px;
+  display: flex;
+  justify-content: center;
+}
+
+.feedback-section {
+  margin-bottom: 24px;
+}
+
+.feedback-label {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
+  margin-bottom: 8px;
+}
+
+.optional {
+  color: #9ca3af;
+  font-weight: normal;
+}
+
+.feedback-textarea {
+  width: 100%;
+  min-height: 120px;
+  padding: 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 14px;
+  color: #111827;
+  resize: vertical;
+  transition: all 0.2s ease;
+
+  &::placeholder {
+    color: #9ca3af;
+  }
+
+  &:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  }
+}
+
+.char-counter {
+  font-size: 12px;
+  color: #9ca3af;
+  text-align: right;
+  margin-top: 4px;
+}
+
+.modal-footer {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  padding-top: 24px;
+  border-top: 1px solid #e5e7eb;
+  flex-wrap: wrap;
+}
+
+.btn {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+.btn-cancel {
+  background-color: #f3f4f6;
+  color: #374151;
+
+  &:hover:not(:disabled) {
+    background-color: #e5e7eb;
+  }
+}
+
+.btn-submit {
+  background: linear-gradient(135deg, #3b82f6 0%, #4f46e5 100%);
+  color: white;
+
+  &:hover:not(:disabled) {
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+    transform: translateY(-2px);
+  }
+
+  &:disabled {
+    background: linear-gradient(135deg, #d1d5db 0%, #e5e7eb 100%);
+  }
+}
+
+/* ── RESPONSIVE ── */
+@media (max-width: 480px) {
+  .modal-content {
+    padding: 24px 16px;
+  }
+
+  .modal-header {
+    padding: 12px 16px;
+  }
+
+  .doctor-info h2 {
+    font-size: 18px;
+  }
+
+  .modal-footer {
+    flex-direction: column-reverse;
+  }
+
+  .btn {
+    width: 100%;
+    justify-content: center;
+  }
+}

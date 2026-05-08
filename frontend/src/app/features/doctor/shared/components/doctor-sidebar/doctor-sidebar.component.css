@@ -1,0 +1,145 @@
+/* shared sidebar styling for doctor pages */
+.sidebar {
+    box-sizing: border-box;
+    width: 220px;
+    background: #ffffff;
+    border-right: 1px solid #e2e8f0;
+    padding: 20px 16px 20px 16px;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.04);
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    z-index: 100;
+    transition: transform 0.3s ease;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+/* On desktop, always visible */
+@media (min-width: 901px) {
+    .sidebar {
+        transform: translateX(0) !important;
+    }
+}
+
+/* On mobile, hidden by default and positioned below topbar */
+@media (max-width: 900px) {
+    .sidebar {
+        transform: translateX(-100%);
+        top: 56px;
+        height: calc(100vh - 56px);
+    }
+
+    .sidebar.open {
+        transform: translateX(0);
+    }
+
+    /* Hide the duplicate brand header inside sidebar on mobile */
+    .sidebar-header {
+        display: none;
+    }
+}
+
+.portal-icon {
+    width: 40px;
+    height: 40px;
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 20px;
+    flex-shrink: 0;
+}
+
+.sidebar-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 32px;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.sidebar-header h2 {
+    font-size: 18px;
+    font-weight: 700;
+    color: #0f172a;
+    margin: 0;
+    white-space: nowrap;
+}
+
+.sidebar-nav {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.nav-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 11px 14px;
+    border-radius: 8px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #64748b;
+    font-size: 14px;
+    font-weight: 500;
+    text-decoration: none;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.nav-item:hover {
+    background: #f1f5f9;
+    color: #3b82f6;
+}
+
+.nav-item.active {
+    background: #e0e7ff;
+    color: #3b82f6;
+    font-weight: 600;
+}
+
+.nav-item i {
+    font-size: 16px;
+    flex-shrink: 0;
+}
+
+.sidebar-footer {
+    padding-top: 16px;
+    border-top: 1px solid #e2e8f0;
+    flex-shrink: 0;
+}
+
+.sign-out-btn {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 11px 14px;
+    border-radius: 8px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #64748b;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+
+.sign-out-btn:hover {
+    background: #fee2e2;
+    color: #dc2626;
+}
+
+.sign-out-btn i {
+    font-size: 16px;
+}

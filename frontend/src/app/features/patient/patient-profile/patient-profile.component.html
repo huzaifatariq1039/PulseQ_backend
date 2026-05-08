@@ -1,0 +1,200 @@
+<div class="page">
+    <p-toast position="top-right"></p-toast>
+    <app-patient-header></app-patient-header>
+
+    <main class="container">
+        <div class="intro">
+            <h1>My Profile</h1>
+            <p class="subtitle">Manage your account information and preferences</p>
+        </div>
+
+        <ng-container *ngIf="userProfile; else noProfile">
+
+            <!-- Avatar Card -->
+            <div class="avatar-card">
+                <div class="avatar-circle">{{ userProfile.initials }}</div>
+                <div class="avatar-info">
+                    <div class="avatar-name">{{ userProfile.fullName }}</div>
+                    <div class="avatar-email">{{ userProfile.email }}</div>
+                </div>
+                <span class="avatar-badge">Patient</span>
+            </div>
+
+            <!-- Info Fields -->
+            <div class="fields-card">
+                <div class="info-field">
+                    <div class="field-left">
+                        <div class="field-label">Full Name</div>
+                        <div class="field-value">{{ userProfile.fullName }}</div>
+                    </div>
+                    <button pButton type="button" icon="pi pi-pencil" class="p-button-text edit-btn"
+                        (click)="openEditNameDialog()" aria-label="Edit name"></button>
+                </div>
+
+                <div class="info-field">
+                    <div class="field-left">
+                        <div class="field-label">Email Address</div>
+                        <div class="field-value">{{ userProfile.email }}</div>
+                    </div>
+                    <button pButton type="button" icon="pi pi-pencil" class="p-button-text edit-btn"
+                        (click)="openEditEmailDialog()" aria-label="Edit email"></button>
+                </div>
+
+                <div class="info-field" *ngIf="userProfile.phone">
+                    <div class="field-left">
+                        <div class="field-label">Phone</div>
+                        <div class="field-value">{{ userProfile.phone }}</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Security -->
+            <div class="action-card">
+                <button class="action-item" (click)="openChangePasswordDialog()">
+                    <div class="action-icon-wrap key">
+                        <i class="pi pi-key"></i>
+                    </div>
+                    <div class="action-text">
+                        <div class="action-title">Change Password</div>
+                        <div class="action-sub">Update your account password</div>
+                    </div>
+                    <i class="pi pi-chevron-right action-chevron"></i>
+                </button>
+            </div>
+
+            <!-- Logout -->
+            <div class="logout-card">
+                <button class="logout-btn" (click)="logout()">
+                    <i class="pi pi-sign-out"></i>
+                    Log out
+                </button>
+            </div>
+
+            <div class="version-tag">PulseQ v1.0</div>
+
+        </ng-container>
+
+        <ng-template #noProfile>
+            <div class="empty-state">
+                <i class="pi pi-user-plus empty-icon"></i>
+                <div class="empty-title">No account found</div>
+                <div class="empty-text">Please create an account to view your profile.</div>
+            </div>
+        </ng-template>
+    </main>
+
+    <!-- Edit Name Dialog -->
+    <p-dialog [(visible)]="showEditNameDialog" header="Edit Full Name" [modal]="true" [style]="{width: '400px'}">
+        <form [formGroup]="editNameForm">
+            <div class="form-group">
+                <label class="form-label">First Name <span class="required">*</span></label>
+                <input pInputText type="text" formControlName="firstName" class="w-full"
+                    placeholder="Enter first name" />
+                <div class="error-message"
+                    *ngIf="editNameFirstName?.invalid && (editNameFirstName?.dirty || editNameFirstName?.touched)">
+                    <span *ngIf="editNameFirstName?.errors?.['required']">First name is required</span>
+                    <span *ngIf="editNameFirstName?.errors?.['minlength']">Minimum 2 characters required</span>
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Last Name <span class="required">*</span></label>
+                <input pInputText type="text" formControlName="lastName" class="w-full" placeholder="Enter last name" />
+                <div class="error-message"
+                    *ngIf="editNameLastName?.invalid && (editNameLastName?.dirty || editNameLastName?.touched)">
+                    <span *ngIf="editNameLastName?.errors?.['required']">Last name is required</span>
+                    <span *ngIf="editNameLastName?.errors?.['minlength']">Minimum 2 characters required</span>
+                </div>
+            </div>
+        </form>
+        <ng-template pTemplate="footer">
+            <button pButton type="button" label="Cancel" (click)="cancelEditName()" class="p-button-text"></button>
+            <button pButton type="button" [label]="savingName ? 'Saving...' : 'Save'" (click)="saveEditName()"
+                [disabled]="editNameForm.invalid || savingName" class="p-button-primary"
+                [icon]="savingName ? 'pi pi-spin pi-spinner' : ''"></button>
+        </ng-template>
+    </p-dialog>
+
+    <!-- Edit Email Dialog -->
+    <p-dialog [(visible)]="showEditEmailDialog" header="Change Email Address" [modal]="true" [style]="{width: '400px'}">
+        <form [formGroup]="editEmailForm">
+            <div class="form-group">
+                <label class="form-label">Current Email</label>
+                <input pInputText type="email" formControlName="currentEmail" class="w-full" readonly />
+            </div>
+            <div class="form-group">
+                <label class="form-label">New Email <span class="required">*</span></label>
+                <input pInputText type="email" formControlName="newEmail" class="w-full"
+                    placeholder="Enter new email" />
+                <div class="error-message"
+                    *ngIf="editEmailNewEmail?.invalid && (editEmailNewEmail?.dirty || editEmailNewEmail?.touched)">
+                    <span *ngIf="editEmailNewEmail?.errors?.['required']">Email is required</span>
+                    <span *ngIf="editEmailNewEmail?.errors?.['email']">Please enter a valid email</span>
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Confirm New Email <span class="required">*</span></label>
+                <input pInputText type="email" formControlName="confirmEmail" class="w-full"
+                    placeholder="Confirm new email" />
+                <div class="error-message"
+                    *ngIf="editEmailConfirmEmail?.invalid && (editEmailConfirmEmail?.dirty || editEmailConfirmEmail?.touched)">
+                    <span *ngIf="editEmailConfirmEmail?.errors?.['required']">Confirmation is required</span>
+                    <span *ngIf="editEmailConfirmEmail?.errors?.['email']">Please enter a valid email</span>
+                    <span *ngIf="editEmailForm.errors?.['emailMismatch']">Emails do not match</span>
+                </div>
+            </div>
+        </form>
+        <ng-template pTemplate="footer">
+            <button pButton type="button" label="Cancel" (click)="cancelEditEmail()" class="p-button-text"></button>
+            <button pButton type="button" [label]="savingEmail ? 'Saving...' : 'Save'" (click)="saveEditEmail()"
+                [disabled]="editEmailForm.invalid || savingEmail" class="p-button-primary"
+                [icon]="savingEmail ? 'pi pi-spin pi-spinner' : ''"></button>
+        </ng-template>
+    </p-dialog>
+
+    <!-- Change Password Dialog -->
+    <p-dialog [(visible)]="showChangePasswordDialog" header="Change Password" [modal]="true" [style]="{width: '400px'}">
+        <form [formGroup]="changePasswordForm">
+            <div class="form-group">
+                <label class="form-label">Current Password <span class="required">*</span></label>
+                <input pInputText type="password" formControlName="currentPassword" class="w-full"
+                    placeholder="Enter current password" />
+                <div class="error-message"
+                    *ngIf="changePasswordCurrentPassword?.invalid && (changePasswordCurrentPassword?.dirty || changePasswordCurrentPassword?.touched)">
+                    <span *ngIf="changePasswordCurrentPassword?.errors?.['required']">Password is required</span>
+                    <span *ngIf="changePasswordCurrentPassword?.errors?.['minlength']">Minimum 6 characters
+                        required</span>
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">New Password <span class="required">*</span></label>
+                <input pInputText type="password" formControlName="newPassword" class="w-full"
+                    placeholder="Enter new password" />
+                <div class="error-message"
+                    *ngIf="changePasswordNewPassword?.invalid && (changePasswordNewPassword?.dirty || changePasswordNewPassword?.touched)">
+                    <span *ngIf="changePasswordNewPassword?.errors?.['required']">Password is required</span>
+                    <span *ngIf="changePasswordNewPassword?.errors?.['minlength']">Minimum 6 characters required</span>
+                    <span *ngIf="changePasswordNewPassword?.errors?.['pattern']">Must include uppercase, lowercase and a
+                        digit</span>
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Confirm New Password <span class="required">*</span></label>
+                <input pInputText type="password" formControlName="confirmPassword" class="w-full"
+                    placeholder="Confirm new password" />
+                <div class="error-message"
+                    *ngIf="changePasswordConfirmPassword?.invalid && (changePasswordConfirmPassword?.dirty || changePasswordConfirmPassword?.touched)">
+                    <span *ngIf="changePasswordConfirmPassword?.errors?.['required']">Confirmation is required</span>
+                    <span *ngIf="changePasswordConfirmPassword?.errors?.['minlength']">Minimum 6 characters
+                        required</span>
+                    <span *ngIf="changePasswordForm.errors?.['passwordMismatch']">Passwords do not match</span>
+                </div>
+            </div>
+        </form>
+        <ng-template pTemplate="footer">
+            <button pButton type="button" label="Cancel" (click)="cancelChangePassword()"
+                class="p-button-text"></button>
+            <button pButton type="button" label="Save" (click)="saveChangePassword()"
+                [disabled]="changePasswordForm.invalid" class="p-button-primary"></button>
+        </ng-template>
+    </p-dialog>
+</div>

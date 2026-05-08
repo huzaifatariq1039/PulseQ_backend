@@ -1,0 +1,44 @@
+<div class="landing-container">
+    <div class="logo">
+        <img src="assets/logo.jpeg" alt="PulseQ" class="landing-logo" />
+    </div>
+
+    <h1 class="title">PulseQ</h1>
+    <p class="subtitle">Select your role to continue.</p>
+
+    <div class="card-grid">
+        <div class="role-card" (click)="goTo('reception')">
+            <div class="icon reception">
+                <i class="pi pi-clipboard"></i>
+            </div>
+            <p class="head">Reception</p>
+            <p class="desc">Manage queue &amp; tokens</p>
+        </div>
+
+        <div class="role-card" (click)="goTo('doctor')">
+            <div class="icon doctor">
+                <i class="pi pi-heart"></i>
+            </div>
+            <p class="head">Doctor</p>
+            <p class="desc">View &amp; call patients</p>
+        </div>
+
+        <div class="role-card" (click)="goTo('admin')">
+            <div class="icon admin">
+                <i class="pi pi-shield"></i>
+            </div>
+            <p class="head">Admin</p>
+            <p class="desc">System controls &amp; stats</p>
+        </div>
+
+        <div class="role-card" (click)="goTo('pharmacy')">
+            <div class="icon pharmacy">
+                <i class="pi pi-shopping-cart"></i>
+            </div>
+            <p class="head">Pharmacy</p>
+            <p class="desc">Manage inventory &amp; stock</p>
+        </div>
+    </div>
+
+    <div class="footer">PulseQ v1.0 • Designed for Hospital Workflows</div>
+</div>

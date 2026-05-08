@@ -1,0 +1,45 @@
+<div class="notifications-page">
+    <app-patient-header></app-patient-header>
+
+    <div class="page-header">
+        <div>
+            <h1>Notifications</h1>
+            <p class="subtitle">Manage your updates and preferences.</p>
+        </div>
+    </div>
+
+    <div class="tabs">
+        <button [class.active]="activeTab === 'inbox'" (click)="activeTab = 'inbox'">Inbox</button>
+    </div>
+
+    <div class="content-wrap">
+        <div *ngIf="activeTab === 'inbox'" class="inbox">
+            <div class="inbox-card">
+                <div class="card-top">
+                    <div class="card-title">Recent Updates</div>
+                    <a class="mark-read" (click)="markAllRead()">Mark all read</a>
+                </div>
+
+                <div class="notifications-list">
+                    <div *ngFor="let n of notifications" class="notification-item" [class.read]="n.read">
+                        <div class="icon">
+                            <i [class]="getIcon(n.type)"></i>
+                        </div>
+                        <div class="body">
+                            <div class="title">{{ n.title }}</div>
+                            <div class="message">{{ n.message }}</div>
+                        </div>
+                        <div class="time">{{ formatTime(n.createdAt) }}</div>
+                    </div>
+
+                    <!-- Empty state -->
+                    <div *ngIf="notifications.length === 0" class="empty-notif">
+                        <i class="pi pi-bell-slash"></i>
+                        <p>No notifications yet.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>

@@ -1,0 +1,106 @@
+<div class="mobile-topbar">
+    <div class="brand-name">Dr. Portal</div>
+    <button class="hamburger" (click)="toggleSidebar()">
+        <i [ngClass]="sidebarOpen ? 'pi pi-times' : 'pi pi-bars'"></i>
+    </button>
+</div>
+
+<!-- overlay -->
+<div class="sidebar-overlay" *ngIf="sidebarOpen" (click)="toggleSidebar()"></div>
+
+<div class="doctor-layout">
+    <!-- shared sidebar -->
+    <app-doctor-sidebar [open]="sidebarOpen" (signOut)="logout()" (close)="sidebarOpen = false"></app-doctor-sidebar>
+
+    <main class="main-content">
+        <div class="history-layout">
+            <div class="history-header">
+                <div>
+                    <h1>Patient History</h1>
+                    <p class="subtitle">View all consultations grouped by patient</p>
+                </div>
+                <div class="search-bar-wrapper" style="display: flex; gap: 1rem; align-items: center;">
+                    <span class="p-input-icon-left" style="margin-right: 2rem;">
+                        <i class="pi pi-search"></i>
+                        <input pInputText type="text" [(ngModel)]="searchName" (input)="loadConsultations()"
+                            placeholder="Search patient name..." style="width: 320px;" />
+                    </span>
+                    <span style="margin-right: 2rem;">
+                        <p-calendar [(ngModel)]="filterDate" (onSelect)="loadConsultations()" dateFormat="mm/dd/yy"
+                            placeholder="Filter by date" showIcon="true" [style]="{width: '180px'}"></p-calendar>
+                    </span>
+                </div>
+                <button pButton icon="pi pi-arrow-left" label="Back to Dashboard" class="back-btn"
+                    (click)="goBack()"></button>
+            </div>
+
+            <!-- Patient Groups -->
+            <div class="patient-groups">
+                <ng-container *ngIf="patientGroups.length === 0">
+                    <div class="empty-state">
+                        <i class="pi pi-inbox"></i>
+                        <p>No consultation history found</p>
+                    </div>
+                </ng-container>
+
+                <div *ngFor="let group of patientGroups; let i = index" class="patient-group-card">
+                    <div class="patient-group-header" (click)="togglePatientGroup(i)">
+                        <div class="patient-group-info">
+                            <div class="patient-group-name">
+                                <i class="pi" [ngClass]="group.isExpanded ? 'pi-chevron-down' : 'pi-chevron-right'"></i>
+                                {{ group.patientName }}
+                            </div>
+                            <div class="visit-count">{{ group.consultations.length }} visit(s)</div>
+                        </div>
+                    </div>
+
+                    <!-- Expanded Consultations -->
+                    <div class="consultations-list" *ngIf="group.isExpanded">
+                        <ng-container *ngIf="group.consultations.length === 0">
+                            <div class="no-visits">No previous visits found for this patient</div>
+                        </ng-container>
+
+                        <div *ngFor="let consultation of group.consultations" class="consultation-item">
+                            <div class="consultation-header">
+                                <div class="visit-info">
+                                    <span class="token-badge">{{ consultation.tokenNumber }}</span>
+                                    <span class="visit-date">{{ formatDateTime(consultation.startTime) }}</span>
+                                </div>
+                            </div>
+
+                            <div class="consultation-details">
+                                <div class="detail-row">
+                                    <span class="detail-label">Reason:</span>
+                                    <span class="detail-value">{{ consultation.reason }}</span>
+                                </div>
+                                <div class="detail-row">
+                                    <span class="detail-label">Doctor:</span>
+                                    <span class="detail-value">{{ consultation.doctorName }}</span>
+                                </div>
+                                <div class="detail-row">
+                                    <span class="detail-label">Duration:</span>
+                                    <span class="detail-value">
+                                        {{ consultation.duration ?? 0 }} min
+                                    </span>
+                                </div>
+                                <div class="detail-row" *ngIf="consultation.phone">
+                                    <span class="detail-label">Phone:</span>
+                                    <span class="detail-value">{{ consultation.phone }}</span>
+                                </div>
+                            </div>
+
+                            <div class="consultation-notes" *ngIf="consultation.notes">
+                                <div class="notes-label">Notes:</div>
+                                <div class="notes-content">{{ consultation.notes }}</div>
+                            </div>
+
+                            <div class="no-notes" *ngIf="!consultation.notes">
+                                <i class="pi pi-file"></i> No notes recorded
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>

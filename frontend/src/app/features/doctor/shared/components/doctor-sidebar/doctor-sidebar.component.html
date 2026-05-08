@@ -1,0 +1,30 @@
+<aside class="sidebar" [class.open]="open">
+    <div class="sidebar-header" *ngIf="!isMobile">
+        <div class="portal-icon">
+            <i class="pi pi-heart-fill"></i>
+        </div>
+        <h2>Dr. Portal</h2>
+    </div>
+
+    <nav class="sidebar-nav">
+        <a routerLink="/staff/doctor/dashboard" routerLinkActive="active" class="nav-item" (click)="handleLinkClick()">
+            <i class="pi pi-th-large"></i>
+            My Dashboard
+        </a>
+        <a routerLink="/staff/doctor/ratings" routerLinkActive="active" class="nav-item" (click)="handleLinkClick()">
+            <i class="pi pi-star-fill"></i>
+            Patient Ratings
+        </a>
+        <a routerLink="/staff/doctor/history" routerLinkActive="active" class="nav-item" (click)="handleLinkClick()">
+            <i class="pi pi-history"></i>
+            History
+        </a>
+    </nav>
+
+    <div class="sidebar-footer">
+        <button class="sign-out-btn" (click)="handleSignOut()">
+            <i class="pi pi-sign-out"></i>
+            Sign Out
+        </button>
+    </div>
+</aside>

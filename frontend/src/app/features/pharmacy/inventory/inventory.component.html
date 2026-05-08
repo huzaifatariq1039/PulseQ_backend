@@ -1,0 +1,184 @@
+<p-toast></p-toast>
+<p-confirmDialog></p-confirmDialog>
+
+<div class="layout">
+
+    <!-- SIDEBAR -->
+    <app-pharmacy-sidebar></app-pharmacy-sidebar>
+
+    <!-- MAIN CONTENT -->
+    <main class="main-content">
+
+        <!-- PAGE HEADER -->
+        <div class="page-header">
+            <div>
+                <h2>Inventory Management</h2>
+                <p class="subtitle">Manage and track medicine stock levels</p>
+            </div>
+            <div class="header-actions">
+                <input type="file" #excelImportInput accept=".xlsx, .xls" style="display: none"
+                    (change)="onImportExcel($event)" />
+
+                <button class="import-btn" (click)="excelImportInput.click()" [disabled]="isImporting">
+                    <i class="pi" [ngClass]="isImporting ? 'pi-spin pi-spinner' : 'pi-upload'"></i>
+                    {{ isImporting ? 'Importing...' : 'Import Excel' }}
+                </button>
+
+                <button (click)="exportToExcel()" class="export-btn" [disabled]="isExporting">
+                    <i class="pi" [ngClass]="isExporting ? 'pi-spin pi-spinner' : 'pi-download'"></i>
+                    {{ isExporting ? 'Exporting...' : 'Export Excel' }}
+                </button>
+
+                <button (click)="addMedicine()" class="add-btn">
+                    <i class="pi pi-plus"></i>
+                    Add Medicine
+                </button>
+            </div>
+        </div>
+
+        <!-- SEARCH + SORT + STATUS FILTER ROW -->
+        <div class="search-filter-row">
+            <span class="search-wrapper">
+                <i class="pi pi-search"></i>
+                <input pInputText type="text" placeholder="Search by medicine name or salt" [(ngModel)]="searchText"
+                    (input)="onSearchChange()" class="search-input" />
+            </span>
+
+            <p-dropdown [options]="sortOptions" [(ngModel)]="selectedSort" optionLabel="label" optionValue="value"
+                (onChange)="onSortChange()" styleClass="sort-dropdown" [style]="{'min-width': '210px'}">
+            </p-dropdown>
+
+            <p-dropdown [options]="[
+                {label: 'All', value: 'all'},
+                {label: 'Active', value: 'active'},
+                {label: 'Low Stock', value: 'lowStock'},
+                {label: 'Expired', value: 'expired'},
+                {label: 'About to Expire', value: 'aboutToExpire'}
+            ]" [(ngModel)]="medicineStatusFilter" (onChange)="onStatusFilterChange()" styleClass="sort-dropdown"
+                [style]="{'min-width': '160px'}">
+            </p-dropdown>
+        </div>
+
+        <!-- BULK ACTION BAR — only visible when something is selected -->
+        @if (selectedCount > 0) {
+        <div class="bulk-action-bar">
+            <span class="bulk-count">
+                <i class="pi pi-check-square"></i>
+                {{ selectedCount }} medicine{{ selectedCount > 1 ? 's' : '' }} selected
+            </span>
+            <div class="bulk-actions">
+                <button class="bulk-clear-btn" (click)="clearSelection()">
+                    <i class="pi pi-times"></i> Clear Selection
+                </button>
+                <button class="bulk-delete-btn" (click)="bulkDelete()" [disabled]="isBulkDeleting">
+                    <i class="pi" [ngClass]="isBulkDeleting ? 'pi-spin pi-spinner' : 'pi-trash'"></i>
+                    {{ isBulkDeleting ? 'Deleting...' : 'Delete Selected' }}
+                </button>
+            </div>
+        </div>
+        }
+
+        <!-- INVENTORY TABLE CARD -->
+        <div class="inventory-card">
+            <div class="table-header">
+                <h3>Medicine Inventory</h3>
+                <span class="table-subtitle">{{ filteredMedicines.length }} medicines found</span>
+            </div>
+            <div class="table-scroll-outer">
+                <p-table [value]="filteredMedicines" [responsiveLayout]="'scroll'" [paginator]="true" [rows]="10"
+                    [rowsPerPageOptions]="[10, 25, 50]" dataKey="id" styleClass="inventory-table wide-table">
+                    <ng-template pTemplate="header">
+                        <tr>
+                            <!-- SELECT ALL checkbox -->
+                            <th class="col-checkbox">
+                                <input type="checkbox" class="row-checkbox" [checked]="isAllSelected"
+                                    [indeterminate]="isIndeterminate"
+                                    (change)="toggleSelectAll($any($event.target).checked)" />
+                            </th>
+                            <th>Product ID</th>
+                            <th>Batch No</th>
+                            <th>Medicine Name</th>
+                            <th>Generic Name</th>
+                            <th>Type</th>
+                            <th>Category</th>
+                            <th>Sub Category</th>
+                            <th>Distributor</th>
+                            <th>Stock Unit</th>
+                            <th>Quantity</th>
+                            <th>Purchase Price</th>
+                            <th>Selling Price</th>
+                            <th>Total Purchase Price</th>
+                            <th>Total Selling Price</th>
+                            <th>Expiry Date</th>
+                            <th>Status</th>
+                            <th class="sticky-col-right">Actions</th>
+                        </tr>
+                    </ng-template>
+                    <ng-template pTemplate="body" let-medicine>
+                        <tr [class.row-selected]="isSelected(medicine.id)">
+                            <td class="col-checkbox">
+                                <input type="checkbox" class="row-checkbox" [checked]="isSelected(medicine.id)"
+                                    (change)="toggleSelect(medicine.id, $any($event.target).checked)" />
+                            </td>
+                            <td>{{ medicine.productId }}</td>
+                            <td>{{ medicine.batchNumber }}</td>
+                            <td>{{ medicine.name }}</td>
+                            <td>{{ medicine.salt }}</td>
+                            <td>{{ medicine.type || '-' }}</td>
+                            <td>{{ medicine.category || '-' }}</td>
+                            <td>{{ medicine.subCategory || '-' }}</td>
+                            <td>{{ medicine.distributorName || medicine.distributorCompany || '-' }}</td>
+                            <td>{{ medicine.stockUnit || '-' }}</td>
+                            <td>
+                                <span [class.quantity-warning]="medicine._uiStatus === 'Low Stock'"
+                                    [class.quantity-normal]="medicine._uiStatus !== 'Low Stock'">
+                                    {{ medicine.quantity }}
+                                </span>
+                            </td>
+                            <td>{{ medicine.purchasedPrice | currency:'PKR':'Rs ' }}</td>
+                            <td>{{ medicine.sellingPrice | currency:'PKR':'Rs ' }}</td>
+                            <td>{{ (medicine.purchasedPrice * medicine.quantity) | currency:'PKR':'Rs ' }}</td>
+                            <td>{{ (medicine.sellingPrice * medicine.quantity) | currency:'PKR':'Rs ' }}</td>
+                            <td>{{ medicine._uiExpiryDate }}</td>
+                            <td>
+                                <span class="badge" [ngClass]="medicine._uiBadgeClass">
+                                    <i class="pi" [ngClass]="medicine._uiIconClass"></i>
+                                    {{ medicine._uiStatus }}
+                                </span>
+                            </td>
+                            <td class="sticky-col-right">
+                                <div class="actions-cell">
+                                    <button type="button" class="action-btn action-view" (click)="view(medicine)">
+                                        <i class="pi pi-eye"></i>
+                                    </button>
+                                    <button type="button" class="action-btn action-edit" (click)="edit(medicine)">
+                                        <i class="pi pi-pencil"></i>
+                                    </button>
+                                    <button type="button" class="action-btn action-delete" (click)="delete(medicine)">
+                                        <i class="pi pi-trash"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    </ng-template>
+                    <ng-template pTemplate="emptymessage">
+                        <tr>
+                            <td colspan="18">
+                                <div class="empty-state">
+                                    <i class="pi pi-inbox"></i>
+                                    @if (medicineStatusFilter === 'active') {
+                                    <p>No active medicines</p>
+                                    } @else {
+                                    <p>No medicines found</p>
+                                    }
+                                </div>
+                            </td>
+                        </tr>
+                    </ng-template>
+                </p-table>
+                <span class="scroll-hint">← Scroll horizontally to see all columns →</span>
+            </div>
+        </div>
+
+    </main>
+</div>

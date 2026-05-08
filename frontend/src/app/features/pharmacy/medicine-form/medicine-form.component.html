@@ -1,0 +1,259 @@
+<p-toast></p-toast>
+
+<div class="layout">
+    <app-pharmacy-sidebar></app-pharmacy-sidebar>
+
+    <main class="main-content">
+        <div class="page-header">
+            <div>
+                @if (isViewMode) {
+                <h1>View Medicine</h1>
+                <p class="subtitle">Medicine details (read-only)</p>
+                } @else {
+                <h1>{{ isEditing ? 'Edit Medicine' : 'Add New Medicine' }}</h1>
+                <p class="subtitle">
+                    {{ isEditing ? 'Update medicine details in inventory' : 'Enter medicine details to add to inventory' }}
+                </p>
+                }
+            </div>
+        </div>
+
+        <p-card class="form-card">
+            <form [formGroup]="medicineForm" (ngSubmit)="onSubmit()">
+
+                <!-- ── BASIC INFORMATION ── -->
+                <div class="form-section">
+                    <h3 class="section-heading">Basic Information</h3>
+
+                    <!-- Row 1: Product ID + Medicine Name -->
+                    <div class="grid-2" style="margin-bottom: 1.25rem;">
+                        <div class="form-group">
+                            <label for="productId" class="form-label">Product ID</label>
+                            <input pInputText type="text" id="productId" formControlName="productId"
+                                class="form-control" [readonly]="isEditing || isViewMode"
+                                placeholder="Auto-generated" />
+                        </div>
+                        <div class="form-group">
+                            <label for="name" class="form-label">Medicine Name <span class="required">*</span></label>
+                            <input pInputText type="text" id="name" formControlName="name" class="form-control"
+                                [ngClass]="{ 'ng-invalid ng-touched': isFieldInvalid('name') }"
+                                placeholder="e.g. Paracetamol 500mg" />
+                            @if (isFieldInvalid('name')) {
+                            <div class="error-message">Medicine name is required</div>
+                            }
+                        </div>
+                    </div>
+
+                    <!-- Row 2: Generic Name + Salt Name -->
+                    <div class="grid-2" style="margin-bottom: 1.25rem;">
+                        <div class="form-group">
+                            <label for="genericName" class="form-label">Generic Name</label>
+                            <input pInputText type="text" id="genericName" formControlName="genericName"
+                                class="form-control" placeholder="e.g. Paracetamol" />
+                        </div>
+                        <div class="form-group">
+                            <label for="salt" class="form-label">Salt Name <span class="required">*</span></label>
+                            <input pInputText type="text" id="salt" formControlName="salt" class="form-control"
+                                [ngClass]="{ 'ng-invalid ng-touched': isFieldInvalid('salt') }"
+                                placeholder="e.g. Acetaminophen" />
+                            @if (isFieldInvalid('salt')) {
+                            <div class="error-message">Salt name is required</div>
+                            }
+                        </div>
+                    </div>
+
+                    <!-- Row 3: Type + Category + Sub Category -->
+                    <div class="grid-3">
+                        <div class="form-group">
+                            <label for="type" class="form-label">Type</label>
+                            <p-dropdown id="type" formControlName="type" [options]="typeOptions" optionLabel="label"
+                                optionValue="value" placeholder="Select Type"></p-dropdown>
+                        </div>
+                        <div class="form-group">
+                            <label for="category" class="form-label">Category</label>
+                            <input pInputText type="text" id="category" formControlName="category" class="form-control"
+                                placeholder="e.g. Antibiotics" />
+                        </div>
+                        <div class="form-group">
+                            <label for="subCategory" class="form-label">Sub Category</label>
+                            <input pInputText type="text" id="subCategory" formControlName="subCategory"
+                                class="form-control" placeholder="e.g. Macrolide" />
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ── STOCK DETAILS ── -->
+                <div class="form-section">
+                    <h3 class="section-heading">Stock Details</h3>
+
+                    <!-- Row 1: Batch Number + Stock Unit + Quantity -->
+                    <div class="grid-3" style="margin-bottom: 1.25rem;">
+                        <div class="form-group">
+                            <label for="batchNumber" class="form-label">Batch Number <span
+                                    class="required">*</span></label>
+                            <input pInputText type="text" id="batchNumber" formControlName="batchNumber"
+                                class="form-control"
+                                [ngClass]="{ 'ng-invalid ng-touched': isFieldInvalid('batchNumber') }"
+                                placeholder="e.g. BATCH-A123" />
+                            @if (isFieldInvalid('batchNumber')) {
+                            <div class="error-message">Batch number is required</div>
+                            }
+                        </div>
+                        <div class="form-group">
+                            <label for="stockUnit" class="form-label">Stock Unit</label>
+                            <p-dropdown id="stockUnit" formControlName="stockUnit" [options]="stockUnitOptions"
+                                optionLabel="label" optionValue="value" placeholder="Select Unit"></p-dropdown>
+                        </div>
+                        <div class="form-group">
+                            <label for="quantity" class="form-label">Quantity <span class="required">*</span></label>
+                            <p-inputNumber id="quantity" formControlName="quantity" placeholder="0"
+                                [useGrouping]="false"
+                                [ngClass]="{ 'ng-invalid ng-touched': isFieldInvalid('quantity') }">
+                            </p-inputNumber>
+                            @if (isFieldInvalid('quantity')) {
+                            <div class="error-message">Quantity is required</div>
+                            }
+                        </div>
+                    </div>
+
+                    <!-- Row 2: Manufacture Date + Expiry Date -->
+                    <div class="grid-2">
+                        <div class="form-group">
+                            <label for="manufactureDate" class="form-label">Manufacture Date <span
+                                    class="required">*</span></label>
+                            <p-calendar id="manufactureDate" formControlName="manufactureDate" dateFormat="dd/mm/yy"
+                                [showIcon]="true" [touchUI]="false" placeholder="DD/MM/YYYY"
+                                [ngClass]="{ 'ng-invalid ng-touched': isFieldInvalid('manufactureDate') }">
+                            </p-calendar>
+                            @if (isFieldInvalid('manufactureDate')) {
+                            <div class="error-message">Manufacture date is required</div>
+                            }
+                        </div>
+                        <div class="form-group">
+                            <label for="expiryDate" class="form-label">Expiry Date <span
+                                    class="required">*</span></label>
+                            <p-calendar id="expiryDate" formControlName="expiryDate" dateFormat="dd/mm/yy"
+                                [showIcon]="true" [touchUI]="false" placeholder="DD/MM/YYYY"
+                                [ngClass]="{ 'ng-invalid ng-touched': isFieldInvalid('expiryDate') }">
+                            </p-calendar>
+                            @if (isFieldInvalid('expiryDate')) {
+                            <div class="error-message">Expiry date is required</div>
+                            }
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ── PRICING ── -->
+                <div class="form-section">
+                    <h3 class="section-heading">Pricing</h3>
+
+                    <!-- Purchase + Selling price inputs -->
+                    <div class="grid-2" style="margin-bottom: 1.25rem;">
+                        <div class="form-group">
+                            <label for="purchasedPrice" class="form-label">Purchased Price (Rs) <span
+                                    class="required">*</span></label>
+                            <p-inputNumber id="purchasedPrice" formControlName="purchasedPrice" [minFractionDigits]="2"
+                                [maxFractionDigits]="2" placeholder="0.00" [useGrouping]="false"
+                                [ngClass]="{ 'ng-invalid ng-touched': isFieldInvalid('purchasedPrice') }">
+                            </p-inputNumber>
+                            @if (isFieldInvalid('purchasedPrice')) {
+                            <div class="error-message">Purchased price is required</div>
+                            }
+                        </div>
+                        <div class="form-group">
+                            <label for="sellingPrice" class="form-label">Selling Price (Rs) <span
+                                    class="required">*</span></label>
+                            <p-inputNumber id="sellingPrice" formControlName="sellingPrice" [minFractionDigits]="2"
+                                [maxFractionDigits]="2" placeholder="0.00" [useGrouping]="false"
+                                [ngClass]="{ 'ng-invalid ng-touched': isFieldInvalid('sellingPrice') }">
+                            </p-inputNumber>
+                            @if (isFieldInvalid('sellingPrice')) {
+                            <div class="error-message">Selling price is required</div>
+                            }
+                        </div>
+                    </div>
+
+                    <!-- Calculated totals -->
+                    <div class="totals-row">
+                        <div class="total-card total-card-purchase">
+                            <span class="total-card-label">Total Purchase Price</span>
+                            <span class="total-card-value">{{ totalPurchasePrice | currency:'PKR':'Rs ' }}</span>
+                        </div>
+                        <div class="total-card total-card-selling">
+                            <span class="total-card-label">Total Selling Price</span>
+                            <span class="total-card-value">{{ totalSellingPrice | currency:'PKR':'Rs ' }}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ── SUPPLIER & DISTRIBUTOR ── -->
+                <div class="form-section">
+                    <h3 class="section-heading">Supplier & Distributor</h3>
+
+                    <!-- Row 1: Supplier Name + Distributor Name -->
+                    <div class="grid-2" style="margin-bottom: 1.25rem;">
+                        <div class="form-group">
+                            <label for="supplierName" class="form-label">Supplier Name <span
+                                    class="required">*</span></label>
+                            <input pInputText type="text" id="supplierName" formControlName="supplierName"
+                                class="form-control"
+                                [ngClass]="{ 'ng-invalid ng-touched': isFieldInvalid('supplierName') }"
+                                placeholder="Supplier company name" />
+                            @if (isFieldInvalid('supplierName')) {
+                            <div class="error-message">Supplier name is required</div>
+                            }
+                        </div>
+                        <div class="form-group">
+                            <label for="distributorName" class="form-label">Distributor Name <span
+                                    class="required">*</span></label>
+                            <input pInputText type="text" id="distributorName" formControlName="distributorName"
+                                class="form-control"
+                                [ngClass]="{ 'ng-invalid ng-touched': isFieldInvalid('distributorName') }"
+                                placeholder="Distributor full name" />
+                            @if (isFieldInvalid('distributorName')) {
+                            <div class="error-message">Distributor name is required</div>
+                            }
+                        </div>
+                    </div>
+
+                    <!-- Row 2: Distributor Mobile + Distributor Company -->
+                    <div class="grid-2">
+                        <div class="form-group">
+                            <label for="distributorMobile" class="form-label">Distributor Mobile <span
+                                    class="required">*</span></label>
+                            <input pInputText type="text" id="distributorMobile" formControlName="distributorMobile"
+                                class="form-control"
+                                [ngClass]="{ 'ng-invalid ng-touched': isFieldInvalid('distributorMobile') }"
+                                placeholder="e.g. 03001234567" />
+                            @if (isFieldInvalid('distributorMobile')) {
+                            <div class="error-message">Distributor mobile is required</div>
+                            }
+                        </div>
+                        <div class="form-group">
+                            <label for="distributorCompany" class="form-label">Distributor Company <span
+                                    class="required">*</span></label>
+                            <input pInputText type="text" id="distributorCompany" formControlName="distributorCompany"
+                                class="form-control"
+                                [ngClass]="{ 'ng-invalid ng-touched': isFieldInvalid('distributorCompany') }"
+                                placeholder="e.g. Sheikh Brother Pharma" />
+                            @if (isFieldInvalid('distributorCompany')) {
+                            <div class="error-message">Distributor company is required</div>
+                            }
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ── ACTIONS ── -->
+                @if (!isViewMode) {
+                <div class="form-actions">
+                    <button type="button" (click)="onCancel()" class="cancel-btn">Cancel</button>
+                    <button type="submit" class="submit-btn">
+                        {{ isEditing ? 'Update Medicine' : 'Save Medicine' }}
+                    </button>
+                </div>
+                }
+
+            </form>
+        </p-card>
+    </main>
+</div>

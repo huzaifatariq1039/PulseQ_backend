@@ -1,0 +1,1004 @@
+from typing import Any, Dict, Optional, List, Tuple
+from datetime import datetime, timedelta, timezone
+import logging
+import io
+import uuid
+import asyncio
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
+from sqlalchemy import func, or_, case, literal_column
+from app.db_models import PharmacyMedicine, PharmacySale
+from db_automation.services import PharmacyInvoiceService
+
+from app.security import get_current_active_user
+from app.database import get_db
+from app.models import TokenData
+from app.security import require_roles
+from app.utils.responses import ok
+from app.services.go_pos_service import go_pos_service
+from app.services.cache_service import CacheService, cached
+from app.routes.realtime import manager as RealTimeConnectionManager
+
+router = APIRouter()
+public_router = APIRouter()
+
+logger = logging.getLogger(__name__)
+
+
+async def _broadcast_inventory_update(hospital_id: Optional[str]) -> None:
+    if not hospital_id:
+        return
+
+    try:
+        await RealTimeConnectionManager.broadcast_via_redis(
+            f"hospital_{hospital_id}",
+            {"type": "INVENTORY_UPDATE"}
+        )
+    except Exception:
+        pass
+
+class AddMedicineRequest(BaseModel):
+    product_id: int = Field(..., ge=0)
+    batch_no: str
+    name: str
+    generic_name: Optional[str] = None
+    type: Optional[str] = None
+    distributor: Optional[str] = None
+    purchase_price: float = Field(..., gt=0)
+    selling_price: float = Field(..., gt=0)
+    stock_unit: Optional[str] = None
+    quantity: int = Field(..., ge=0)
+    expiration_date: Optional[str] = None
+    category: Optional[str] = None
+    sub_category: Optional[str] = None
+    hospital_id: Optional[str] = None
+
+class DispenseMedicineItem(BaseModel):
+    product_id: int = Field(..., ge=0)
+    quantity: int = Field(..., ge=1)
+
+class DispenseMedicineRequest(BaseModel):
+    patient_id: str
+    doctor_id: str
+    medicines: List[DispenseMedicineItem]
+
+def _normalize_date_str(v: Optional[str]) -> Optional[str]:
+    if not v: return None
+    s = v.strip()
+    try:
+        if "/" in s:
+            parts = s.split("/")
+            if len(parts) == 3:
+                dd, mm, yyyy = parts
+                return datetime(int(yyyy), int(mm), int(dd)).date().isoformat()
+    except Exception: pass
+    try:
+        return datetime.fromisoformat(s.replace("Z", "+00:00")).date().isoformat()
+    except Exception: pass
+    return s
+
+@router.get("/dashboard/stats", dependencies=[Depends(require_roles("pharmacy", "admin"))])
+async def get_pharmacy_dashboard_stats(
+    db: Session = Depends(get_db),
+    hospital_id: Optional[str] = Query(None),
+):
+    now = datetime.utcnow()
+
+    query = db.query(
+        func.count(PharmacyMedicine.id).label('total'),
+        func.coalesce(func.sum(case(
+            (PharmacyMedicine.quantity > 0, 1), else_=0
+        )), 0).label('in_stock'),
+        func.coalesce(func.sum(case(
+            (PharmacyMedicine.quantity < 10, 1), else_=0
+        )), 0).label('low_stock'),
+        func.coalesce(func.sum(
+            PharmacyMedicine.quantity * PharmacyMedicine.selling_price
+        ), 0).label('inventory_value'),
+        func.coalesce(func.sum(case(
+            (PharmacyMedicine.expiration_date <= now, 1), else_=0
+        )), 0).label('expired'),
+        func.coalesce(func.sum(case(
+            (PharmacyMedicine.quantity > 0, case(
+                (or_(PharmacyMedicine.expiration_date.is_(None),
+                     PharmacyMedicine.expiration_date > now), 1),
+                else_=0
+            )), else_=0
+        )), 0).label('active'),
+    ).filter(PharmacyMedicine.is_deleted.isnot(True))
+
+    if hospital_id:
+        query = query.filter(PharmacyMedicine.hospital_id == hospital_id)
+
+    stats = query.first()
+
+    return ok(data={
+        "total_medicines": int(stats.total or 0),
+        "active_medicines": int(stats.active or 0),
+        "low_stock_items": int(stats.low_stock or 0),
+        "expired_items": int(stats.expired or 0),
+        "inventory_value": round(float(stats.inventory_value or 0), 2)
+    })
+
+@router.get("/reports/sales-summary", dependencies=[Depends(require_roles("pharmacy", "admin"))])
+async def get_pharmacy_sales_summary(
+    db: Session = Depends(get_db),
+    hospital_id: Optional[str] = Query(None),
+):
+    def _sum_sales(start: datetime, end: datetime) -> float:
+        q = db.query(
+            func.coalesce(func.sum(PharmacySale.total_price), 0)
+        ).filter(PharmacySale.sold_at >= start, PharmacySale.sold_at < end)
+        if hospital_id:
+            q = q.filter(PharmacySale.hospital_id == hospital_id)
+        return float(q.scalar() or 0)
+
+    def _count_sales(start: datetime, end: datetime) -> int:
+        q = db.query(func.count(PharmacySale.id)).filter(
+            PharmacySale.sold_at >= start, PharmacySale.sold_at < end
+        )
+        if hospital_id:
+            q = q.filter(PharmacySale.hospital_id == hospital_id)
+        return int(q.scalar() or 0)
+
+    def _pct_change(current: float, previous: float) -> float:
+        if previous == 0:
+            return 100.0 if current > 0 else 0.0
+        return round(((current - previous) / previous) * 100, 1)
+
+    total_query = db.query(
+        func.coalesce(func.sum(PharmacySale.total_price), 0).label('total_revenue'),
+        func.count(PharmacySale.id).label('total_count')
+    )
+    if hospital_id:
+        total_query = total_query.filter(PharmacySale.hospital_id == hospital_id)
+    totals = total_query.first()
+
+    now = datetime.utcnow()
+
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    today_end = today_start + timedelta(days=1)
+    daily_revenue = _sum_sales(today_start, today_end)
+    daily_count = _count_sales(today_start, today_end)
+
+    days_since_monday = now.weekday()
+    this_week_start = (now - timedelta(days=days_since_monday)).replace(hour=0, minute=0, second=0, microsecond=0)
+    last_week_start = this_week_start - timedelta(days=7)
+
+    this_week_revenue = _sum_sales(this_week_start, now)
+    last_week_revenue = _sum_sales(last_week_start, this_week_start)
+    weekly_pct_change = _pct_change(this_week_revenue, last_week_revenue)
+
+    this_month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    if this_month_start.month == 1:
+        last_month_start = this_month_start.replace(year=this_month_start.year - 1, month=12)
+    else:
+        last_month_start = this_month_start.replace(month=this_month_start.month - 1)
+
+    this_month_revenue = _sum_sales(this_month_start, now)
+    last_month_revenue = _sum_sales(last_month_start, this_month_start)
+    monthly_pct_change = _pct_change(this_month_revenue, last_month_revenue)
+
+    return ok(data={
+        "total_revenue": round(float(totals.total_revenue or 0), 2),
+        "total_sales_count": totals.total_count or 0,
+        "daily_revenue": round(daily_revenue, 2),
+        "daily_sales_count": daily_count,
+        "weekly_revenue": round(this_week_revenue, 2),
+        "weekly_pct_change": weekly_pct_change,
+        "weekly_trend": "up" if weekly_pct_change > 0 else ("down" if weekly_pct_change < 0 else "neutral"),
+        "monthly_revenue": round(this_month_revenue, 2),
+        "monthly_pct_change": monthly_pct_change,
+        "monthly_trend": "up" if monthly_pct_change > 0 else ("down" if monthly_pct_change < 0 else "neutral"),
+    })
+
+@router.get("/reports/revenue-chart", dependencies=[Depends(require_roles("pharmacy", "admin"))])
+async def get_revenue_chart_data(
+    db: Session = Depends(get_db),
+    hospital_id: Optional[str] = Query(None),
+    days: int = Query(7, ge=1, le=30)
+):
+    now = datetime.utcnow()
+    start_date = (now - timedelta(days=days-1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    
+    query = db.query(
+        func.date(PharmacySale.sold_at).label('sale_date'),
+        func.coalesce(func.sum(PharmacySale.total_price), 0).label('day_revenue'),
+        func.count(PharmacySale.id).label('sales_count')
+    ).filter(PharmacySale.sold_at >= start_date)
+    
+    if hospital_id:
+        query = query.filter(PharmacySale.hospital_id == hospital_id)
+    
+    query = query.group_by(func.date(PharmacySale.sold_at))
+    aggregated_sales = query.all()
+    
+    sales_map = {row.sale_date: {'revenue': float(row.day_revenue), 'count': row.sales_count} for row in aggregated_sales}
+    
+    chart_data = []
+    for i in range(days):
+        day = start_date + timedelta(days=i)
+        day_date = day.date()
+        day_stats = sales_map.get(day_date, {'revenue': 0.0, 'count': 0})
+        
+        chart_data.append({
+            "date": day.strftime("%Y-%m-%d"),
+            "revenue": round(day_stats['revenue'], 2),
+            "sales_count": day_stats['count']
+        })
+    
+    return ok(data=chart_data)
+
+@router.get("/sales/history", dependencies=[Depends(require_roles("pharmacy", "admin"))])
+async def get_sales_history(
+    db: Session = Depends(get_db),
+    hospital_id: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+):
+    query = db.query(PharmacySale)
+    if hospital_id:
+        query = query.filter(PharmacySale.hospital_id == hospital_id)
+    
+    total = query.count()
+    sales = query.order_by(PharmacySale.sold_at.desc()).offset((page-1)*page_size).limit(page_size).all()
+    
+    results = []
+    for s in sales:
+        results.append({
+            "id": s.id,
+            "medicine_name": s.medicine_name,
+            "quantity": s.quantity,
+            "unit_price": s.unit_price,
+            "total_price": s.total_price,
+            "sold_at": s.sold_at.isoformat(),
+            "payment_status": s.payment_status,
+            "patient_id": s.patient_id,
+            "doctor_id": s.doctor_id,
+            "performed_by": s.performed_by
+        })
+        
+    return ok(data=results, meta={"total": total, "page": page, "page_size": page_size})
+
+@router.get("/external/pos/sales/history", dependencies=[Depends(require_roles("pharmacy", "admin"))])
+async def get_pos_sales_history_alias(
+    db: Session = Depends(get_db),
+    hospital_id: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+):
+    return await get_sales_history(db, hospital_id, page, page_size)
+
+@public_router.get("/search-medicine")
+async def search_medicine(
+    q: str = Query(..., description="Search by medicine name or generic name"),
+    db: Session = Depends(get_db)
+) -> Dict[str, Any]:
+    terms = [t for t in q.strip().split() if t]
+    
+    query = db.query(PharmacyMedicine).filter(PharmacyMedicine.is_deleted.isnot(True))
+    
+    for term in terms:
+        like_term = f"%{term}%"
+        # [FIX] Numeric UUID resolution
+        conditions = [
+            PharmacyMedicine.name.ilike(like_term),
+            PharmacyMedicine.generic_name.ilike(like_term)
+        ]
+        if term.isdigit():
+            conditions.append(PharmacyMedicine.product_id == int(term))
+            
+        query = query.filter(or_(*conditions))
+        
+    medicines = query.all()
+
+    results = []
+    for m in medicines:
+        data = {k: v for k, v in m.__dict__.items() if not k.startswith('_')}
+        results.append({
+            "product_id": data.get("product_id"),
+            "name": data.get("name"),
+            "generic_name": data.get("generic_name"),
+            "selling_price": float(data.get("selling_price") or 0),
+            "quantity": int(data.get("quantity") or 0),
+            "expiration_date": data.get("expiration_date").isoformat() if data.get("expiration_date") else None,
+            "low_stock": bool((data.get("quantity") or 0) < 5),
+        })
+
+    return {"results": results}
+
+@public_router.post("/add-medicine")
+async def public_add_medicine(
+    payload: AddMedicineRequest,
+    db: Session = Depends(get_db),
+    current: TokenData = Depends(get_current_active_user),
+) -> Dict[str, Any]:
+    
+    user_hospital = getattr(current, 'hospital_id', None)
+    
+    # [FIX] Multi-tenant scoping and Native Upsert (ignores is_deleted to find ghosts)
+    existing = db.query(PharmacyMedicine).filter(
+        PharmacyMedicine.product_id == payload.product_id,
+        PharmacyMedicine.hospital_id == user_hospital
+    ).first()
+
+    exp_iso = _normalize_date_str(payload.expiration_date)
+    exp_dt = None
+    if exp_iso:
+        try:
+            exp_dt = datetime.fromisoformat(exp_iso)
+        except (ValueError, TypeError):
+            pass
+
+    if existing:
+        existing.batch_no = payload.batch_no
+        existing.name = payload.name
+        existing.generic_name = payload.generic_name
+        existing.type = payload.type
+        existing.distributor = payload.distributor
+        existing.purchase_price = payload.purchase_price
+        existing.selling_price = payload.selling_price
+        existing.stock_unit = payload.stock_unit
+        existing.quantity = payload.quantity
+        existing.expiration_date = exp_dt
+        existing.category = payload.category
+        existing.sub_category = payload.sub_category
+        
+        existing.is_deleted = False # Instantly revive it from the trash
+        existing.updated_at = datetime.utcnow()
+        
+        db.commit()
+        db.refresh(existing)
+        await _broadcast_inventory_update(user_hospital)
+        return ok(message="Medicine updated successfully", data={"id": existing.id, "product_id": existing.product_id})
+
+    new_med = PharmacyMedicine(
+        id=str(uuid.uuid4()),
+        product_id=payload.product_id,
+        batch_no=payload.batch_no,
+        name=payload.name,
+        generic_name=payload.generic_name,
+        type=payload.type,
+        distributor=payload.distributor,
+        purchase_price=payload.purchase_price,
+        selling_price=payload.selling_price,
+        stock_unit=payload.stock_unit,
+        quantity=payload.quantity,
+        expiration_date=exp_dt,
+        category=payload.category,
+        sub_category=payload.sub_category,
+        hospital_id=user_hospital,
+        created_at=datetime.utcnow()
+    )
+    db.add(new_med)
+    db.commit()
+    await _broadcast_inventory_update(user_hospital)
+    return ok(message="Medicine added successfully", data={"id": new_med.id, "product_id": new_med.product_id})
+
+async def _sync_medicines_internal(db: Session, hospital_id: Optional[str] = None) -> Dict[str, int]:
+    from app.services.pharmacy_inventory_service import list_medicines as list_legacy
+    
+    legacy_items = list_legacy(limit=1000)
+    if not legacy_items:
+        return {"synced": 0, "skipped": 0, "total_legacy": 0}
+
+    existing_ids = {row[0] for row in db.query(PharmacyMedicine.product_id).all()}
+    
+    synced_count = 0
+    skipped_count = 0
+    
+    for item in legacy_items:
+        prod_id = item.get("product_id")
+        if prod_id is None:
+            continue
+            
+        prod_id_int = int(prod_id)
+        if prod_id_int in existing_ids:
+            skipped_count += 1
+            continue
+            
+        new_med = PharmacyMedicine(
+            id=str(item.get("id") or uuid.uuid4()),
+            product_id=prod_id_int,
+            batch_no=str(item.get("batch_no") or "LEGACY"),
+            name=str(item.get("name") or "Unnamed"),
+            generic_name=item.get("generic_name"),
+            type=item.get("type"),
+            distributor=item.get("distributor"),
+            purchase_price=float(item.get("purchase_price") or 0),
+            selling_price=float(item.get("selling_price") or 0),
+            stock_unit=item.get("stock_unit"),
+            quantity=int(item.get("quantity") or 0),
+            expiration_date=item.get("expiration_date"),
+            category=item.get("category"),
+            sub_category=item.get("sub_category"),
+            hospital_id=item.get("hospital_id") or hospital_id,
+            created_at=item.get("created_at") or datetime.utcnow()
+        )
+        db.add(new_med)
+        synced_count += 1
+        
+    if synced_count > 0:
+        db.commit()
+        await _broadcast_inventory_update(hospital_id)
+        
+    return {
+        "synced": synced_count,
+        "skipped": skipped_count,
+        "total_legacy": len(legacy_items)
+    }
+
+@router.post("/sync-from-legacy", dependencies=[Depends(require_roles("pharmacy", "admin"))])
+async def sync_medicines_from_legacy(
+    db: Session = Depends(get_db),
+    current: TokenData = Depends(get_current_active_user)
+) -> Any:
+    result = await _sync_medicines_internal(db)
+    return ok(data=result, message=f"Successfully imported {result['synced']} medicines from legacy storage")
+
+
+@public_router.get("/medicines")
+async def get_all_medicines(
+    db: Session = Depends(get_db),
+    hospital_id: Optional[str] = Query(None, description="Filter by hospital ID"),
+    product_id: Optional[int] = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(500, ge=1, le=1000),  
+) -> Dict[str, Any]:
+    cols = (
+        PharmacyMedicine.id, PharmacyMedicine.product_id, PharmacyMedicine.batch_no,
+        PharmacyMedicine.name, PharmacyMedicine.generic_name, PharmacyMedicine.type,
+        PharmacyMedicine.distributor, PharmacyMedicine.purchase_price,
+        PharmacyMedicine.selling_price, PharmacyMedicine.stock_unit,
+        PharmacyMedicine.quantity, PharmacyMedicine.expiration_date,
+        PharmacyMedicine.category, PharmacyMedicine.sub_category,
+        PharmacyMedicine.hospital_id, PharmacyMedicine.created_at,
+        PharmacyMedicine.updated_at,
+    )
+    base = db.query(*cols).filter(PharmacyMedicine.is_deleted.isnot(True))
+    if hospital_id:
+        base = base.filter(PharmacyMedicine.hospital_id == hospital_id)
+    
+    if product_id is not None:
+        base = base.filter(PharmacyMedicine.product_id == product_id)
+
+    total = base.count()
+    rows = base.order_by(PharmacyMedicine.name).offset((page-1)*page_size).limit(page_size).all()
+
+    results = [
+        {
+            "id": r.id, "product_id": r.product_id, "batch_no": r.batch_no,
+            "name": r.name, "generic_name": r.generic_name, "type": r.type,
+            "distributor": r.distributor,
+            "purchase_price": float(r.purchase_price or 0),
+            "selling_price": float(r.selling_price or 0),
+            "stock_unit": r.stock_unit,
+            "quantity": int(r.quantity or 0),
+            "low_stock": (r.quantity or 0) < 5,
+            "expiration_date": r.expiration_date.isoformat() if r.expiration_date else None,
+            "category": r.category, "sub_category": r.sub_category,
+            "hospital_id": r.hospital_id,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+            "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+        }
+        for r in rows
+    ]
+
+    return ok(
+        data=results,
+        meta={
+            "total": total, "page": page, "page_size": page_size,
+            "hospital_id": hospital_id,
+            "total_pages": (total + page_size - 1) // page_size,
+            "has_next": page * page_size < total,
+            "has_prev": page > 1
+        }
+    )
+
+@router.post("/dispense-medicine", dependencies=[Depends(require_roles("pharmacy", "admin"))])
+async def dispense_medicine(
+    payload: DispenseMedicineRequest,
+    db: Session = Depends(get_db),
+    current: TokenData = Depends(get_current_active_user),
+) -> Dict[str, Any]:
+    try:
+        for item in payload.medicines:
+            med = db.query(PharmacyMedicine).filter(
+                PharmacyMedicine.product_id == item.product_id,
+                PharmacyMedicine.hospital_id == current.hospital_id
+            ).with_for_update().first()
+            
+            if not med:
+                raise HTTPException(status_code=404, detail=f"Medicine {item.product_id} not found")
+            
+            if med.quantity < item.quantity:
+                raise HTTPException(status_code=400, detail=f"Insufficient stock for {med.name}")
+            
+            med.quantity -= item.quantity
+            
+            sale = PharmacySale(
+                id=str(uuid.uuid4()),
+                hospital_id=current.hospital_id,
+                patient_id=payload.patient_id,
+                doctor_id=payload.doctor_id,
+                medicine_id=med.product_id,
+                medicine_name=med.name,
+                quantity=item.quantity,
+                unit_price=med.selling_price,
+                total_price=float(item.quantity * med.selling_price),
+                sold_at=datetime.utcnow(),
+                performed_by=current.user_id
+            )
+            db.add(sale)
+        
+        db.commit()
+        return ok(message="Medicines dispensed successfully")
+    except Exception as e:
+        db.rollback()
+        if isinstance(e, HTTPException): raise e
+        logger.exception("Dispense failed")
+        raise HTTPException(status_code=500, detail="Dispense failed")
+
+@router.post("/add-medicine", dependencies=[Depends(require_roles("pharmacy", "admin"))])
+async def add_medicine(
+    payload: AddMedicineRequest,
+    db: Session = Depends(get_db),
+    current: TokenData = Depends(get_current_active_user),
+) -> Dict[str, Any]:
+    
+    exp_dt = None
+    if payload.expiration_date:
+        try:
+            if isinstance(payload.expiration_date, datetime):
+                exp_dt = payload.expiration_date
+            else:
+                exp_iso = str(payload.expiration_date).strip()
+                exp_dt = datetime.fromisoformat(exp_iso)
+        except Exception:
+            exp_dt = None
+            logger.exception("Invalid expiration date format")
+
+    # [FIX] Applied the same Soft-Delete ghost fix here as in the public router
+    existing = db.query(PharmacyMedicine).filter(
+        PharmacyMedicine.product_id == int(payload.product_id),
+        PharmacyMedicine.hospital_id == current.hospital_id
+    ).first()
+    
+    if existing:
+        existing.name = payload.name
+        existing.generic_name = payload.generic_name
+        existing.batch_no = payload.batch_no
+        existing.quantity = payload.quantity
+        existing.selling_price = payload.selling_price
+        existing.purchase_price = payload.purchase_price
+        existing.expiration_date = payload.expiration_date
+        existing.category = payload.category
+        existing.sub_category = payload.sub_category
+        existing.type = payload.type
+        existing.distributor = payload.distributor
+        existing.stock_unit = payload.stock_unit
+        existing.updated_at = datetime.utcnow()
+        existing.is_deleted = False # Auto-revive
+        db.commit()
+        db.refresh(existing)
+        await _broadcast_inventory_update(current.hospital_id)
+        return ok(data={"id": existing.id, "product_id": existing.product_id},
+            message="Medicine updated successfully"
+        )
+
+    new_med = PharmacyMedicine(
+        id=str(uuid.uuid4()),
+        product_id=payload.product_id,
+        batch_no=payload.batch_no,
+        name=payload.name,
+        generic_name=payload.generic_name,
+        type=payload.type,
+        distributor=payload.distributor,
+        purchase_price=payload.purchase_price,
+        selling_price=payload.selling_price,
+        stock_unit=payload.stock_unit,
+        quantity=payload.quantity,
+        expiration_date=exp_dt,
+        category=payload.category,
+        sub_category=payload.sub_category,
+        hospital_id=current.hospital_id, 
+        created_at=datetime.utcnow()
+    )
+    db.add(new_med)
+    db.commit()
+    db.refresh(new_med)
+    await _broadcast_inventory_update(current.hospital_id)
+    return ok(data={"id": new_med.id, "product_id": new_med.product_id},
+        message="Medicine added successfully"
+    )
+
+@router.get("/items", dependencies=[Depends(require_roles("pharmacy", "admin"))])
+async def list_items(
+    db: Session = Depends(get_db),
+    hospital_id: Optional[str] = Query(None),
+    q: Optional[str] = Query(None),
+    search_param: Optional[str] = Query(None, alias="search"),
+    is_deleted: Optional[bool] = Query(False),
+    status: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(100, ge=1, le=500),
+) -> Any:
+    cols = (
+        PharmacyMedicine.id, PharmacyMedicine.product_id, PharmacyMedicine.batch_no,
+        PharmacyMedicine.name, PharmacyMedicine.generic_name, PharmacyMedicine.type,
+        PharmacyMedicine.distributor, PharmacyMedicine.purchase_price,
+        PharmacyMedicine.selling_price, PharmacyMedicine.stock_unit,
+        PharmacyMedicine.quantity, PharmacyMedicine.expiration_date,
+        PharmacyMedicine.category, PharmacyMedicine.sub_category,
+        PharmacyMedicine.hospital_id, PharmacyMedicine.created_at,
+        PharmacyMedicine.updated_at, PharmacyMedicine.is_deleted,
+    )
+    
+    base = db.query(*cols)
+    if is_deleted or status == 'deleted' or status == 'trash':
+        base = base.filter(PharmacyMedicine.is_deleted == True)
+    else:
+        base = base.filter(PharmacyMedicine.is_deleted.isnot(True))
+
+    if hospital_id:
+        base = base.filter(PharmacyMedicine.hospital_id == hospital_id)
+        
+    search_term = q or search_param
+    if search_term:
+        terms = [t for t in search_term.strip().split() if t]
+        for term in terms:
+            like_term = f"%{term}%"
+            conditions = [
+                PharmacyMedicine.name.ilike(like_term),
+                PharmacyMedicine.generic_name.ilike(like_term),
+                PharmacyMedicine.batch_no.ilike(like_term)
+            ]
+            if term.isdigit():
+                conditions.append(PharmacyMedicine.product_id == int(term))
+                
+            base = base.filter(or_(*conditions))
+
+    total = base.count()
+    rows = base.order_by(PharmacyMedicine.updated_at.desc()).offset((page-1)*page_size).limit(page_size).all()
+
+    results = [
+        {
+            "id": r.id, "product_id": r.product_id, "batch_no": r.batch_no,
+            "name": r.name, "generic_name": r.generic_name, "type": r.type,
+            "distributor": r.distributor,
+            "purchase_price": float(r.purchase_price or 0),
+            "selling_price": float(r.selling_price or 0),
+            "stock_unit": r.stock_unit,
+            "quantity": int(r.quantity or 0),
+            "low_stock": (r.quantity or 0) < 5,
+            "expiration_date": r.expiration_date.isoformat() if r.expiration_date else None,
+            "category": r.category, "sub_category": r.sub_category,
+            "hospital_id": r.hospital_id,
+            "is_deleted": bool(r.is_deleted),
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+            "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+        }
+        for r in rows
+    ]
+
+    return ok(data=results, meta={
+        "page": page, "page_size": page_size, "total": total,
+        "total_pages": (total + page_size - 1) // page_size,
+        "has_next": page * page_size < total,
+        "has_prev": page > 1
+    })
+
+@router.delete("/items/{item_id}", dependencies=[Depends(require_roles("pharmacy", "admin"))])
+async def delete_item(
+    item_id: str,
+    db: Session = Depends(get_db),
+    current: TokenData = Depends(get_current_active_user),
+) -> Any:
+    from app.db_models import PharmacyMedicine
+    
+    med = db.query(PharmacyMedicine).filter(
+        PharmacyMedicine.id == item_id,
+        PharmacyMedicine.hospital_id == current.hospital_id
+    ).first()
+    
+    if not med:
+        try:
+            med = db.query(PharmacyMedicine).filter(
+                PharmacyMedicine.product_id == int(item_id),
+                PharmacyMedicine.hospital_id == current.hospital_id
+            ).first()
+        except (ValueError, TypeError):
+            pass
+    
+    if not med:
+        raise HTTPException(status_code=404, detail="Medicine not found")
+    
+    deleted_name = med.name
+    deleted_id = med.id
+    
+    med.is_deleted = True
+    med.deleted_at = datetime.utcnow()
+    
+    db.commit()
+    await _broadcast_inventory_update(current.hospital_id)
+    
+    return ok(message=f"Medicine '{deleted_name}' deleted successfully", data={"deleted_id": deleted_id})
+
+@router.patch("/items/{item_id}/restore", dependencies=[Depends(require_roles("pharmacy", "admin"))])
+async def restore_item(
+    item_id: str,
+    db: Session = Depends(get_db),
+    current: TokenData = Depends(get_current_active_user),
+) -> Any:
+    med = db.query(PharmacyMedicine).filter(
+        PharmacyMedicine.id == item_id,
+        PharmacyMedicine.hospital_id == current.hospital_id
+    ).first()
+    
+    if not med:
+        try:
+            med = db.query(PharmacyMedicine).filter(
+                PharmacyMedicine.product_id == int(item_id),
+                PharmacyMedicine.hospital_id == current.hospital_id
+            ).first()
+        except (ValueError, TypeError):
+            pass
+
+    if not med:
+        raise HTTPException(status_code=404, detail="Medicine not found")
+
+    if not med.is_deleted:
+        raise HTTPException(status_code=400, detail="Medicine is not deleted")
+
+    med.is_deleted = False
+    med.deleted_at = None
+    med.updated_at = datetime.utcnow()
+    db.commit()
+
+    await _broadcast_inventory_update(current.hospital_id)
+
+    return ok(
+        message=f"Medicine '{med.name}' restored successfully",
+        data={"restored_id": med.id}
+    )
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  PHARMACY INVOICES ROUTES
+#  Append this entire block to the bottom of routes/pharmacy.py
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+#  Also add this ONE import at the top of pharmacy.py alongside existing imports:
+#
+#  from db_automation.services import PharmacyInvoiceService
+#
+# ═══════════════════════════════════════════════════════════════════════════════
+
+from pydantic import BaseModel as _BaseModel
+from typing import Optional as _Optional, List as _List
+
+
+# ── Request / Response models ─────────────────────────────────────────────────
+
+class InvoiceItemPayload(_BaseModel):
+    medicine_id: _Optional[str] = None
+    product_id: _Optional[int] = None
+    product_name: str
+    product_code: _Optional[str] = None
+    quantity: float = 1
+    unit_price: float
+    discount: float = 0.0
+    total: float
+
+
+class CreateInvoiceRequest(_BaseModel):
+    customer_id: _Optional[str] = None
+    customer_name: str = "Walk in customer"
+    payment_method: str = "cash"
+    status: str = "pending"
+    subtotal: float = 0.0
+    discount: float = 0.0
+    discount_percent: float = 0.0
+    tax: float = 0.0
+    total: float = 0.0
+    amount_paid: float = 0.0
+    balance_due: float = 0.0
+    notes: _Optional[str] = None
+    items: _List[InvoiceItemPayload] = []
+
+
+class UpdateInvoiceRequest(_BaseModel):
+    customer_id: _Optional[str] = None
+    customer_name: _Optional[str] = None
+    payment_method: _Optional[str] = None
+    status: _Optional[str] = None
+    subtotal: _Optional[float] = None
+    discount: _Optional[float] = None
+    discount_percent: _Optional[float] = None
+    tax: _Optional[float] = None
+    total: _Optional[float] = None
+    amount_paid: _Optional[float] = None
+    balance_due: _Optional[float] = None
+    notes: _Optional[str] = None
+    items: _Optional[_List[InvoiceItemPayload]] = None
+
+
+# ── GET /invoices ─────────────────────────────────────────────────────────────
+
+@router.get("/invoices", dependencies=[Depends(require_roles("pharmacy", "admin"))])
+async def list_invoices(
+    db: Session = Depends(get_db),
+    current: TokenData = Depends(get_current_active_user),
+    status: _Optional[str] = Query(None, description="completed | pending | partial | cancelled"),
+    search: _Optional[str] = Query(None, description="Search by invoice # or customer name"),
+    payment_method: _Optional[str] = Query(None, description="cash | card | insurance | online"),
+    date_from: _Optional[str] = Query(None, description="YYYY-MM-DD"),
+    date_to: _Optional[str] = Query(None, description="YYYY-MM-DD"),
+    hospital_id: _Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(20, ge=1, le=100),
+):
+    h_id = hospital_id or getattr(current, "hospital_id", None)
+    result = PharmacyInvoiceService.get_all_invoices(
+        db=db,
+        hospital_id=h_id,
+        status=status,
+        search=search,
+        payment_method=payment_method,
+        date_from=date_from,
+        date_to=date_to,
+        page=page,
+        per_page=per_page,
+    )
+    return ok(data=result)
+
+
+# ── GET /invoices/trash ───────────────────────────────────────────────────────
+# Returns soft-deleted invoices (Trash button in UI)
+
+@router.get("/invoices/trash", dependencies=[Depends(require_roles("pharmacy", "admin"))])
+async def list_invoice_trash(
+    db: Session = Depends(get_db),
+    current: TokenData = Depends(get_current_active_user),
+    hospital_id: _Optional[str] = Query(None),
+):
+    h_id = hospital_id or getattr(current, "hospital_id", None)
+    invoices = PharmacyInvoiceService.get_trash(db=db, hospital_id=h_id)
+    return ok(data=invoices)
+
+
+# ── GET /invoices/{invoice_id} ────────────────────────────────────────────────
+# Full invoice detail with all line items (View button in UI)
+
+@router.get("/invoices/{invoice_id}", dependencies=[Depends(require_roles("pharmacy", "admin"))])
+async def get_invoice(
+    invoice_id: str,
+    db: Session = Depends(get_db),
+):
+    invoice = PharmacyInvoiceService.get_invoice_by_id(db=db, invoice_id=invoice_id)
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+
+    data = invoice.to_dict()
+    data["items"] = PharmacyInvoiceService.get_invoice_items(db=db, invoice_id=invoice_id)
+    data["item_count"] = len(data["items"])
+    return ok(data=data)
+
+
+# ── POST /invoices ────────────────────────────────────────────────────────────
+# Create new invoice (New Invoice button in UI)
+
+@router.post("/invoices", dependencies=[Depends(require_roles("pharmacy", "admin"))])
+async def create_invoice(
+    payload: CreateInvoiceRequest,
+    db: Session = Depends(get_db),
+    current: TokenData = Depends(get_current_active_user),
+):
+    invoice = PharmacyInvoiceService.create_invoice(
+        db=db,
+        customer_id=payload.customer_id,
+        customer_name=payload.customer_name,
+        payment_method=payload.payment_method,
+        status=payload.status,
+        subtotal=payload.subtotal,
+        discount=payload.discount,
+        discount_percent=payload.discount_percent,
+        tax=payload.tax,
+        total=payload.total,
+        amount_paid=payload.amount_paid,
+        balance_due=payload.balance_due,
+        notes=payload.notes,
+        hospital_id=getattr(current, "hospital_id", None),
+        created_by=getattr(current, "user_id", None),
+        items=[item.model_dump() for item in payload.items],
+    )
+    data = invoice.to_dict()
+    data["items"] = PharmacyInvoiceService.get_invoice_items(db=db, invoice_id=invoice.id)
+    data["item_count"] = len(data["items"])
+    return ok(data=data, message="Invoice created successfully")
+
+
+# ── PUT /invoices/{invoice_id} ────────────────────────────────────────────────
+# Edit invoice (Edit button in UI)
+
+@router.put("/invoices/{invoice_id}", dependencies=[Depends(require_roles("pharmacy", "admin"))])
+async def update_invoice(
+    invoice_id: str,
+    payload: UpdateInvoiceRequest,
+    db: Session = Depends(get_db),
+):
+    updated_data = payload.model_dump(exclude_unset=True, exclude={"items"})
+    items = [item.model_dump() for item in payload.items] if payload.items is not None else None
+
+    invoice = PharmacyInvoiceService.update_invoice(
+        db=db,
+        invoice_id=invoice_id,
+        updated_data=updated_data,
+        items=items,
+    )
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+
+    data = invoice.to_dict()
+    data["items"] = PharmacyInvoiceService.get_invoice_items(db=db, invoice_id=invoice.id)
+    data["item_count"] = len(data["items"])
+    return ok(data=data, message="Invoice updated successfully")
+
+
+# ── PATCH /invoices/{invoice_id}/status ──────────────────────────────────────
+# Quick status change (e.g. mark as completed/cancelled)
+
+@router.patch("/invoices/{invoice_id}/status", dependencies=[Depends(require_roles("pharmacy", "admin"))])
+async def update_invoice_status(
+    invoice_id: str,
+    new_status: str = Query(..., description="completed | pending | partial | cancelled"),
+    db: Session = Depends(get_db),
+):
+    invoice = PharmacyInvoiceService.update_status(db=db, invoice_id=invoice_id, new_status=new_status)
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    return ok(data=invoice.to_dict(), message=f"Status updated to '{new_status}'")
+
+# ── DELETE /invoices/{invoice_id}/permanent ───────────────────────────────────
+# Permanently delete from Trash (hard delete)
+
+@router.delete("/invoices/{invoice_id}/permanent", dependencies=[Depends(require_roles("pharmacy", "admin"))])
+async def permanent_delete_invoice(
+    invoice_id: str,
+    db: Session = Depends(get_db),
+):
+    success = PharmacyInvoiceService.hard_delete_invoice(db=db, invoice_id=invoice_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Invoice not found in trash")
+    return ok(message="Invoice permanently deleted")
+
+# ── DELETE /invoices/{invoice_id} ─────────────────────────────────────────────
+# Soft delete → moves to Trash
+
+@router.delete("/invoices/{invoice_id}", dependencies=[Depends(require_roles("pharmacy", "admin"))])
+async def delete_invoice(
+    invoice_id: str,
+    db: Session = Depends(get_db),
+):
+    success = PharmacyInvoiceService.soft_delete_invoice(db=db, invoice_id=invoice_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    return ok(message="Invoice moved to trash")
+
+
+# ── POST /invoices/{invoice_id}/restore ──────────────────────────────────────
+# Restore invoice from Trash
+
+@router.post("/invoices/{invoice_id}/restore", dependencies=[Depends(require_roles("pharmacy", "admin"))])
+async def restore_invoice(
+    invoice_id: str,
+    db: Session = Depends(get_db),
+):
+    invoice = PharmacyInvoiceService.restore_invoice(db=db, invoice_id=invoice_id)
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found in trash")
+    return ok(data=invoice.to_dict(), message="Invoice restored successfully")
+
+

@@ -1,0 +1,330 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+.page {
+    min-height: 100vh;
+    background: #f1f5f9;
+    font-family: 'Inter', sans-serif;
+}
+
+.container {
+    max-width: 560px;
+    margin: 0 auto;
+    padding: 2rem 1.25rem 4rem;
+}
+
+.intro {
+    margin-bottom: 1.75rem;
+}
+
+.intro h1 {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: #0f172a;
+    letter-spacing: -0.5px;
+}
+
+.intro .subtitle {
+    font-size: 0.875rem;
+    color: #64748b;
+    margin-top: 0.25rem;
+    font-weight: 400;
+}
+
+/* ── Avatar Card ── */
+.avatar-card {
+    background: #fff;
+    border-radius: 16px;
+    padding: 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+    margin-bottom: 1rem;
+    border: 1px solid #e2e8f0;
+}
+
+.avatar-circle {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background: #2563eb;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Inter', sans-serif;
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #fff;
+    flex-shrink: 0;
+    letter-spacing: -0.5px;
+}
+
+.avatar-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.avatar-name {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #0f172a;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.avatar-email {
+    font-size: 0.8rem;
+    color: #64748b;
+    margin-top: 0.2rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.avatar-badge {
+    background: #eff6ff;
+    color: #2563eb;
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 0.3rem 0.75rem;
+    border-radius: 20px;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+    flex-shrink: 0;
+    border: 1px solid #dbeafe;
+}
+
+/* ── Info Fields Card ── */
+.fields-card {
+    background: #fff;
+    border-radius: 16px;
+    padding: 0;
+    margin-bottom: 1rem;
+    border: 1px solid #e2e8f0;
+    overflow: hidden;
+}
+
+.info-field {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid #f1f5f9;
+    gap: 1rem;
+}
+
+.info-field:last-child {
+    border-bottom: none;
+}
+
+.field-left {
+    flex: 1;
+    min-width: 0;
+}
+
+.field-label {
+    font-size: 0.7rem;
+    font-weight: 500;
+    color: #94a3b8;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 0.2rem;
+}
+
+.field-value {
+    font-size: 0.9rem;
+    color: #0f172a;
+    font-weight: 400;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.edit-btn {
+    background: #f8fafc !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 8px !important;
+    width: 42px !important;
+    height: 42px !important;
+    color: #64748b !important;
+    flex-shrink: 0;
+    transition: all 0.15s !important;
+}
+
+.edit-btn:hover {
+    background: #eff6ff !important;
+    border-color: #bfdbfe !important;
+    color: #2563eb !important;
+}
+
+.edit-btn .p-button-icon {
+    font-size: 0.75rem !important;
+}
+
+/* ── Action Card ── */
+.action-card {
+    background: #fff;
+    border-radius: 16px;
+    margin-bottom: 1rem;
+    border: 1px solid #e2e8f0;
+    overflow: hidden;
+}
+
+.action-item {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1.25rem 1.5rem;
+    cursor: pointer;
+    transition: background 0.15s;
+    border: none;
+    background: transparent;
+    width: 100%;
+    text-align: left;
+    font-family: 'Inter', sans-serif;
+}
+
+.action-item:hover {
+    background: #f8fafc;
+}
+
+.action-icon-wrap {
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.action-icon-wrap.key {
+    background: #eff6ff;
+    border: 1px solid #dbeafe;
+}
+
+.action-icon-wrap.key i {
+    color: #2563eb;
+    font-size: 0.85rem;
+}
+
+.action-text {
+    flex: 1;
+}
+
+.action-title {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #0f172a;
+}
+
+.action-sub {
+    font-size: 0.75rem;
+    color: #94a3b8;
+    margin-top: 0.1rem;
+}
+
+.action-chevron {
+    color: #cbd5e1;
+    font-size: 0.75rem;
+}
+
+/* ── Logout Button ── */
+.logout-card {
+    background: #fff;
+    border-radius: 16px;
+    overflow: hidden;
+    margin-bottom: 1rem;
+    border: 1px solid #fecaca;
+}
+
+.logout-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6rem;
+    padding: 1.25rem 1.75rem;
+    width: 100%;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    font-family: 'Inter', sans-serif;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #ef4444;
+    transition: background 0.15s;
+}
+
+.logout-btn:hover {
+    background: #fef2f2;
+}
+
+.logout-btn i {
+    font-size: 0.9rem;
+}
+
+/* ── Version ── */
+.version-tag {
+    text-align: center;
+    font-size: 0.72rem;
+    color: #cbd5e1;
+    margin-top: 0.5rem;
+}
+
+/* ── Dialogs ── */
+.form-group {
+    margin-bottom: 1.75rem;
+}
+
+.form-label {
+    display: block;
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: #475569;
+    margin-bottom: 0.6rem;
+}
+
+.required {
+    color: #ef4444;
+}
+
+.error-message {
+    font-size: 0.78rem;
+    color: #ef4444;
+    margin-top: 0.3rem;
+}
+
+.w-full {
+    width: 100%;
+}
+
+/* ── Empty state ── */
+.empty-state {
+    text-align: center;
+    padding: 3rem 1rem;
+}
+
+.empty-icon {
+    font-size: 3rem;
+    color: #cbd5e1;
+    display: block;
+    margin-bottom: 1rem;
+}
+
+.empty-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #475569;
+    margin-bottom: 0.5rem;
+}
+
+.empty-text {
+    font-size: 0.875rem;
+    color: #94a3b8;
+}

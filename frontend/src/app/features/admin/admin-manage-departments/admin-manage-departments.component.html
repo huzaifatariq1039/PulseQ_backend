@@ -1,0 +1,104 @@
+<p-toast></p-toast>
+<p-confirmDialog></p-confirmDialog>
+
+<div class="layout">
+    <app-admin-sidebar></app-admin-sidebar>
+
+    <main class="main-content">
+        <div class="page-container">
+
+            <div class="admin-header">
+                <div>
+                    <h1>Manage Departments</h1>
+                    <p class="subtitle">Organize and manage hospital departments</p>
+                </div>
+            </div>
+
+            <div class="search-action-bar">
+                <div class="search-box">
+                    <i class="pi pi-search"></i>
+                    <input type="text" placeholder="Search departments..." [(ngModel)]="searchText"
+                        (input)="onSearchInput($event)" class="search-input" />
+                </div>
+                <button pButton icon="pi pi-plus" label="Add Department" class="add-btn"
+                    (click)="openAddDialog()"></button>
+            </div>
+
+            <div class="departments-grid">
+                <div *ngIf="filteredDepartments.length === 0" class="empty-state">
+                    <i class="pi pi-inbox"></i>
+                    <p>No departments found</p>
+                </div>
+
+                <div *ngFor="let dept of filteredDepartments" class="department-card">
+                    <div class="dept-header">
+                        <div class="dept-icon-section">
+                            <i class="pi pi-building dept-icon"></i>
+                        </div>
+                        <div class="dept-actions">
+                            <button pButton icon="pi pi-pencil"
+                                class="p-button-rounded p-button-text p-button-sm action-btn edit-btn" pRipple
+                                (click)="openEditDialog(dept)" title="Edit"></button>
+                            <button pButton icon="pi pi-trash"
+                                class="p-button-rounded p-button-text p-button-sm action-btn delete-btn" pRipple
+                                (click)="confirmDeleteDepartment(dept)" title="Delete"></button>
+                        </div>
+                    </div>
+
+                    <div class="dept-content">
+                        <h3 class="dept-name">{{ dept.name }}</h3>
+                        <p class="dept-description" *ngIf="dept.description">
+                            {{ dept.description }}
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </main>
+</div>
+
+<!-- ADD DIALOG -->
+<p-dialog [(visible)]="showAddDialog" [modal]="true" header="Add New Department"
+    [style]="{ width: '100%', maxWidth: '480px' }" (onHide)="closeAddDialog()">
+    <div class="dialog-form" *ngIf="showAddDialog">
+        <div class="form-group">
+            <label for="addDeptName">Department Name *</label>
+            <input pInputText id="addDeptName" [(ngModel)]="addFormModel.name" placeholder="Enter department name"
+                class="full-width" />
+        </div>
+        <div class="form-group">
+            <label for="addDeptDesc">Description</label>
+            <textarea id="addDeptDesc" [(ngModel)]="addFormModel.description"
+                placeholder="Enter department description (optional)" class="full-width" rows="3"></textarea>
+        </div>
+    </div>
+
+    <ng-template pTemplate="footer">
+        <button pButton type="button" label="Cancel" class="p-button-secondary" (click)="closeAddDialog()"></button>
+        <button pButton type="button" label="Add Department" class="p-button-success"
+            (click)="addDepartment()"></button>
+    </ng-template>
+</p-dialog>
+
+<!-- EDIT DIALOG -->
+<p-dialog [(visible)]="showEditDialog" [modal]="true" header="Edit Department"
+    [style]="{ width: '100%', maxWidth: '480px' }" (onHide)="closeEditDialog()">
+    <div class="dialog-form" *ngIf="showEditDialog && editingDepartment">
+        <div class="form-group">
+            <label for="editDeptName">Department Name *</label>
+            <input pInputText id="editDeptName" [(ngModel)]="editFormModel.name" placeholder="Enter department name"
+                class="full-width" />
+        </div>
+        <div class="form-group">
+            <label for="editDeptDesc">Description</label>
+            <textarea id="editDeptDesc" [(ngModel)]="editFormModel.description"
+                placeholder="Enter department description" class="full-width" rows="3"></textarea>
+        </div>
+    </div>
+
+    <ng-template pTemplate="footer">
+        <button pButton type="button" label="Cancel" class="p-button-secondary" (click)="closeEditDialog()"></button>
+        <button pButton type="button" label="Save Changes" class="p-button-success" (click)="saveDepartment()"></button>
+    </ng-template>
+</p-dialog>

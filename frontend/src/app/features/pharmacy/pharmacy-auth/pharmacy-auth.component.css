@@ -1,0 +1,202 @@
+:host {
+    display: block;
+    --primary: #2563eb;
+    --muted: #6b7a85;
+    --card-radius: 14px;
+    --card-bg: #ffffff;
+    --card-shadow: 0 12px 32px rgba(11, 19, 32, 0.12);
+}
+
+.page {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+    padding: 1rem;
+}
+
+.auth-container {
+    width: 100%;
+    max-width: 420px;
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+}
+
+.brand-section {
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.brand-logo {
+    width: 60px;
+    height: 60px;
+    border-radius: 12px;
+    margin-bottom: 1rem;
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.15);
+}
+
+.brand-name {
+    font-size: 2.5rem;
+    font-weight: 800;
+    color: #0b1419;
+    margin: 0 0 0.5rem 0;
+    letter-spacing: -0.5px;
+}
+
+.brand-tagline {
+    font-size: 1rem;
+    color: var(--muted);
+    margin: 0;
+    font-weight: 500;
+}
+
+:host ::ng-deep .auth-card .p-card {
+    padding: 2.5rem;
+    background: var(--card-bg);
+    border-radius: var(--card-radius);
+    border: 1px solid #eef2f6;
+    box-shadow: var(--card-shadow);
+}
+
+.auth-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #0b1419;
+    margin: 0 0 0.5rem 0;
+}
+
+.auth-subtitle {
+    color: var(--muted);
+    font-size: 0.95rem;
+    margin: 0 0 1.5rem 0;
+    line-height: 1.6;
+}
+
+.auth-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.form-label {
+    font-weight: 600;
+    color: #0b1419;
+    font-size: 0.95rem;
+}
+
+.required {
+    color: #dc2626;
+}
+
+:host ::ng-deep .p-inputtext {
+    width: 100%;
+    padding: 0.75rem;
+    border-radius: 8px;
+    border: 1px solid #d1d5db;
+    font-family: inherit;
+    font-size: 0.95rem;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+:host ::ng-deep .p-inputtext:focus {
+    border-color: var(--primary);
+    outline: 0;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.error-message {
+    color: #dc2626;
+    font-size: 0.85rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.error-message span {
+    display: block;
+}
+
+.form-actions {
+    display: flex;
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.login-btn {
+    background-color: var(--primary) !important;
+    border-color: var(--primary) !important;
+    color: #fff !important;
+    border-radius: 8px !important;
+    font-weight: 600 !important;
+    padding: 0.85rem 2rem !important;
+    width: 100%;
+}
+
+.login-btn:disabled {
+    opacity: 0.6 !important;
+    cursor: not-allowed !important;
+}
+
+:host ::ng-deep .login-btn:hover:not(:disabled) {
+    background-color: #1d4ed8 !important;
+    border-color: #1d4ed8 !important;
+}
+
+.back-section {
+    text-align: center;
+    padding-top: 1rem;
+    border-top: 1px solid #eef2f6;
+}
+
+.back-link {
+    color: var(--primary);
+    cursor: pointer;
+    font-weight: 500;
+    font-size: 0.9rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    text-decoration: none;
+    transition: color 0.2s;
+}
+
+.back-link:hover {
+    color: #1d4ed8;
+}
+
+.back-link i {
+    font-size: 0.85rem;
+}
+
+@media (max-width: 480px) {
+    .auth-container {
+        gap: 1.5rem;
+    }
+
+    :host ::ng-deep .auth-card .p-card {
+        padding: 1.5rem;
+    }
+
+    .brand-name {
+        font-size: 1.9rem;
+    }
+
+    .auth-title {
+        font-size: 1.25rem;
+    }
+
+    .login-btn {
+        padding: 0.75rem 1rem !important;
+    }
+}

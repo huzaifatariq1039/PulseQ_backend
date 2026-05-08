@@ -1,0 +1,121 @@
+<app-pharmacy-sidebar></app-pharmacy-sidebar>
+<div class="invoices-container">
+    <div class="header-section">
+        <p-breadcrumb [model]="breadcrumbs" [home]="{ icon: 'pi pi-home' }"></p-breadcrumb>
+        <div class="header-content">
+            <div class="header-title">
+                <h1>Invoices</h1>
+            </div>
+            <div class="header-actions">
+                <p-button label="Trash" icon="pi pi-trash" [outlined]="true" (onClick)="goToTrash()"></p-button>
+                <p-button label="New Invoice" icon="pi pi-plus" styleClass="p-button-warning"
+                    (onClick)="goToCreate()"></p-button>
+            </div>
+        </div>
+    </div>
+    <div class="filter-tabs-section">
+        <p-selectButton [options]="statusOptions" [(ngModel)]="selectedStatus" (onChange)="onStatusChange()"
+            optionLabel="label" optionValue="value" styleClass="status-buttons">
+            <ng-template pTemplate="item" let-option>
+                <div class="status-button-content">
+                    <span>{{ option.label }}</span>
+                    @if (option.label !== 'All') {
+                    <p-badge [value]="getStatusCount(option.value).toString()" class="ml-2"></p-badge>
+                    }
+                </div>
+            </ng-template>
+        </p-selectButton>
+    </div>
+    <div class="toolbar-section">
+        <div class="search-input">
+            <p-iconField iconPosition="left">
+                <i class="pi pi-search"></i>
+                <input pInputText type="text" [(ngModel)]="searchTerm" (input)="onSearchChange(searchTerm)"
+                    placeholder="Search invoice #, customer...">
+            </p-iconField>
+        </div>
+        <p-button icon="pi pi-filter" [outlined]="true" [badge]="activeFilterCount.toString()" badgeSeverity="warning"
+            (onClick)="filterPanel.toggle($event)">
+        </p-button>
+        <p-overlayPanel #filterPanel>
+            <div class="filter-panel">
+                <div class="filter-row">
+                    <label>From Date</label>
+                    <p-calendar [(ngModel)]="dateFrom" [showIcon]="true" dateFormat="yy-mm-dd"></p-calendar>
+                </div>
+                <div class="filter-row">
+                    <label>To Date</label>
+                    <p-calendar [(ngModel)]="dateTo" [showIcon]="true" dateFormat="yy-mm-dd"></p-calendar>
+                </div>
+                <div class="filter-actions">
+                    <p-button label="Apply Filter" styleClass="p-button-warning"
+                        (onClick)="applyDateFilter(); filterPanel.hide()"></p-button>
+                    <p-button label="Clear" [outlined]="true"
+                        (onClick)="clearDateFilter(); filterPanel.hide()"></p-button>
+                </div>
+            </div>
+        </p-overlayPanel>
+    </div>
+    @if (selectedInvoices.length > 0) {
+    <div class="bulk-actions">
+        <span class="bulk-text">{{ selectedInvoices.length }} invoice(s) selected</span>
+        <div class="bulk-buttons">
+            <p-button label="Mark Completed" styleClass="p-button-sm" (onClick)="updateStatus('completed')"></p-button>
+            <p-button label="Mark Partial" styleClass="p-button-sm" (onClick)="updateStatus('partial')"></p-button>
+            <p-button label="Cancel" styleClass="p-button-sm" (onClick)="updateStatus('cancel')"></p-button>
+        </div>
+    </div>
+    }
+    <p-table [value]="invoices" [loading]="loading" [paginator]="true" [rows]="rowsPerPage"
+        [rowsPerPageOptions]="[10, 25, 50]" [(selection)]="selectedInvoices" dataKey="id" [showCurrentPageReport]="true"
+        currentPageReportTemplate="Showing {first} to {last} of {totalRecords} invoices"
+        styleClass="p-datatable-sm p-datatable-gridlines" responsiveLayout="scroll">
+        <ng-template pTemplate="header">
+            <tr>
+                <th style="width: 3rem"><p-tableHeaderCheckbox></p-tableHeaderCheckbox></th>
+                <th pSortableColumn="invoice_number" style="width: 12%">Invoice # <p-sortIcon
+                        field="invoice_number"></p-sortIcon></th>
+                <th pSortableColumn="customer_name" style="width: 15%">Customer <p-sortIcon
+                        field="customer_name"></p-sortIcon></th>
+                <th style="width: 8%">Items</th>
+                <th style="width: 12%">Total</th>
+                <th style="width: 10%">Payment</th>
+                <th style="width: 10%">Status</th>
+                <th style="width: 15%">Date</th>
+                <th style="width: 15%">Actions</th>
+            </tr>
+        </ng-template>
+        <ng-template pTemplate="body" let-invoice>
+            <tr>
+                <td><p-tableCheckbox [value]="invoice"></p-tableCheckbox></td>
+                <td>{{ invoice.invoice_number }}</td>
+                <td>{{ invoice.customer_name }}</td>
+                <td><p-badge [value]="invoice.item_count?.toString()"></p-badge></td>
+                <td><span class="text-green-400">PKR {{ invoice.total | number:'1.2-2' }}</span></td>
+                <td><p-tag [value]="invoice.payment_method"
+                        [severity]="getPaymentSeverity(invoice.payment_method)"></p-tag></td>
+                <td><p-tag [value]="invoice.status" [severity]="getStatusSeverity(invoice.status)"></p-tag></td>
+                <td>{{ invoice.created_at | date:'MMM dd, yyyy HH:mm' }}</td>
+                <td>
+                    <div class="actions-cell">
+                        <p-button icon="pi pi-eye" [text]="true" pTooltip="View" tooltipPosition="bottom"
+                            (onClick)="viewInvoice(invoice)"></p-button>
+                        <p-button icon="pi pi-pencil" [text]="true" pTooltip="Edit" tooltipPosition="bottom"
+                            (onClick)="editInvoice(invoice)"></p-button>
+                        <p-button icon="pi pi-print" [text]="true" pTooltip="Print" tooltipPosition="bottom"
+                            (onClick)="printInvoice(invoice)"></p-button>
+                        <p-button icon="pi pi-trash" [text]="true" severity="danger" pTooltip="Delete"
+                            tooltipPosition="bottom" (onClick)="deleteInvoice(invoice)"></p-button>
+                    </div>
+                </td>
+            </tr>
+        </ng-template>
+        <ng-template pTemplate="emptymessage">
+            <tr>
+                <td colspan="9">No invoices found.</td>
+            </tr>
+        </ng-template>
+    </p-table>
+</div>
+<p-toast></p-toast>
+<p-confirmDialog></p-confirmDialog>

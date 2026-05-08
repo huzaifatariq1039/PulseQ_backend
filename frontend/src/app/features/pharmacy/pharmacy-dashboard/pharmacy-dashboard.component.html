@@ -1,0 +1,98 @@
+<p-toast></p-toast>
+
+<div class="layout">
+    <!-- SIDEBAR -->
+    <app-pharmacy-sidebar></app-pharmacy-sidebar>
+
+    <!-- MAIN CONTENT -->
+    <main class="main-content">
+        <div class="page-header">
+            <h1>Pharmacy Dashboard</h1>
+            <p class="subtitle">Overview of pharmacy operations and inventory</p>
+        </div>
+
+        <!-- SUMMARY CARDS ROW -->
+        <div class="summary-row">
+            <!-- Total Medicines -->
+            <div class="summary-card" (click)="goToInventory()">
+                <div class="card-icon-wrap icon-blue">
+                    <i class="pi pi-box"></i>
+                </div>
+                <div class="card-label">Total Medicines</div>
+                <div class="card-number">{{ totalMedicines }}</div>
+                <div class="card-sub">Active: {{ activeCount }}</div>
+            </div>
+
+            <!-- Low Stock -->
+            <div class="summary-card">
+                <div class="card-icon-wrap icon-yellow">
+                    <i class="pi pi-exclamation-triangle"></i>
+                </div>
+                <div class="card-label">Low Stock Items</div>
+                <div class="card-number text-warning">{{ lowStockCount }}</div>
+            </div>
+
+            <!-- Expired -->
+            <div class="summary-card">
+                <div class="card-icon-wrap icon-red">
+                    <i class="pi pi-times-circle"></i>
+                </div>
+                <div class="card-label">Expired Items</div>
+                <div class="card-number text-danger">{{ expiredCount }}</div>
+            </div>
+
+            <!-- Inventory Value -->
+            <div class="summary-card value-card">
+                <div class="card-icon-wrap icon-white">
+                    <i class="pi pi-dollar"></i>
+                </div>
+                <div class="card-label">Inventory Value</div>
+                <div class="card-number">{{ formatRs(inventoryValue) }}</div>
+            </div>
+        </div>
+
+        <!-- QUICK ACTIONS -->
+        <div class="actions-row">
+            <div class="action-card" (click)="goToInventory()">
+                <div class="action-icon-wrap icon-blue">
+                    <i class="pi pi-box"></i>
+                </div>
+                <div>
+                    <div class="action-title">Manage Inventory</div>
+                    <div class="action-sub">View and manage medicine stock</div>
+                </div>
+            </div>
+
+            <div class="action-card" (click)="goToSales()">
+                <div class="action-icon-wrap icon-green">
+                    <i class="pi pi-arrow-up-right"></i>
+                </div>
+                <div>
+                    <div class="action-title">Sales & Revenue</div>
+                    <div class="action-sub">Track pharmacy performance</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ALERTS -->
+        <div class="alerts-section">
+            <h3 class="alerts-title">Alerts &amp; Notifications</h3>
+
+            <div class="alert-card alert-warn" *ngIf="lowStockCount > 0">
+                <i class="pi pi-exclamation-triangle alert-icon"></i>
+                <div>
+                    <div class="alert-heading">Low Stock Alert</div>
+                    <div class="alert-body">{{ lowStockCount }} item has low stock. Please reorder soon.</div>
+                </div>
+            </div>
+
+            <div class="alert-card alert-error" *ngIf="expiredCount > 0">
+                <i class="pi pi-times-circle alert-icon"></i>
+                <div>
+                    <div class="alert-heading">Expired Items</div>
+                    <div class="alert-body">{{ expiredCount }} items have expired. Please remove from inventory.</div>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>

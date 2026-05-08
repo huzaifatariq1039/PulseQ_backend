@@ -1,0 +1,558 @@
+/* ═══════════════════════════════════════════════
+   CSS CUSTOM PROPERTIES
+═══════════════════════════════════════════════ */
+:host {
+    display: block;
+    --primary: #2563eb;
+    --primary-dark: #1d4ed8;
+    --primary-light: #eff6ff;
+    --card-bg: #ffffff;
+    --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    --border-color: #e2e8f0;
+    --text-primary: #1f2937;
+    --text-secondary: #4b5563;
+    --text-muted: #6b7280;
+    --text-faint: #9ca3af;
+    --bg-page: #f8fafc;
+    --bg-subtle: #f9fafb;
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --radius-lg: 10px;
+    --radius-xl: 12px;
+    --topbar-height: 56px;
+    --sidebar-width: 220px;
+    --gap-sm: 0.75rem;
+    --gap-md: 1rem;
+    --gap-lg: 1.25rem;
+}
+
+/* ═══════════════════════════════════════════════
+   LAYOUT
+═══════════════════════════════════════════════ */
+.doctor-layout {
+    display: flex;
+    min-height: 100vh;
+    background: var(--bg-page);
+}
+
+.main-content {
+    flex: 1;
+    padding: 32px 40px;
+    overflow-y: auto;
+    margin-left: var(--sidebar-width);
+    min-width: 0;
+}
+
+/* ═══════════════════════════════════════════════
+   MOBILE TOPBAR
+═══════════════════════════════════════════════ */
+.mobile-topbar {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: var(--topbar-height);
+    background: var(--card-bg);
+    border-bottom: 1px solid var(--border-color);
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 1rem;
+    z-index: 200;
+}
+
+.mobile-topbar .brand-name {
+    font-size: 1rem;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.hamburger {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 1.4rem;
+    color: #475569;
+    padding: 0.4rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-sm);
+    transition: background 0.2s;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.hamburger:hover {
+    background: #f1f5f9;
+}
+
+.sidebar-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    z-index: 99;
+}
+
+/* ═══════════════════════════════════════════════
+   HISTORY LAYOUT
+═══════════════════════════════════════════════ */
+.history-layout {
+    max-width: 1100px;
+    margin: 0 auto;
+}
+
+/* ═══════════════════════════════════════════════
+   HEADER
+═══════════════════════════════════════════════ */
+.history-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 2rem;
+    flex-wrap: wrap;
+    gap: var(--gap-md);
+}
+
+.history-header h1 {
+    font-size: clamp(1.25rem, 4vw, 1.75rem);
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0;
+    line-height: 1.2;
+}
+
+.history-header .subtitle {
+    color: var(--text-muted);
+    font-size: 0.875rem;
+    margin: 0.25rem 0 0 0;
+}
+
+.back-btn {
+    background: var(--primary) !important;
+    border: none !important;
+    border-radius: var(--radius-sm) !important;
+    padding: 0.65rem 1.25rem !important;
+    font-weight: 600 !important;
+    font-size: 0.85rem !important;
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
+.back-btn:hover {
+    background: var(--primary-dark) !important;
+}
+
+/* ═══════════════════════════════════════════════
+   PATIENT GROUPS
+═══════════════════════════════════════════════ */
+.patient-groups {
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap-md);
+}
+
+.empty-state {
+    text-align: center;
+    padding: clamp(2rem, 6vw, 3rem) clamp(1rem, 4vw, 1.5rem);
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-xl);
+    color: var(--text-muted);
+}
+
+.empty-state i {
+    font-size: clamp(2rem, 6vw, 3rem);
+    color: #d1d5db;
+    margin-bottom: 1rem;
+    display: block;
+}
+
+.patient-group-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-xl);
+    overflow: hidden;
+    box-shadow: var(--card-shadow);
+}
+
+.patient-group-header {
+    padding: clamp(0.875rem, 3vw, 1rem) clamp(1rem, 3vw, 1.25rem);
+    background: linear-gradient(135deg, var(--primary-light) 0%, #f0f9ff 100%);
+    border-bottom: 1px solid var(--border-color);
+    cursor: pointer;
+    transition: background 0.2s ease;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+}
+
+.patient-group-header:hover {
+    background: linear-gradient(135deg, #dbeafe 0%, #e0f2fe 100%);
+}
+
+.patient-group-info {
+    display: flex;
+    align-items: center;
+    gap: var(--gap-md);
+    flex-wrap: wrap;
+    min-width: 0;
+}
+
+.patient-group-name {
+    font-size: clamp(0.9rem, 2.5vw, 1.05rem);
+    font-weight: 700;
+    color: var(--primary);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-width: 0;
+    word-break: break-word;
+}
+
+.patient-group-name i {
+    font-size: 0.875rem;
+    transition: transform 0.2s ease;
+    flex-shrink: 0;
+}
+
+.visit-count {
+    background: var(--primary);
+    color: white;
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+/* ═══════════════════════════════════════════════
+   CONSULTATIONS LIST
+═══════════════════════════════════════════════ */
+.consultations-list {
+    padding: clamp(0.75rem, 3vw, 1rem);
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap-md);
+}
+
+.no-visits {
+    text-align: center;
+    padding: 2rem;
+    color: var(--text-faint);
+    font-style: italic;
+}
+
+.consultation-item {
+    padding: clamp(0.75rem, 3vw, 1rem);
+    background: var(--bg-subtle);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+}
+
+.consultation-header {
+    margin-bottom: 0.75rem;
+}
+
+.visit-info {
+    display: flex;
+    align-items: center;
+    gap: var(--gap-sm);
+    flex-wrap: wrap;
+}
+
+.token-badge {
+    background: var(--primary);
+    color: white;
+    font-weight: 700;
+    font-size: clamp(0.775rem, 2vw, 0.875rem);
+    padding: 0.4rem 0.75rem;
+    border-radius: 4px;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.visit-date {
+    color: var(--text-muted);
+    font-size: clamp(0.8rem, 2vw, 0.875rem);
+}
+
+/* ═══════════════════════════════════════════════
+   CONSULTATION DETAILS
+═══════════════════════════════════════════════ */
+.consultation-details {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr));
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+}
+
+.detail-row {
+    display: flex;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid #e5e7eb;
+    gap: 0.5rem;
+    align-items: flex-start;
+}
+
+.detail-label {
+    font-weight: 600;
+    color: var(--text-secondary);
+    min-width: 75px;
+    flex-shrink: 0;
+    font-size: clamp(0.8rem, 2vw, 0.875rem);
+}
+
+.detail-value {
+    color: var(--text-primary);
+    flex: 1;
+    font-size: clamp(0.8rem, 2vw, 0.875rem);
+    word-break: break-word;
+    min-width: 0;
+}
+
+/* ═══════════════════════════════════════════════
+   NOTES
+═══════════════════════════════════════════════ */
+.consultation-notes {
+    margin-top: var(--gap-md);
+    padding: clamp(0.75rem, 3vw, 1rem);
+    background: white;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+}
+
+.notes-label {
+    font-weight: 700;
+    color: var(--primary);
+    font-size: 0.875rem;
+    margin-bottom: 0.5rem;
+    display: block;
+}
+
+.notes-content {
+    color: #374151;
+    font-size: clamp(0.8rem, 2vw, 0.875rem);
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+}
+
+.no-notes {
+    padding: var(--gap-md);
+    background: var(--bg-subtle);
+    border: 1px dashed var(--border-color);
+    border-radius: var(--radius-sm);
+    color: var(--text-faint);
+    text-align: center;
+    font-size: 0.875rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.no-notes i {
+    font-size: 1rem;
+    flex-shrink: 0;
+}
+
+/* ═══════════════════════════════════════════════
+   RESPONSIVE — TABLET (≤ 1024px)
+═══════════════════════════════════════════════ */
+@media (max-width: 1024px) {
+    .main-content {
+        padding: 24px 28px;
+    }
+
+    .consultation-details {
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    }
+}
+
+/* ═══════════════════════════════════════════════
+   RESPONSIVE — SMALL TABLET (≤ 900px)
+═══════════════════════════════════════════════ */
+@media (max-width: 900px) {
+    .mobile-topbar {
+        display: flex;
+    }
+
+    .sidebar-overlay {
+        display: block;
+    }
+
+    .main-content {
+        margin-left: 0;
+        padding: 20px 24px;
+        padding-top: calc(var(--topbar-height) + 20px);
+    }
+
+    .history-header {
+        margin-bottom: 1.5rem;
+    }
+}
+
+/* ═══════════════════════════════════════════════
+   RESPONSIVE — MOBILE (≤ 768px)
+═══════════════════════════════════════════════ */
+@media (max-width: 768px) {
+    .main-content {
+        padding: 1rem;
+        padding-top: calc(var(--topbar-height) + 1rem);
+    }
+
+    .history-header {
+        flex-direction: column;
+        align-items: stretch;
+        gap: var(--gap-sm);
+        margin-bottom: var(--gap-lg);
+    }
+
+    .back-btn {
+        width: 100% !important;
+        justify-content: center !important;
+        text-align: center;
+    }
+
+    .patient-group-header {
+        padding: 0.875rem 1rem;
+    }
+
+    .consultation-details {
+        grid-template-columns: 1fr;
+        gap: 0;
+    }
+
+    .patient-group-card {
+        border-radius: var(--radius-lg);
+    }
+
+    .consultations-list {
+        padding: 0.875rem;
+        gap: 0.875rem;
+    }
+
+    .consultation-item {
+        padding: 0.875rem;
+    }
+
+    .visit-info {
+        gap: 0.5rem;
+    }
+}
+
+/* ═══════════════════════════════════════════════
+   RESPONSIVE — SMALL MOBILE (≤ 480px)
+═══════════════════════════════════════════════ */
+@media (max-width: 480px) {
+    .main-content {
+        padding: 0.75rem;
+        padding-top: calc(var(--topbar-height) + 0.75rem);
+    }
+
+    .history-header {
+        gap: 0.5rem;
+        margin-bottom: var(--gap-md);
+    }
+
+    .patient-group-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+    }
+
+    .patient-group-info {
+        width: 100%;
+        gap: 0.5rem;
+    }
+
+    .visit-count {
+        align-self: flex-start;
+    }
+
+    .patient-groups {
+        gap: 0.75rem;
+    }
+
+    .consultations-list {
+        padding: 0.75rem;
+        gap: 0.75rem;
+    }
+
+    .consultation-item {
+        padding: 0.75rem;
+    }
+
+    .consultation-header {
+        margin-bottom: 0.5rem;
+    }
+
+    .detail-row {
+        flex-direction: column;
+        gap: 0.1rem;
+        padding: 0.4rem 0;
+    }
+
+    .detail-label {
+        min-width: auto;
+    }
+
+    .consultation-notes {
+        padding: 0.75rem;
+        margin-top: 0.75rem;
+    }
+
+    .no-notes {
+        padding: 0.75rem;
+        font-size: 0.8rem;
+    }
+
+    .empty-state {
+        padding: 2rem 0.875rem;
+        border-radius: var(--radius-lg);
+    }
+}
+
+/* ═══════════════════════════════════════════════
+   RESPONSIVE — VERY SMALL (≤ 360px)
+═══════════════════════════════════════════════ */
+@media (max-width: 360px) {
+    .main-content {
+        padding: 0.5rem;
+        padding-top: calc(var(--topbar-height) + 0.5rem);
+    }
+
+    .token-badge {
+        font-size: 0.72rem;
+        padding: 0.3rem 0.5rem;
+    }
+
+    .visit-date {
+        font-size: 0.75rem;
+    }
+
+    .notes-label {
+        font-size: 0.8rem;
+    }
+
+    .consultations-list {
+        padding: 0.5rem;
+    }
+
+    .consultation-item {
+        padding: 0.625rem;
+    }
+
+    .patient-group-header {
+        padding: 0.75rem;
+    }
+}

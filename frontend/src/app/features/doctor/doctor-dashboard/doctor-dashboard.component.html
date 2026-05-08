@@ -1,0 +1,199 @@
+<!-- MOBILE TOPBAR -->
+<div class="mobile-topbar">
+    <div class="brand-name">Dr. Portal</div>
+    <button class="hamburger" (click)="toggleSidebar()">
+        <i [ngClass]="sidebarOpen ? 'pi pi-times' : 'pi pi-bars'"></i>
+    </button>
+</div>
+
+<!-- SIDEBAR OVERLAY -->
+@if (sidebarOpen) {
+    <div class="sidebar-overlay" (click)="sidebarOpen = false"></div>
+}
+
+<div class="doctor-layout">
+    <!-- shared sidebar component -->
+    <app-doctor-sidebar [open]="sidebarOpen" (signOut)="logout()" (close)="sidebarOpen = false"></app-doctor-sidebar>
+
+    <!-- main page -->
+    <main class="main-content">
+        <p-toast></p-toast>
+
+        <header class="top-header">
+            <div class="doctor-info">
+                <h1>{{ doctorName }}</h1>
+                <div class="doctor-qualifications">{{ qualifications }}</div>
+                <p>{{ specialty }}</p>
+                @if (rating > 0) {
+                <div class="doctor-rating">
+                    <span class="stars">
+                        @for (s of [1, 2, 3, 4, 5]; track trackStar($index)) {
+                        <i class="pi pi-star-fill"
+                            [ngClass]="{'active': s <= rating}"></i>
+                        }
+                    </span>
+                    <span class="rating-value">{{ rating | number:'1.1-1' }}</span>
+                    @if (reviewCount > 0) {
+                    <span class="review-count">({{ reviewCount }} reviews)</span>
+                    }
+                </div>
+                }
+            </div>
+            <div class="active-session">
+                <i class="pi pi-check-circle"></i>
+                Active Session
+            </div>
+        </header>
+
+        <section class="stats-section">
+            <div class="stat-card">
+                <div class="stat-item">
+                    <div class="stat-icon waiting">
+                        <i class="pi pi-user"></i>
+                    </div>
+                    <div class="stat-text">
+                        <div class="stat-number">{{ waitingPatients }}</div>
+                        <div class="stat-label">Waiting in Queue</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-item">
+                    <div class="stat-icon served">
+                        <i class="pi pi-user-plus"></i>
+                    </div>
+                    <div class="stat-text">
+                        <div class="stat-number">{{ patientsServed }}</div>
+                        <div class="stat-label">Patients Served</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <div class="content-grid">
+            <!-- current consulation -->
+            <section class="consultation-section">
+                <div class="section-header">
+                    <h2>CURRENT CONSULTATION</h2>
+                    @if (currentPatient) {
+                    <span class="in-progress-badge">IN PROGRESS</span>
+                    }
+                </div>
+
+                @if (currentPatient) {
+                    <div class="consultation-card">
+                        <!-- Patient Header -->
+                        <div class="patient-header">
+                            <div>
+                                <h3>{{ currentPatient.name }}</h3>
+                                <p>{{ currentPatient.age }}y • {{ currentPatient.gender }}</p>
+                                <p><strong>MRN:</strong> {{ currentPatient.mrn || '-' }}</p>
+                            </div>
+                            <div class="token-display">{{ currentPatient.token }}</div>
+                        </div>
+
+                        <!-- Patient Details -->
+                        <div class="patient-details">
+                            <div class="detail-item">
+                                <span class="detail-label">Reason:</span>
+                                <span class="detail-value">{{ currentPatient.reason }}</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Phone:</span>
+                                <span class="detail-value">{{ currentPatient.phone }}</span>
+                            </div>
+                        </div>
+
+                        <div class="prev-history-wrapper">
+                            <button class="prev-history-link" (click)="viewPreviousHistory()">
+                                <i class="pi pi-history"></i>
+                                View Previous History
+                            </button>
+                        </div>
+                        <!-- it must be visible only when consulation has started-->
+                        @if (isConsultationActive) {
+                        <div class="notes-section">
+                            <label class="notes-label">Consultation Notes (Optional)</label>
+                            <textarea pInputTextarea [(ngModel)]="consultationNotes" rows="6"
+                                placeholder="Type clinical notes, diagnosis, or prescriptions here..."
+                                class="notes-textarea"></textarea>
+                        </div>
+                        }
+
+                        <div class="consultation-actions">
+                            <!-- Start Consultation -->
+                            @if (!isConsultationActive) {
+                                <button pButton label="Start Consultation" icon="pi pi-play" class="start-btn"
+                                    (click)="startConsultation()"></button>
+                            }
+
+                            <!-- Finish Consultation -->
+                            @if (isConsultationActive) {
+                                <button pButton label="Finish Consultation" icon="pi pi-check" class="finish-btn"
+                                    (click)="finishConsultation()"></button>
+                            }
+
+                            <button pButton label="Skip Patient" icon="pi pi-forward" class="skip-btn"
+                                (click)="skipPatient()"></button>
+                        </div>
+                    </div>
+                } @else {
+                    <div class="consultation-card empty">
+                        <div class="patient-header">
+                            <div>
+                                <h3>No active consultation</h3>
+                                <p class="subtitle">Waiting for next patient</p>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </section>
+
+            <!-- UPCOMING PATIENTS -->
+            <aside class="upcoming-section">
+                <div class="section-header">
+                    <h3>Upcoming Patients</h3>
+                    <span class="count">{{ upcomingPatients.length }}</span>
+                </div>
+
+                <div class="upcoming-list">
+                    @for (patient of upcomingPatients; track trackUpcomingPatient($index, patient)) {
+                    <div class="upcoming-card">
+                        <div class="patient-token">{{ patient.token }}</div>
+                        <div class="patient-info">
+                            <h4>{{ patient.name }}</h4>
+                            <p>{{ patient.age }} • {{ patient.reason }}</p>
+                            <p class="small"><strong>MRN:</strong> {{ patient.mrn || '-' }}</p>
+                        </div>
+                        <div class="wait-time">
+                            <i class="pi pi-clock"></i>
+                            {{ patient.waitTime }}
+                        </div>
+                    </div>
+                    }
+                </div>
+
+                <!-- SKIPPED QUEUE -->
+                <div class="section-header" style="margin-top: 1rem;">
+                    <h3>Skipped Patients</h3>
+                    <span class="count">{{ skippedPatients.length }}</span>
+                </div>
+                <div class="skipped-list">
+                    @if (skippedPatients.length === 0) {
+                    <div class="queue-empty">No skipped patients</div>
+                    }
+                    @for (s of skippedPatients; track trackSkippedPatient(s); let si = $index) {
+                    <div class="skipped-card">
+                        <div class="skipped-info">
+                            <div class="skipped-token">{{ s.token }}</div>
+                            <div class="skipped-name">{{ s.name }}</div>
+                        </div>
+                        <button pButton class="readd-btn" label="+ Re-add" (click)="reAddFromSkipped(s)"></button>
+                    </div>
+                    }
+                </div>
+            </aside>
+        </div>
+    </main>
+</div>

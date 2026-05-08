@@ -1,0 +1,164 @@
+{
+  "$schema": "./node_modules/@angular/cli/lib/config/schema.json",
+  "version": 1,
+  "newProjectRoot": "projects",
+  "projects": {
+    "pulseQ": {
+      "projectType": "application",
+      "schematics": {},
+      "root": "",
+      "sourceRoot": "src",
+      "prefix": "app",
+      "architect": {
+        "build": {
+          "builder": "@angular-devkit/build-angular:application",
+          "options": {
+            "outputPath": "dist/pulse-q",
+            "index": "src/index.html",
+            "browser": "src/main.ts",
+            "polyfills": [
+              "zone.js"
+            ],
+            "tsConfig": "tsconfig.app.json",
+            "assets": [
+              "src/favicon.ico",
+              "src/assets"
+            ],
+            "styles": [
+              "src/styles.css",
+              "node_modules/primeng/resources/themes/lara-light-blue/theme.css",
+              "node_modules/primeng/resources/primeng.min.css"
+            ],
+            "scripts": [],
+            "server": "src/main.server.ts",
+            "prerender": true,
+            "ssr": {
+              "entry": "server.ts"
+            }
+          },
+          "configurations": {
+            "production": {
+              "budgets": [
+                {
+                  "type": "initial",
+                  "maximumWarning": "1mb",
+                  "maximumError": "2mb"
+                },
+                {
+                  "type": "anyComponentStyle",
+                  "maximumWarning": "20kb",
+                  "maximumError": "50kb"
+                }
+              ],
+              "outputHashing": "all"
+            },
+            "development": {
+              "optimization": false,
+              "extractLicenses": false,
+              "sourceMap": true
+            },
+            "patient": {
+              "outputPath": "dist/patient",
+              "fileReplacements": [{ "replace": "src/environments/environment.ts", "with": "src/environments/environment.patient.ts" }],
+              "outputHashing": "all"
+            },
+            "doctor": {
+              "outputPath": "dist/doctor",
+              "fileReplacements": [{ "replace": "src/environments/environment.ts", "with": "src/environments/environment.doctor.ts" }],
+              "outputHashing": "all"
+            },
+            "pharmacy": {
+              "outputPath": "dist/pharmacy",
+              "fileReplacements": [{ "replace": "src/environments/environment.ts", "with": "src/environments/environment.pharmacy.ts" }],
+              "outputHashing": "all"
+            },
+            "reception": {
+              "outputPath": "dist/reception",
+              "fileReplacements": [{ "replace": "src/environments/environment.ts", "with": "src/environments/environment.reception.ts" }],
+              "outputHashing": "all"
+            },
+            "admin": {
+              "outputPath": "dist/admin",
+              "fileReplacements": [{ "replace": "src/environments/environment.ts", "with": "src/environments/environment.admin.ts" }],
+              "outputHashing": "all"
+            },
+            "demo": {
+              "outputPath": "dist/demo",
+              "fileReplacements": [{ "replace": "src/environments/environment.ts", "with": "src/environments/environment.demo.ts" }],
+              "outputHashing": "all"
+            },
+            "main": {
+              "outputPath": "dist/main",
+              "fileReplacements": [{ "replace": "src/environments/environment.ts", "with": "src/environments/environment.main.ts" }],
+              "outputHashing": "all"
+            }
+          },
+          "defaultConfiguration": "production"
+        },
+        "serve": {
+          "builder": "@angular-devkit/build-angular:dev-server",
+          "options": {
+            "proxyConfig": "proxy.conf.json"
+          },
+          "configurations": {
+            "production": {
+              "buildTarget": "pulseQ:build:production"
+            },
+            "development": {
+              "buildTarget": "pulseQ:build:development"
+            },
+            "patient": {
+              "buildTarget": "pulseQ:build:patient"
+            },
+            "doctor": {
+              "buildTarget": "pulseQ:build:doctor"
+            },
+            "pharmacy": {
+              "buildTarget": "pulseQ:build:pharmacy"
+            },
+            "reception": {
+              "buildTarget": "pulseQ:build:reception"
+            },
+            "admin": {
+              "buildTarget": "pulseQ:build:admin"
+            },
+            "demo": {
+              "buildTarget": "pulseQ:build:demo"
+            },
+            "main": {
+              "buildTarget": "pulseQ:build:main"
+            }
+          },
+          "defaultConfiguration": "development"
+        },
+        "extract-i18n": {
+          "builder": "@angular-devkit/build-angular:extract-i18n",
+          "options": {
+            "buildTarget": "pulseQ:build"
+          }
+        },
+        "test": {
+          "builder": "@angular-devkit/build-angular:karma",
+          "options": {
+            "polyfills": [
+              "zone.js",
+              "zone.js/testing"
+            ],
+            "tsConfig": "tsconfig.spec.json",
+            "assets": [
+              "src/favicon.ico",
+              "src/assets"
+            ],
+            "styles": [
+              "src/styles.css"
+            ],
+            "scripts": []
+          }
+        }
+      }
+    }
+  },
+  "cli": {
+    "analytics": "033da972-f2cd-4c18-9c9e-24568825f86b"
+  }
+}

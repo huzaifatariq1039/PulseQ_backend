@@ -1,0 +1,148 @@
+<p-toast position="top-right"></p-toast>
+
+<app-reception-sidebar [currentNav]="currentNav" [sidebarOpen]="sidebarOpen" (toggleSidebar)="toggleSidebar()"
+    (navigate)="navigateTo($event)" (signOut)="signOut()">
+
+    <div class="header-row">
+        <div>
+            <h2>Manage Doctors</h2>
+            <p class="subtitle">View and manage doctor information and availability.</p>
+        </div>
+    </div>
+
+    <!-- SEARCH & FILTER BAR -->
+    <div class="search-filter-bar">
+        <div class="search-input-wrapper">
+            <i class="pi pi-search"></i>
+            <input type="text" placeholder="Search by doctor name..." [(ngModel)]="searchText"
+                (ngModelChange)="onSearchChange($event)" class="search-input" />
+        </div>
+        <p-dropdown [(ngModel)]="selectedDepartment" [options]="departments" optionLabel="label" optionValue="value"
+            placeholder="All Departments" (onChange)="onDepartmentChange()" class="department-filter"></p-dropdown>
+        <button *ngIf="searchText || selectedDepartment" pButton icon="pi pi-times"
+            class="p-button-text p-button-plain clear-btn" pTooltip="Clear filters"
+            (click)="searchText = ''; selectedDepartment = null; loadDoctors()"></button>
+    </div>
+
+    <!-- DOCTORS TABLE -->
+    <p-card class="doctors-card">
+        <div class="table-scroll-wrapper">
+            <p-table [value]="filteredDoctors" [paginator]="true" [rows]="5" responsiveLayout="scroll">
+                <ng-template pTemplate="header">
+                    <tr>
+                        <th class="col-name">Name</th>
+                        <th class="col-dept">Department</th>
+                        <th class="col-qual">Qualifications</th>
+                        <th class="col-fee">Fee</th>
+                        <th class="col-timings">Timings</th>
+                        <th class="col-status">Status</th>
+                        <th class="col-actions">Actions</th>
+                    </tr>
+                </ng-template>
+                <ng-template pTemplate="body" let-row>
+                    <tr>
+                        <td class="col-name">
+                            <div class="doctor-name">{{ row.name }}</div>
+                        </td>
+                        <td class="col-dept">
+                            <span class="dept-text">{{ row.department }}</span>
+                        </td>
+                        <td class="col-qual">
+                            <span class="qual-text">{{ row.qualifications || '-' }}</span>
+                        </td>
+                        <td class="col-fee">
+                            <span class="fee-badge">{{ row.fee }}</span>
+                        </td>
+                        <td class="col-timings">
+                            <span class="timings-text">{{ row.timings }}</span>
+                        </td>
+                        <td class="col-status">
+                            <span [ngClass]="getStatusClass(row)">
+                                {{ getStatusText(row) }}
+                            </span>
+                        </td>
+                        <td class="col-actions">
+                            <button pButton icon="pi pi-pencil" severity="success"
+                                class="p-button-text p-button-plain edit-btn" pTooltip="Edit"
+                                (click)="editDoctor(row)"></button>
+                        </td>
+                    </tr>
+                </ng-template>
+                <ng-template pTemplate="emptymessage">
+                    <tr>
+                        <td colspan="7" class="empty-cell">NO DOCTORS FOUND</td>
+                    </tr>
+                </ng-template>
+            </p-table>
+        </div>
+    </p-card>
+
+</app-reception-sidebar>
+
+<!-- EDIT DIALOG -->
+<p-dialog header="Edit Doctor" [(visible)]="editVisible" [modal]="true" [style]="{width:'100%', 'max-width':'480px'}">
+    <div *ngIf="editModel" class="p-fluid doctor-dialog">
+
+        <div class="p-field">
+            <label>Doctor Name <span class="required-asterisk">*</span></label>
+            <input pInputText [(ngModel)]="editModel.name" placeholder="Doctor name" />
+        </div>
+
+        <div class="p-field">
+            <label>Department <span class="required-asterisk">*</span></label>
+            <p-dropdown [(ngModel)]="editModel.department" [options]="departments" optionLabel="label"
+                optionValue="value" placeholder="Select department"></p-dropdown>
+        </div>
+
+        <div class="p-field">
+            <label>Qualifications</label>
+            <input pInputText [(ngModel)]="editModel.qualifications" placeholder="e.g. MBBS / MD / RMP" />
+        </div>
+
+        <!-- Start time and End time as separate time inputs -->
+        <div class="two-col-times">
+            <div class="p-field">
+                <label>Start Time <span class="required-asterisk">*</span></label>
+                <input pInputText type="time" [(ngModel)]="editStartTime" />
+            </div>
+            <div class="p-field">
+                <label>End Time <span class="required-asterisk">*</span></label>
+                <input pInputText type="time" [(ngModel)]="editEndTime" />
+            </div>
+        </div>
+
+        <div class="p-field">
+            <label>Consultation Fee (Rs.) <span class="required-asterisk">*</span></label>
+            <input pInputText type="number" [(ngModel)]="editFee" placeholder="e.g. 700" />
+        </div>
+
+        <div class="p-field checkbox-field">
+            <label>Status <span style="color:#ef4444">*</span></label>
+            <div class="radio-group">
+                <label class="radio-option">
+                    <input type="radio" name="editStatus" value="available" [(ngModel)]="editStatus" />
+                    <span class="radio-dot available-dot"></span>
+                    Available
+                </label>
+                <label class="radio-option">
+                    <input type="radio" name="editStatus" value="unavailable" [(ngModel)]="editStatus" />
+                    <span class="radio-dot unavailable-dot"></span>
+                    Unavailable
+                </label>
+                <label class="radio-option">
+                    <input type="radio" name="editStatus" value="onLeave" [(ngModel)]="editStatus" />
+                    <span class="radio-dot leave-dot"></span>
+                    On Leave
+                </label>
+            </div>
+        </div>
+
+        <div style="display:flex; gap:0.5rem; margin-top:1.5rem; flex-wrap:wrap;">
+            <button pButton label="Cancel" (click)="editVisible=false" class="p-button-secondary"
+                style="flex:1; min-width:120px;"></button>
+            <button pButton label="Save Changes" (click)="saveEdit()" class="save-btn"
+                style="flex:1; min-width:120px;"></button>
+        </div>
+
+    </div>
+</p-dialog>
