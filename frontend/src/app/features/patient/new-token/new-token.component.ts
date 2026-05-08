@@ -369,8 +369,9 @@ export class NewTokenComponent implements OnInit, OnDestroy {
                     errorDetail = err.error.data.detail;
                 }
 
+                // Check if it's a duplicate booking error
                 if (errorDetail.toLowerCase().includes('active appointment')) {
-                    errorDetail += ' You can generate a new token again once your consultation is completed.';
+                    errorDetail = 'You already have an active appointment with this doctor.';
                 }
 
                 this.messageService.add({

@@ -29,6 +29,11 @@
             <i class="pi pi-box"></i>
             <span>Inventory</span>
         </a>
+        <a routerLink="/staff/pharmacy/add" routerLinkActive="active" class="menu-item"
+            [routerLinkActiveOptions]="{ exact: false }" (click)="sidebarOpen = false">
+            <i class="pi pi-plus-circle"></i>
+            <span>Add Medicine</span>
+        </a>
         <a routerLink="/staff/pharmacy/sales" routerLinkActive="active" class="menu-item"
             [routerLinkActiveOptions]="{ exact: false }" (click)="sidebarOpen = false">
             <i class="pi pi-chart-line"></i>
@@ -38,16 +43,6 @@
             [routerLinkActiveOptions]="{ exact: false }" (click)="sidebarOpen = false">
             <i class="pi pi-receipt"></i>
             <span>Invoices</span>
-        </a>
-        <a routerLink="/staff/pharmacy/add" routerLinkActive="active" class="menu-item"
-            [routerLinkActiveOptions]="{ exact: false }" (click)="sidebarOpen = false">
-            <i class="pi pi-plus-circle"></i>
-            <span>Add Medicine</span>
-        </a>
-        <a routerLink="/staff/pharmacy/trash" routerLinkActive="active" class="menu-item"
-            [routerLinkActiveOptions]="{ exact: false }" (click)="sidebarOpen = false">
-            <i class="pi pi-trash"></i>
-            <span>Trash</span>
         </a>
     </nav>
 

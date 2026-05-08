@@ -122,9 +122,14 @@ async def get_doctor_tokens(
     page: Optional[int] = Query(1, ge=1),
     page_size: Optional[int] = Query(20, ge=1, le=500),
 ) -> Dict[str, Any]:
-    """Get tokens/patient history - Returns all tokens (no doctor_id filter)"""
+    """Get tokens/patient history - Doctors see only their own tokens, admins see all"""
     
     query = db.query(Token)
+    
+    # Filter by doctor if user is a doctor (not admin)
+    user_role = str(getattr(current, "role", "")).lower()
+    if user_role == "doctor":
+        query = query.filter(Token.doctor_id == current.user_id)
     
     if patient_id:
         query = query.filter(Token.patient_id == patient_id)

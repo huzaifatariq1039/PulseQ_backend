@@ -167,7 +167,8 @@
 </p-dialog>
 
 <!-- EDIT DIALOG -->
-<p-dialog header="Edit Token Details" [(visible)]="editVisible" [modal]="true" [style]="{width:'500px'}">
+<p-dialog header="Edit Token Details" [(visible)]="editVisible" [modal]="true" [style]="{width:'500px'}"
+    [contentStyle]="{padding: '1.5rem'}">
     <div *ngIf="editModel" class="p-fluid queue-dialog">
 
         <!-- Token (read-only) + Status badge -->

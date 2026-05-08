@@ -59,13 +59,20 @@ export class HistoryDetailComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     const id = this.route.snapshot.paramMap.get('id');
-    if (!id) return;
+    console.log('[History Detail] Loaded with ID:', id);
+    if (!id) {
+      console.error('[History Detail] No ID provided in route params');
+      return;
+    }
 
     this.loading = true;
     this.tokenService.getAppointmentDetails(id).subscribe({
       next: (res: any) => {
         this.loading = false;
-        const data = res.appointment || res.data || res.token || res;
+        console.log('[History Detail] API Response:', res);
+
+        // API returns: { token: {...}, doctor: {...}, hospital: {...}, queue: {...} }
+        const data = res.token || res.appointment || res.data || res;
         if (data) {
           // Construct ageGender from separate fields
           const age = data.patient_age ?? data.patient?.age ?? 0;
@@ -130,12 +137,12 @@ export class HistoryDetailComponent implements OnInit, OnDestroy {
         }
       },
       error: (err) => {
-        console.error('Failed to load appointment details', err);
+        console.error('[History Detail] Failed to load appointment details:', err);
         this.loading = false;
         this.messageService.add({
           severity: 'error',
           summary: 'Error',
-          detail: 'Failed to load appointment details'
+          detail: 'Failed to load appointment details. Please try again.'
         });
       }
     });

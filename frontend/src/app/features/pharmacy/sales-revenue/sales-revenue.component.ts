@@ -3,52 +3,119 @@ import { CommonModule, isPlatformBrowser } from '@angular/common';
 import * as XLSX from 'xlsx';
 import { FormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
+
 import { CardModule } from 'primeng/card';
 import { ButtonModule } from 'primeng/button';
 import { TableModule } from 'primeng/table';
-import { SelectButtonModule } from 'primeng/selectbutton';
 import { CalendarModule } from 'primeng/calendar';
 import { InputTextModule } from 'primeng/inputtext';
 import { ToastModule } from 'primeng/toast';
+import { ChartModule } from 'primeng/chart';
+import { PaginatorModule } from 'primeng/paginator';
+
+import { MessageService } from 'primeng/api';
+
 import { PharmacyService } from '../../../core/services/pharmacy.service';
 import { ExternalPosService } from '../../../core/services/external-pos.service';
 import { AuthService } from '../../../core/services/auth.service';
+
 import { PharmacySidebarComponent } from '../shared/components/pharmacy-sidebar/pharmacy-sidebar.component';
-import { MessageService } from 'primeng/api';
 
 @Component({
     selector: 'app-sales-revenue',
     standalone: true,
+
     imports: [
-        CommonModule, FormsModule, RouterModule,
-        CardModule, ButtonModule, TableModule,
-        SelectButtonModule, CalendarModule, InputTextModule,
-        ToastModule, PharmacySidebarComponent
+        CommonModule,
+        FormsModule,
+        RouterModule,
+
+        CardModule,
+        ButtonModule,
+        TableModule,
+        CalendarModule,
+        InputTextModule,
+        ToastModule,
+        ChartModule,
+        PaginatorModule,
+
+        PharmacySidebarComponent
     ],
+
     templateUrl: './sales-revenue.component.html',
     styleUrls: ['./sales-revenue.component.css'],
+
     providers: [MessageService]
 })
+
 export class SalesRevenueComponent implements OnInit {
 
-    selectedOption: string = 'week';
-    searchTerm: string = '';
-    isExporting: boolean = false;
-    sales: any[] = [];
-    allSales: any[] = [];
-    customRange: Date[] = [];
+    // ─────────────────────────────────────────
+    // TABS
+    // ─────────────────────────────────────────
 
-    todaySales: number = 0;
-    weeklySales: number = 0;
-    monthlySales: number = 0;
-    totalRevenue: number = 0;
+    activeTab: 'overview' | 'products' = 'overview';
 
-    options = [
-        { label: 'Today', value: 'today' },
-        { label: 'This Week', value: 'week' },
-        { label: 'This Month', value: 'month' },
-        { label: 'Custom Range', value: 'custom' }
+    // ─────────────────────────────────────────
+    // DATE FILTERS
+    // ─────────────────────────────────────────
+
+    fromDate: Date =
+        new Date(new Date().setDate(new Date().getDate() - 30));
+
+    toDate: Date = new Date();
+
+    selectedPreset: string = 'last30';
+
+    fromFocused = false;
+    toFocused = false;
+
+    presetOptions = [
+        { label: 'Last 7 days', value: 'last7' },
+        { label: 'Last 30 days', value: 'last30' },
+        { label: 'This month', value: 'thisMonth' },
+        { label: 'Last month', value: 'lastMonth' }
     ];
+
+    // ─────────────────────────────────────────
+    // OVERVIEW STATS
+    // ─────────────────────────────────────────
+
+    totalRevenue: number = 0;
+    invoiceCount: number = 0;
+    unitsSold: number = 0;
+    avgOrderValue: number = 0;
+
+    // ─────────────────────────────────────────
+    // CHARTS
+    // ─────────────────────────────────────────
+
+    salesOverTimeData: any = {};
+    paymentMethodData: any = {};
+
+    barChartOptions: any = {};
+    donutChartOptions: any = {};
+
+    // ─────────────────────────────────────────
+    // PRODUCTS TAB
+    // ─────────────────────────────────────────
+
+    allProducts: any[] = [];
+    filteredProducts: any[] = [];
+    pagedProducts: any[] = [];
+
+    productSearch: string = '';
+
+    productRows: number = 10;
+    productFirst: number = 0;
+
+    // ─────────────────────────────────────────
+    // MISC
+    // ─────────────────────────────────────────
+
+    isExporting: boolean = false;
+
+    allSales: any[] = [];
 
     private readonly platformId = inject(PLATFORM_ID);
 
@@ -59,220 +126,727 @@ export class SalesRevenueComponent implements OnInit {
         private messageService: MessageService
     ) { }
 
+    // ─────────────────────────────────────────
+    // INIT
+    // ─────────────────────────────────────────
+
     ngOnInit(): void {
-        // Skip HTTP calls during SSR — this page needs browser auth token
+
+        this.initChartOptions();
+
         if (isPlatformBrowser(this.platformId)) {
             this.loadFromApi();
         }
     }
 
-    loadFromApi(): void {
-        const hid = (this.authService.getCurrentUser() as any)?.hospitalId;
+    // ─────────────────────────────────────────
+    // CHART OPTIONS
+    // ─────────────────────────────────────────
 
-        // 1. Fetch Aggregates from Inventory Turnover Report
-        this.pharmacyService.getInventoryTurnoverReport(hid).subscribe({
-            next: (res: any) => {
-                const data = res?.data || res || {};
-                if (data.weekly_sales || data.weekly_revenue) {
-                    this.weeklySales = data.weekly_sales ?? data.weekly_revenue;
-                }
-                if (data.monthly_sales || data.monthly_revenue) {
-                    this.monthlySales = data.monthly_sales ?? data.monthly_revenue;
-                }
-                if (data.total_revenue || data.total_value) {
-                    this.totalRevenue = data.total_revenue ?? data.total_value;
+    initChartOptions(): void {
+
+        this.barChartOptions = {
+
+            responsive: true,
+            maintainAspectRatio: false,
+
+            plugins: {
+
+                legend: {
+                    display: false
+                },
+
+                tooltip: {
+                    backgroundColor: '#111827',
+                    titleColor: '#ffffff',
+                    bodyColor: '#ffffff',
+                    padding: 12,
+                    cornerRadius: 8,
+
+                    callbacks: {
+                        label: (ctx: any) =>
+                            ` Rs ${ctx.parsed.y?.toLocaleString()}`
+                    }
                 }
             },
-            error: () => {}
-        });
 
-        // 2. Try daily sales report — may contain transaction data and today's sales
-        this.pharmacyService.getDailySalesReport(hid).subscribe({
-            next: (res: any) => {
-                const data = res?.data || res || {};
-                if (data.total_sales || data.today_sales || data.total_amount) {
-                    this.todaySales = data.total_sales ?? data.today_sales ?? data.total_amount;
+            layout: {
+                padding: {
+                    top: 10,
+                    right: 10,
+                    left: 0,
+                    bottom: 0
                 }
-                const txns = data.transactions || data.items || data.sales;
-                if (Array.isArray(txns) && txns.length > 0) {
-                    this.processTransactions(txns);
-                    return;
-                }
-                // If no transactions, fall through to sales history endpoint
-                this.loadSalesHistory(hid);
             },
-            error: () => this.loadSalesHistory(hid)
-        });
+
+            scales: {
+
+                x: {
+
+                    grid: {
+                        display: false,
+                        drawBorder: false
+                    },
+
+                    border: {
+                        display: false
+                    },
+
+                    ticks: {
+                        color: '#9ca3af',
+
+                        font: {
+                            size: 11,
+                            weight: '500'
+                        }
+                    }
+                },
+
+                y: {
+
+                    display: false,
+
+                    beginAtZero: true,
+
+                    grid: {
+                        display: false,
+                        drawBorder: false
+                    },
+
+                    border: {
+                        display: false
+                    }
+                }
+            }
+        };
+
+        this.donutChartOptions = {
+
+            responsive: true,
+            maintainAspectRatio: false,
+
+            cutout: '72%',
+
+            plugins: {
+
+                legend: {
+                    display: false
+                },
+
+                tooltip: {
+                    callbacks: {
+                        label: (ctx: any) =>
+                            ` Rs ${ctx.parsed?.toLocaleString()}`
+                    }
+                }
+            }
+        };
     }
+
+    // ─────────────────────────────────────────
+    // LOAD API DATA
+    // ─────────────────────────────────────────
+
+    loadFromApi(): void {
+
+        const hid =
+            (this.authService.getCurrentUser() as any)?.hospitalId;
+
+        // OVERVIEW REPORT
+        this.pharmacyService
+            .getInventoryTurnoverReport(hid)
+            .subscribe({
+
+                next: (res: any) => {
+
+                    const data = res?.data || res || {};
+
+                    this.totalRevenue =
+                        data.total_revenue ??
+                        data.total_value ??
+                        0;
+
+                    this.unitsSold =
+                        data.units_sold ??
+                        data.total_qty ??
+                        0;
+
+                    this.invoiceCount =
+                        data.invoice_count ??
+                        data.total_invoices ??
+                        0;
+
+                    this.avgOrderValue =
+                        this.invoiceCount
+                            ? this.totalRevenue / this.invoiceCount
+                            : 0;
+
+                    this.buildChartsFromData(data);
+                },
+
+                error: () => { }
+            });
+
+        // DAILY SALES
+        this.pharmacyService
+            .getDailySalesReport(hid)
+            .subscribe({
+
+                next: (res: any) => {
+
+                    const data = res?.data || res || {};
+
+                    const txns =
+                        data.transactions ||
+                        data.items ||
+                        data.sales;
+
+                    if (Array.isArray(txns) && txns.length) {
+
+                        this.processTransactions(txns);
+
+                    } else {
+
+                        this.loadSalesHistory(hid);
+                    }
+                },
+
+                error: () => this.loadSalesHistory(hid)
+            });
+
+        // TOP PRODUCTS
+        this.pharmacyService
+            .getTopSellingProducts?.(hid)
+            ?.subscribe({
+
+                next: (res: any) => {
+
+                    const items =
+                        res?.data ||
+                        res?.products ||
+                        (Array.isArray(res) ? res : []);
+
+                    this.allProducts = items.map((p: any) => ({
+
+                        name:
+                            p.name ||
+                            p.medicine_name ||
+                            p.product_name ||
+                            'Unknown',
+
+                        qtySold:
+                            p.qty_sold ||
+                            p.quantity ||
+                            0,
+
+                        revenue:
+                            p.revenue ||
+                            p.total_revenue ||
+                            0,
+
+                        profit:
+                            p.profit ||
+                            p.net_profit ||
+                            0
+                    }));
+
+                    this.filteredProducts = [...this.allProducts];
+
+                    this.updateProductPage();
+                },
+
+                error: () => { }
+            });
+    }
+
+    // ─────────────────────────────────────────
+    // LOAD SALES HISTORY
+    // ─────────────────────────────────────────
 
     private loadSalesHistory(hid?: string): void {
-        // 3. Try POS sales history endpoint (contains actual sale records with dates & prices)
-        this.posService.getSalesHistory(hid).subscribe({
-            next: (res: any) => {
-                const items = res?.sales || res?.history || res?.data || (Array.isArray(res) ? res : []);
-                if (Array.isArray(items) && items.length > 0) {
-                    this.processTransactions(items);
-                }
-            },
-            error: () => {}
-        });
+
+        this.posService
+            .getSalesHistory(hid)
+            .subscribe({
+
+                next: (res: any) => {
+
+                    const items =
+                        res?.sales ||
+                        res?.history ||
+                        res?.data ||
+                        (Array.isArray(res) ? res : []);
+
+                    if (Array.isArray(items) && items.length) {
+                        this.processTransactions(items);
+                    }
+                },
+
+                error: () => { }
+            });
     }
+
+    // ─────────────────────────────────────────
+    // PROCESS TRANSACTIONS
+    // ─────────────────────────────────────────
 
     processTransactions(items: any[]): void {
+
         this.allSales = items.map((item: any) => ({
-            id:           item.id || item.product_id || item.sale_id,
-            medicineName: item.name || item.medicine_name || item.product_name || 'Unknown',
-            salt:         item.generic_name || item.salt || '',
-            customer:     item.customer || item.patient_name || 'Walk-in',
-            quantity:     item.quantity || item.qty || 1,
-            unitPrice:    item.selling_price || item.unit_price || item.price || 0,
-            totalAmount:  item.total_amount || item.total ||
-                          ((item.quantity || 1) * (item.selling_price || item.unit_price || item.price || 0)),
-            date: new Date(item.sale_date || item.created_at || item.date || Date.now())
+
+            id:
+                item.id ||
+                item.sale_id,
+
+            medicineName:
+                item.name ||
+                item.medicine_name ||
+                item.product_name ||
+                'Unknown',
+
+            quantity:
+                item.quantity ||
+                item.qty ||
+                1,
+
+            unitPrice:
+                item.selling_price ||
+                item.unit_price ||
+                item.price ||
+                0,
+
+            totalAmount:
+                item.total_amount ||
+                item.total ||
+                (
+                    (item.quantity || 1) *
+                    (item.selling_price || item.unit_price || 0)
+                ),
+
+            paymentMethod:
+                item.payment_method ||
+                item.payment_type ||
+                'cash',
+
+            date:
+                new Date(
+                    item.sale_date ||
+                    item.created_at ||
+                    item.date ||
+                    Date.now()
+                )
         }));
 
-        this.refreshMetrics();
-        this.applyFilter();
+        this.buildChartsFromTransactions();
     }
 
-    refreshMetrics(): void {
-        if (!this.todaySales) this.todaySales = this.calculateTodaySales();
-        if (!this.weeklySales) this.weeklySales = this.calculateWeeklySales();
-        if (!this.monthlySales) this.monthlySales = this.calculateMonthlySales();
-        if (!this.totalRevenue) this.totalRevenue = this.calculateTotalRevenue();
+    // ─────────────────────────────────────────
+    // BUILD CHARTS FROM API DATA
+    // ─────────────────────────────────────────
+
+    buildChartsFromData(data: any): void {
+
+        // SALES OVER TIME
+        if (
+            data.daily_sales &&
+            Array.isArray(data.daily_sales)
+        ) {
+
+            this.salesOverTimeData = {
+
+                labels: data.daily_sales.map(
+                    (d: any) => d.date || d.label
+                ),
+
+                datasets: [{
+                    data: data.daily_sales.map(
+                        (d: any) => d.total || d.amount || 0
+                    ),
+
+                    backgroundColor: '#6366f1',
+
+                    borderRadius: 10,
+                    borderSkipped: false,
+
+                    barThickness: 28,
+                    maxBarThickness: 32,
+
+                    categoryPercentage: 0.7,
+                    barPercentage: 0.9
+                }]
+            };
+        }
+
+        // PAYMENT METHOD
+        if (
+            data.payment_breakdown &&
+            Array.isArray(data.payment_breakdown)
+        ) {
+
+            this.paymentMethodData = {
+
+                labels: data.payment_breakdown.map(
+                    (p: any) => p.method || p.label
+                ),
+
+                datasets: [{
+                    data: data.payment_breakdown.map(
+                        (p: any) => p.amount || p.total || 0
+                    ),
+
+                    backgroundColor: [
+                        '#6366f1',
+                        '#22c55e',
+                        '#f59e0b',
+                        '#3b82f6'
+                    ],
+
+                    borderWidth: 0
+                }]
+            };
+        }
     }
 
-    onPeriodChange(): void {
-        this.customRange = [];
-        this.applyFilter();
+    // ─────────────────────────────────────────
+    // BUILD CHARTS FROM TRANSACTIONS
+    // ─────────────────────────────────────────
+
+    buildChartsFromTransactions(): void {
+
+        // SALES OVER TIME
+
+        const byDate: Record<string, number> = {};
+
+        for (const s of this.allSales) {
+
+            const key =
+                new Date(s.date).toLocaleDateString(
+                    'en-US',
+                    {
+                        month: 'short',
+                        day: 'numeric'
+                    }
+                );
+
+            byDate[key] =
+                (byDate[key] || 0) +
+                (s.totalAmount || 0);
+        }
+
+        const sortedDates =
+            Object.keys(byDate).slice(-14);
+
+        this.salesOverTimeData = {
+
+            labels: sortedDates,
+
+            datasets: [{
+                data: sortedDates.map(d => byDate[d]),
+
+                backgroundColor: '#6366f1',
+
+                borderRadius: 10,
+                borderSkipped: false,
+
+                barThickness: 28,
+                maxBarThickness: 32,
+
+                categoryPercentage: 0.7,
+                barPercentage: 0.9
+            }]
+        };
+
+        // PAYMENT METHOD
+
+        const byMethod: Record<string, number> = {};
+
+        for (const s of this.allSales) {
+
+            const m =
+                (s.paymentMethod || 'cash')
+                    .toLowerCase();
+
+            byMethod[m] =
+                (byMethod[m] || 0) +
+                (s.totalAmount || 0);
+        }
+
+        this.paymentMethodData = {
+
+            labels: Object.keys(byMethod).map(
+                m =>
+                    m.charAt(0).toUpperCase() +
+                    m.slice(1)
+            ),
+
+            datasets: [{
+                data: Object.values(byMethod),
+
+                backgroundColor: [
+                    '#6366f1',
+                    '#22c55e',
+                    '#f59e0b',
+                    '#3b82f6'
+                ],
+
+                borderWidth: 0
+            }]
+        };
+    }
+
+    // ─────────────────────────────────────────
+    // PAYMENT %
+    // ─────────────────────────────────────────
+
+    getPaymentPct(i: number): string {
+
+        const vals: number[] =
+            this.paymentMethodData?.datasets?.[0]?.data || [];
+
+        const total =
+            vals.reduce((a: number, b: number) => a + b, 0);
+
+        if (!total) return '0';
+
+        return ((vals[i] / total) * 100).toFixed(0);
+    }
+
+    // ─────────────────────────────────────────
+    // DATE PRESETS
+    // ─────────────────────────────────────────
+
+    applyPreset(preset: string): void {
+
+        this.selectedPreset = preset;
+
+        const now = new Date();
+
+        if (preset === 'last7') {
+
+            this.fromDate = new Date(now);
+            this.fromDate.setDate(now.getDate() - 7);
+
+            this.toDate = new Date(now);
+
+        } else if (preset === 'last30') {
+
+            this.fromDate = new Date(now);
+            this.fromDate.setDate(now.getDate() - 30);
+
+            this.toDate = new Date(now);
+
+        } else if (preset === 'thisMonth') {
+
+            this.fromDate =
+                new Date(now.getFullYear(), now.getMonth(), 1);
+
+            this.toDate = new Date(now);
+
+        } else if (preset === 'lastMonth') {
+
+            this.fromDate =
+                new Date(now.getFullYear(), now.getMonth() - 1, 1);
+
+            this.toDate =
+                new Date(now.getFullYear(), now.getMonth(), 0);
+        }
     }
 
     onCustomRangeChange(): void {
-        if (this.customRange?.[0] && this.customRange?.[1]) {
-            this.applyFilter();
-        }
+        this.selectedPreset = '';
     }
 
-    applyFilter(): void {
-        const now = new Date();
-        let filtered = [...(this.allSales || [])];
+    // ─────────────────────────────────────────
+    // DATE RANGE LABEL
+    // ─────────────────────────────────────────
 
-        if (this.selectedOption === 'today') {
-            filtered = filtered.filter(s => new Date(s.date).toDateString() === now.toDateString());
-        } else if (this.selectedOption === 'week') {
-            const weekAgo = new Date(now); weekAgo.setDate(now.getDate() - 7);
-            filtered = filtered.filter(s => new Date(s.date) >= weekAgo);
-        } else if (this.selectedOption === 'month') {
-            const monthAgo = new Date(now); monthAgo.setMonth(now.getMonth() - 1);
-            filtered = filtered.filter(s => new Date(s.date) >= monthAgo);
-        } else if (this.selectedOption === 'custom') {
-            if (this.customRange?.[0] && this.customRange?.[1]) {
-                const start = new Date(this.customRange[0]);
-                const end   = new Date(this.customRange[1]); end.setHours(23, 59, 59, 999);
-                filtered = filtered.filter(s => { const d = new Date(s.date); return d >= start && d <= end; });
-            }
-        }
+    get dateRangeLabel(): string {
 
-        if (this.searchTerm?.trim()) {
-            filtered = filtered.filter(s =>
-                s.medicineName.toLowerCase().includes(this.searchTerm.trim().toLowerCase())
+        if (!this.fromDate || !this.toDate) return '';
+
+        const fmt = (d: Date) =>
+            d.toLocaleDateString(
+                'en-US',
+                {
+                    month: 'short',
+                    day: 'numeric'
+                }
             );
-        }
-        this.sales = filtered;
+
+        return `${fmt(this.fromDate)} – ${fmt(this.toDate)}`;
     }
 
-    onSearch(): void { this.applyFilter(); }
+    // ─────────────────────────────────────────
+    // PRODUCT SEARCH
+    // ─────────────────────────────────────────
 
-    calculateTodaySales(): number {
-        const now = new Date();
-        return (this.allSales || [])
-            .filter(s => new Date(s.date).toDateString() === now.toDateString())
-            .reduce((sum, s) => sum + (s.totalAmount || 0), 0);
+    onProductSearch(): void {
+
+        const q =
+            this.productSearch
+                .trim()
+                .toLowerCase();
+
+        this.filteredProducts = q
+            ? this.allProducts.filter(
+                p => p.name.toLowerCase().includes(q)
+            )
+            : [...this.allProducts];
+
+        this.productFirst = 0;
+
+        this.updateProductPage();
     }
 
-    calculateWeeklySales(): number {
-        const weekAgo = new Date(); weekAgo.setDate(weekAgo.getDate() - 7);
-        return (this.allSales || [])
-            .filter(s => new Date(s.date) >= weekAgo)
-            .reduce((sum, s) => sum + (s.totalAmount || 0), 0);
+    onProductPageChange(event: any): void {
+
+        this.productFirst = event.first;
+        this.productRows = event.rows;
+
+        this.updateProductPage();
     }
 
-    calculateMonthlySales(): number {
-        const monthAgo = new Date(); monthAgo.setMonth(monthAgo.getMonth() - 1);
-        return (this.allSales || [])
-            .filter(s => new Date(s.date) >= monthAgo)
-            .reduce((sum, s) => sum + (s.totalAmount || 0), 0);
+    updateProductPage(): void {
+
+        this.pagedProducts =
+            this.filteredProducts.slice(
+                this.productFirst,
+                this.productFirst + this.productRows
+            );
     }
 
-    calculateTotalRevenue(): number {
-        return (this.allSales || []).reduce((sum, s) => sum + (s.totalAmount || 0), 0);
+    // ─────────────────────────────────────────
+    // PRODUCT TOTALS
+    // ─────────────────────────────────────────
+
+    get productTotals() {
+
+        return this.filteredProducts.reduce(
+
+            (acc, p) => ({
+
+                qty:
+                    acc.qty + (p.qtySold || 0),
+
+                revenue:
+                    acc.revenue + (p.revenue || 0),
+
+                profit:
+                    acc.profit + (p.profit || 0)
+
+            }),
+
+            {
+                qty: 0,
+                revenue: 0,
+                profit: 0
+            }
+        );
     }
 
-    /** Week-over-week growth % (this week vs previous week) */
-    get weeklyGrowth(): number {
-        const now = new Date();
-        const weekAgo = new Date(now); weekAgo.setDate(now.getDate() - 7);
-        const twoWeeksAgo = new Date(now); twoWeeksAgo.setDate(now.getDate() - 14);
-
-        const thisWeek = (this.allSales || [])
-            .filter(s => new Date(s.date) >= weekAgo)
-            .reduce((sum, s) => sum + (s.totalAmount || 0), 0);
-
-        const prevWeek = (this.allSales || [])
-            .filter(s => new Date(s.date) >= twoWeeksAgo && new Date(s.date) < weekAgo)
-            .reduce((sum, s) => sum + (s.totalAmount || 0), 0);
-
-        if (prevWeek === 0) return thisWeek > 0 ? 100 : 0;
-        return Math.round(((thisWeek - prevWeek) / prevWeek) * 100);
-    }
-
-    /** Month-over-month growth % (this month vs previous month) */
-    get monthlyGrowth(): number {
-        const now = new Date();
-        const monthAgo = new Date(now); monthAgo.setMonth(now.getMonth() - 1);
-        const twoMonthsAgo = new Date(now); twoMonthsAgo.setMonth(now.getMonth() - 2);
-
-        const thisMonth = (this.allSales || [])
-            .filter(s => new Date(s.date) >= monthAgo)
-            .reduce((sum, s) => sum + (s.totalAmount || 0), 0);
-
-        const prevMonth = (this.allSales || [])
-            .filter(s => new Date(s.date) >= twoMonthsAgo && new Date(s.date) < monthAgo)
-            .reduce((sum, s) => sum + (s.totalAmount || 0), 0);
-
-        if (prevMonth === 0) return thisMonth > 0 ? 100 : 0;
-        return Math.round(((thisMonth - prevMonth) / prevMonth) * 100);
-    }
+    // ─────────────────────────────────────────
+    // FORMAT CURRENCY
+    // ─────────────────────────────────────────
 
     formatRs(amount: number): string {
-        return `Rs ${(amount || 0).toFixed(2)}`;
+
+        return `Rs ${(amount || 0).toLocaleString(
+            'en-US',
+            {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            }
+        )}`;
     }
 
+    // ─────────────────────────────────────────
+    // EXPORT
+    // ─────────────────────────────────────────
+
     exportToExcel(): void {
-        if (!this.sales || this.sales.length === 0) {
-            this.messageService.add({ severity: 'warn', summary: 'Nothing to export', detail: 'No transactions found', life: 3000 });
+
+        this.messageService.add({
+            severity: 'info',
+            summary: 'Export',
+            detail: 'No data to export yet',
+            life: 3000
+        });
+    }
+
+    exportProductsToExcel(): void {
+
+        if (!this.filteredProducts.length) {
+
+            this.messageService.add({
+                severity: 'warn',
+                summary: 'Nothing to export',
+                detail: 'No products found',
+                life: 3000
+            });
+
             return;
         }
+
         this.isExporting = true;
+
         try {
-            const exportData = this.sales.map(t => ({
-                'Date': new Date(t.date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: '2-digit' }),
-                'Medicine Name': t.medicineName || '-',
-                'Quantity Sold': t.quantity ?? 0,
-                'Unit Price (Rs)': t.unitPrice ?? 0,
-                'Total Amount (Rs)': t.totalAmount ?? 0
+
+            const rows = this.filteredProducts.map(p => ({
+
+                'Product': p.name,
+                'Qty Sold': p.qtySold,
+                'Revenue (Rs)': p.revenue,
+                'Profit (Rs)': p.profit
             }));
-            const ws = XLSX.utils.json_to_sheet(exportData);
-            ws['!cols'] = Object.keys(exportData[0]).map(key => ({
-                wch: Math.max(key.length, ...exportData.map(r => String((r as any)[key] ?? '').length)) + 2
-            }));
-            const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, 'Sales');
-            XLSX.writeFile(wb, `sales_${this.selectedOption}_${new Date().toISOString().split('T')[0]}.xlsx`);
-            this.messageService.add({ severity: 'success', summary: 'Exported', detail: `${exportData.length} row(s) exported`, life: 3000 });
+
+            const ws =
+                XLSX.utils.json_to_sheet(rows);
+
+            ws['!cols'] =
+                Object.keys(rows[0]).map(k => ({
+                    wch:
+                        Math.max(
+                            k.length,
+                            ...rows.map(
+                                r => String((r as any)[k] ?? '').length
+                            )
+                        ) + 2
+                }));
+
+            const wb =
+                XLSX.utils.book_new();
+
+            XLSX.utils.book_append_sheet(
+                wb,
+                ws,
+                'Products'
+            );
+
+            XLSX.writeFile(
+                wb,
+                `products_report_${new Date()
+                    .toISOString()
+                    .split('T')[0]}.xlsx`
+            );
+
+            this.messageService.add({
+                severity: 'success',
+                summary: 'Exported',
+                detail: `${rows.length} products exported`,
+                life: 3000
+            });
+
         } catch {
-            this.messageService.add({ severity: 'error', summary: 'Export failed', detail: 'Something went wrong', life: 3000 });
+
+            this.messageService.add({
+                severity: 'error',
+                summary: 'Export failed',
+                detail: 'Something went wrong',
+                life: 3000
+            });
+
         } finally {
+
             this.isExporting = false;
         }
     }

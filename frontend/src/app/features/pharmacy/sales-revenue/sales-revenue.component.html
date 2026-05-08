@@ -1,148 +1,229 @@
 <p-toast></p-toast>
 
 <div class="layout">
-
-    <!-- SIDEBAR -->
     <app-pharmacy-sidebar></app-pharmacy-sidebar>
 
-    <!-- MAIN CONTENT -->
     <main class="main-content">
+
+        <!-- PAGE HEADER -->
         <div class="page-header">
-            <h2>Sales & Revenue</h2>
-            <p class="subtitle">Monitor pharmacy performance and revenue trends</p>
+            <div class="page-header-left">
+                <h2>Sales & Revenue</h2>
+                <p class="subtitle">Monitor pharmacy performance and revenue trends</p>
+            </div>
+            <button (click)="exportToExcel()" class="export-btn" [disabled]="isExporting">
+                <i class="pi" [ngClass]="isExporting ? 'pi-spin pi-spinner' : 'pi-download'"></i>
+                {{ isExporting ? 'Exporting...' : 'Export Excel' }}
+            </button>
         </div>
 
-        <!-- Summary Cards -->
-        <div class="summary-grid">
-            <div class="summary-card">
-                <div class="card-inner">
-                    <div class="card-left">
-                        <div class="card-icon today-icon"><i class="pi pi-clock"></i></div>
-                        <div class="card-info">
-                            <div class="card-label">Today's Sales</div>
-                            <div class="card-value">{{ formatRs(todaySales) }}</div>
-                            <div class="card-sub">Today</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="summary-card">
-                <div class="card-inner">
-                    <div class="card-left">
-                        <div class="card-icon weekly-icon"><i class="pi pi-shopping-cart"></i></div>
-                        <div class="card-info">
-                            <div class="card-label">Weekly Sales</div>
-                            <div class="card-value">{{ formatRs(weeklySales) }}</div>
-                            <div class="card-sub">Last 7 days</div>
-                        </div>
-                    </div>
-                    <div class="card-badge" [ngClass]="weeklyGrowth >= 0 ? 'growth-badge' : 'decline-badge'" *ngIf="totalRevenue > 0">
-                        <i class="pi" [ngClass]="weeklyGrowth >= 0 ? 'pi-arrow-up' : 'pi-arrow-down'"></i>
-                        {{ weeklyGrowth >= 0 ? '+' : '' }}{{ weeklyGrowth }}%
-                    </div>
-                </div>
-            </div>
-            <div class="summary-card">
-                <div class="card-inner">
-                    <div class="card-left">
-                        <div class="card-icon monthly-icon"><i class="pi pi-calendar"></i></div>
-                        <div class="card-info">
-                            <div class="card-label">Monthly Sales</div>
-                            <div class="card-value">{{ formatRs(monthlySales) }}</div>
-                            <div class="card-sub">This month</div>
-                        </div>
-                    </div>
-                    <div class="card-badge" [ngClass]="monthlyGrowth >= 0 ? 'growth-badge' : 'decline-badge'" *ngIf="totalRevenue > 0">
-                        <i class="pi" [ngClass]="monthlyGrowth >= 0 ? 'pi-arrow-up' : 'pi-arrow-down'"></i>
-                        {{ monthlyGrowth >= 0 ? '+' : '' }}{{ monthlyGrowth }}%
-                    </div>
-                </div>
-            </div>
-            <div class="summary-card total-card">
-                <div class="card-inner">
-                    <div class="card-left">
-                        <div class="card-info">
-                            <div class="card-label">Total Revenue</div>
-                            <div class="card-value">{{ formatRs(totalRevenue) }}</div>
-                            <div class="card-sub">All time</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
+        <!-- TAB BAR -->
+        <div class="tab-bar">
+            <button class="tab-btn" [class.active]="activeTab === 'overview'" (click)="activeTab = 'overview'">
+                Overview
+            </button>
+            <button class="tab-btn" [class.active]="activeTab === 'products'" (click)="activeTab = 'products'">
+                Products
+            </button>
         </div>
 
-        <!-- Filter Row -->
-        <div class="filter-section">
-            <span class="filter-label">Time Period</span>
-            <div class="filter-buttons">
-                <button *ngFor="let opt of options" class="filter-btn" [class.active]="selectedOption === opt.value"
-                    (click)="selectedOption = opt.value; onPeriodChange()">
-                    {{ opt.label }}
-                </button>
-            </div>
-            <span class="search-bar">
-                <i class="pi pi-search"></i>
-                <input pInputText type="text" [(ngModel)]="searchTerm" placeholder="Search by medicine..."
-                    class="search-input" (input)="onSearch()" />
-            </span>
-        </div>
+        <!-- ══════════════════════════════
+         TAB 1 — OVERVIEW
+    ══════════════════════════════ -->
+        <div *ngIf="activeTab === 'overview'">
 
-        <!-- Custom Range Picker -->
-        <div *ngIf="selectedOption === 'custom'" class="calendar-row">
-            <div class="calendar-wrapper">
-                <i class="pi pi-calendar calendar-icon"></i>
-                <p-calendar [(ngModel)]="customRange" selectionMode="range" placeholder="Select start and end date"
-                    [showIcon]="false" [readonlyInput]="false" dateFormat="dd/mm/yy" (onSelect)="onCustomRangeChange()"
-                    styleClass="range-calendar">
-                </p-calendar>
-            </div>
-        </div>
-
-        <!-- Sales History Table -->
-        <div class="table-card">
-            <div class="sales-table-header">
-                <div>
-                    <h3>Sales History</h3>
-                    <span class="table-subtitle">
-                        {{ sales.length }} transactions found
-                    </span>
+            <!-- Date Filter -->
+            <div class="filter-section">
+                <div class="date-inputs">
+                    <div class="date-field">
+                        <label>From</label>
+                        <div class="calendar-wrapper" [class.focused]="fromFocused">
+                            <i class="pi pi-calendar calendar-icon"></i>
+                            <p-calendar [(ngModel)]="fromDate" dateFormat="dd/mm/yy" placeholder="Start date"
+                                [showIcon]="false" [readonlyInput]="false" styleClass="range-calendar"
+                                (onFocus)="fromFocused=true" (onBlur)="fromFocused=false">
+                            </p-calendar>
+                        </div>
+                    </div>
+                    <div class="date-field">
+                        <label>To</label>
+                        <div class="calendar-wrapper" [class.focused]="toFocused">
+                            <i class="pi pi-calendar calendar-icon"></i>
+                            <p-calendar [(ngModel)]="toDate" dateFormat="dd/mm/yy" placeholder="End date"
+                                [showIcon]="false" [readonlyInput]="false" styleClass="range-calendar"
+                                (onFocus)="toFocused=true" (onBlur)="toFocused=false">
+                            </p-calendar>
+                        </div>
+                    </div>
+                    <button class="update-btn" (click)="onCustomRangeChange()">Update</button>
                 </div>
-                <button (click)="exportToExcel()" class="export-btn" [disabled]="isExporting">
-                    <i class="pi" [ngClass]="isExporting ? 'pi-spin pi-spinner' : 'pi-download'"></i>
-                    {{ isExporting ? 'Exporting...' : 'Export Excel' }}
-                </button>
+                <div class="preset-buttons">
+                    <button *ngFor="let opt of presetOptions" class="filter-btn"
+                        [class.active]="selectedPreset === opt.value" (click)="applyPreset(opt.value)">
+                        {{ opt.label }}
+                    </button>
+                </div>
             </div>
 
-            <p-table [value]="sales" [responsiveLayout]="'scroll'" styleClass="sales-table">
-                <ng-template pTemplate="header">
-                    <tr>
-                        <th>DATE</th>
-                        <th>MEDICINE NAME</th>
-                        <th>QUANTITY SOLD</th>
-                        <th>UNIT PRICE</th>
-                        <th>TOTAL AMOUNT</th>
-                    </tr>
-                </ng-template>
-                <ng-template pTemplate="body" let-s>
-                    <tr>
-                        <td>{{ s.date | date:'MMM d, yyyy' }}</td>
-                        <td><strong>{{ s.medicineName }}</strong></td>
-                        <td>{{ s.quantity }} units</td>
-                        <td>{{ formatRs(s.unitPrice) }}</td>
-                        <td class="amount-cell">{{ formatRs(s.totalAmount) }}</td>
-                    </tr>
-                </ng-template>
-                <ng-template pTemplate="emptymessage">
-                    <tr>
-                        <td colspan="5">
-                            <div class="empty-state">
-                                <i class="pi pi-inbox"></i>
-                                <p>No sales found for this period</p>
+            <!-- Hint -->
+            <p class="filter-hint">
+                Figures use invoices as sales (cancelled invoices excluded). Use Update after changing dates; preset
+                buttons apply immediately.
+            </p>
+
+            <!-- Stat Cards -->
+            <div class="summary-grid">
+                <div class="summary-card">
+                    <div class="card-inner">
+                        <div class="card-left">
+                            <div class="card-icon total-rev-icon"><i class="pi pi-dollar"></i></div>
+                            <div class="card-info">
+                                <div class="card-label">Total Revenue</div>
+                                <div class="card-value">{{ formatRs(totalRevenue) }}</div>
+                                <div class="card-sub">{{ dateRangeLabel }}</div>
                             </div>
-                        </td>
-                    </tr>
-                </ng-template>
-            </p-table>
-        </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="summary-card">
+                    <div class="card-inner">
+                        <div class="card-left">
+                            <div class="card-icon invoices-icon"><i class="pi pi-receipt"></i></div>
+                            <div class="card-info">
+                                <div class="card-label">Invoices</div>
+                                <div class="card-value">{{ invoiceCount }}</div>
+                                <div class="card-sub">Non-cancelled</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="summary-card">
+                    <div class="card-inner">
+                        <div class="card-left">
+                            <div class="card-icon units-icon"><i class="pi pi-box"></i></div>
+                            <div class="card-info">
+                                <div class="card-label">Units Sold</div>
+                                <div class="card-value">{{ unitsSold }}</div>
+                                <div class="card-sub">Sum of line item quantities</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="summary-card total-card">
+                    <div class="card-inner">
+                        <div class="card-left">
+                            <div class="card-info">
+                                <div class="card-label">Avg Order Value</div>
+                                <div class="card-value">{{ formatRs(avgOrderValue) }}</div>
+                                <div class="card-sub">Revenue ÷ invoices</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Charts Row -->
+            <div class="charts-row">
+                <div class="chart-card chart-bar">
+                    <div class="chart-card-header">
+                        <h3>Sales over time</h3>
+                    </div>
+                    <div class="chart-body">
+                        <p-chart type="bar" [data]="salesOverTimeData" [options]="barChartOptions"></p-chart>
+                    </div>
+                </div>
+                <div class="chart-card chart-donut">
+                    <div class="chart-card-header">
+                        <h3>Payment method</h3>
+                    </div>
+                    <div class="chart-body donut-body">
+                        <p-chart type="doughnut" [data]="paymentMethodData" [options]="donutChartOptions"></p-chart>
+                        <div class="donut-legend" *ngIf="paymentMethodData?.labels?.length">
+                            <div class="legend-item" *ngFor="let lbl of paymentMethodData.labels; let i = index">
+                                <span class="legend-dot"
+                                    [style.background]="paymentMethodData.datasets[0].backgroundColor[i]"></span>
+                                <span class="legend-label">{{ lbl }}</span>
+                                <span class="legend-pct">{{ getPaymentPct(i) }}%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div><!-- /overview -->
+
+        <!-- ══════════════════════════════
+         TAB 2 — PRODUCTS REPORT
+    ══════════════════════════════ -->
+        <div *ngIf="activeTab === 'products'">
+
+            <div class="table-card">
+                <div class="sales-table-header">
+                    <div>
+                        <h3>Top Selling Products</h3>
+                        <span class="table-subtitle">{{ filteredProducts.length }} products</span>
+                    </div>
+                    <div class="table-header-actions">
+                        <span class="search-bar">
+                            <i class="pi pi-search"></i>
+                            <input pInputText type="text" [(ngModel)]="productSearch" placeholder="Search medicine..."
+                                class="search-input" (input)="onProductSearch()" />
+                        </span>
+                        <button (click)="exportProductsToExcel()" class="export-btn" [disabled]="isExporting">
+                            <i class="pi" [ngClass]="isExporting ? 'pi-spin pi-spinner' : 'pi-download'"></i>
+                            {{ isExporting ? 'Exporting...' : 'Export Excel' }}
+                        </button>
+                    </div>
+                </div>
+
+                <p-table [value]="pagedProducts" styleClass="sales-table" [responsiveLayout]="'scroll'">
+                    <ng-template pTemplate="header">
+                        <tr>
+                            <th>PRODUCT</th>
+                            <th>QTY SOLD</th>
+                            <th>REVENUE</th>
+                            <th>PROFIT</th>
+                        </tr>
+                    </ng-template>
+                    <ng-template pTemplate="body" let-p>
+                        <tr>
+                            <td><strong>{{ p.name }}</strong></td>
+                            <td>{{ p.qtySold }}</td>
+                            <td class="amount-cell">{{ formatRs(p.revenue) }}</td>
+                            <td class="amount-cell">{{ formatRs(p.profit) }}</td>
+                        </tr>
+                    </ng-template>
+                    <!-- Summary totals row -->
+                    <ng-template pTemplate="footer">
+                        <tr class="totals-row">
+                            <td><strong>Totals</strong></td>
+                            <td><strong>{{ productTotals.qty }}</strong></td>
+                            <td class="amount-cell"><strong>{{ formatRs(productTotals.revenue) }}</strong></td>
+                            <td class="amount-cell"><strong>{{ formatRs(productTotals.profit) }}</strong></td>
+                        </tr>
+                    </ng-template>
+                    <ng-template pTemplate="emptymessage">
+                        <tr>
+                            <td colspan="4">
+                                <div class="empty-state">
+                                    <i class="pi pi-inbox"></i>
+                                    <p>No products found</p>
+                                </div>
+                            </td>
+                        </tr>
+                    </ng-template>
+                </p-table>
+
+                <!-- Paginator -->
+                <div class="paginator-row">
+                    <p-paginator [rows]="productRows" [totalRecords]="filteredProducts.length"
+                        [rowsPerPageOptions]="[10, 25, 50]" (onPageChange)="onProductPageChange($event)"
+                        styleClass="custom-paginator">
+                    </p-paginator>
+                </div>
+
+            </div>
+        </div><!-- /products -->
+
     </main>
 </div>

@@ -27,8 +27,17 @@
               'status-waiting':   token.status === 'waiting',
               'status-called':    token.status === 'called',
               'status-completed': token.status === 'completed',
-              'status-cancelled': token.status === 'cancelled'
-            }">{{ token.status | titlecase }}</span>
+              'status-cancelled': token.status === 'cancelled',
+              'status-skipped':   token.status === 'skipped'
+            }">
+                            {{ token.status === 'skipped' ? 'Skipped' : (token.status | titlecase) }}
+                        </span>
+                        @if (token.status === 'skipped') {
+                        <div class="skipped-notice">
+                            <i class="pi pi-exclamation-circle"></i>
+                            You were skipped. You can leave the queue if you wish.
+                        </div>
+                        }
                         <div class="mrn-display">Medical Record Number: {{ token.mrn || '-' }}</div>
                     </div>
 

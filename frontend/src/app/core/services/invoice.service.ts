@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { Invoice, InvoiceListParams, ApiResponse } from '../../shared/models/invoice.model';
+import { Invoice, InvoiceListData, InvoiceListParams, ApiResponse } from '../../shared/models/invoice.model';
 
 @Injectable({
     providedIn: 'root'
@@ -12,25 +12,15 @@ export class InvoiceService {
 
     constructor(private http: HttpClient) { }
 
-    getInvoices(params?: InvoiceListParams): Observable<ApiResponse<Invoice[]>> {
+    getInvoices(params?: InvoiceListParams): Observable<ApiResponse<InvoiceListData>> {
         let httpParams = new HttpParams();
-
         if (params) {
-            if (params.status) {
-                httpParams = httpParams.set('status', params.status);
-            }
-            if (params.search) {
-                httpParams = httpParams.set('search', params.search);
-            }
-            if (params.date_from) {
-                httpParams = httpParams.set('date_from', params.date_from);
-            }
-            if (params.date_to) {
-                httpParams = httpParams.set('date_to', params.date_to);
-            }
+            if (params.status) httpParams = httpParams.set('status', params.status);
+            if (params.search) httpParams = httpParams.set('search', params.search);
+            if (params.date_from) httpParams = httpParams.set('date_from', params.date_from);
+            if (params.date_to) httpParams = httpParams.set('date_to', params.date_to);
         }
-
-        return this.http.get<ApiResponse<Invoice[]>>(this.API, { params: httpParams });
+        return this.http.get<ApiResponse<InvoiceListData>>(this.API, { params: httpParams });
     }
 
     getInvoice(id: string): Observable<ApiResponse<Invoice>> {
@@ -45,24 +35,23 @@ export class InvoiceService {
         return this.http.put<ApiResponse<Invoice>>(`${this.API}/${id}`, payload);
     }
 
-    updateInvoiceStatus(ids: string[], newStatus: string): Observable<any> {
+    updateInvoiceStatus(ids: string[], newStatus: string): Observable<ApiResponse<any>> {
         const params = new HttpParams().set('new_status', newStatus);
-        return this.http.patch<any>(`${this.API}/status`, { ids }, { params });
+        return this.http.patch<ApiResponse<any>>(`${this.API}/status`, { ids }, { params });
     }
 
-    deleteInvoice(id: string): Observable<any> {
-        return this.http.delete(`${this.API}/${id}`);
+    deleteInvoice(id: string): Observable<ApiResponse<any>> {
+        return this.http.delete<ApiResponse<any>>(`${this.API}/${id}`);
     }
 
+    // Trash returns { success, data: [] } — plain Invoice array, NOT InvoiceListData
     getTrash(hospitalId?: string): Observable<ApiResponse<Invoice[]>> {
         let params = new HttpParams();
-        if (hospitalId) {
-            params = params.set('hospital_id', hospitalId);
-        }
+        if (hospitalId) params = params.set('hospital_id', hospitalId);
         return this.http.get<ApiResponse<Invoice[]>>(`${this.API}/trash`, { params });
     }
 
-    restoreInvoice(id: string): Observable<any> {
-        return this.http.post(`${this.API}/${id}/restore`, {});
+    restoreInvoice(id: string): Observable<ApiResponse<any>> {
+        return this.http.post<ApiResponse<any>>(`${this.API}/${id}/restore`, {});
     }
 }

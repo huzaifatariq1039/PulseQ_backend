@@ -15,7 +15,7 @@ import { TooltipModule } from 'primeng/tooltip';
 import { MessageService, ConfirmationService } from 'primeng/api';
 import { PharmacyService, AddMedicineApiRequest } from '../../../core/services/pharmacy.service';
 import { Subject } from 'rxjs';
-import { takeUntil, debounceTime, distinctUntilChanged } from 'rxjs/operators';
+import { takeUntil, debounceTime } from 'rxjs/operators';
 import { Medicine, MedicineStatus } from '../../../shared/models/medicine.model';
 import { PharmacySidebarComponent } from '../shared/components/pharmacy-sidebar/pharmacy-sidebar.component';
 import { AuthService } from '../../../core/services/auth.service';
@@ -78,9 +78,11 @@ export class InventoryComponent implements OnInit, OnDestroy {
     ngOnInit(): void {
         this.searchSubject$.pipe(
             debounceTime(300),
-            distinctUntilChanged(),
             takeUntil(this.destroy$)
-        ).subscribe(() => this.applyFilters());
+        ).subscribe(() => {
+            this.applyFilters();
+            this.cdr.markForCheck();
+        });
 
         effect(() => {
             this.medicines = this.pharmacyService.medicines();
@@ -230,6 +232,7 @@ export class InventoryComponent implements OnInit, OnDestroy {
     view(medicine: Medicine): void { this.router.navigate(['/staff/pharmacy/view', medicine.id]); }
     edit(medicine: Medicine): void { this.router.navigate(['/staff/pharmacy/edit', medicine.id]); }
     addMedicine(): void { this.router.navigate(['/staff/pharmacy/add']); }
+    goToTrash(): void { this.router.navigate(['/staff/pharmacy/trash']); }
 
     delete(medicine: Medicine): void {
         this.confirmationService.confirm({

@@ -1,167 +1,177 @@
-<div class="layout">
+<app-pharmacy-sidebar></app-pharmacy-sidebar>
+<div class="page-wrapper">
+    <div class="page-header">
+        <div class="header-left">
+            <h1>{{ isViewMode ? 'View Invoice' : (isEditMode ? 'Edit Invoice' : 'Create Invoice') }}</h1>
+            <p class="subtitle">{{ isViewMode ? 'View invoice details (read-only)' : (isEditMode ? 'Update invoice
+                details' : 'Create a new pharmacy invoice') }}</p>
+        </div>
+        <button class="btn btn-outline" (click)="cancel()">
+            <i class="pi pi-arrow-left"></i> Back
+        </button>
+    </div>
 
-    <!-- SIDEBAR -->
-    <app-pharmacy-sidebar></app-pharmacy-sidebar>
-
-    <!-- MAIN CONTENT -->
-    <main class="main-content">
-
-        <div class="create-invoice-container">
-    <div class="header-section">
-        <p-breadcrumb [model]="breadcrumbs" [home]="{ icon: 'pi pi-home' }"></p-breadcrumb>
-        <div class="header-title">
-            <h1>{{ isEditMode ? 'Edit Invoice' : 'Create Invoice' }}</h1>
+    <!-- Customer Information -->
+    <div class="form-card">
+        <div class="card-header">
+            <i class="pi pi-user card-icon"></i>
+            <h3>Customer Information</h3>
+        </div>
+        <div class="card-body">
+            <div class="form-field">
+                <label class="field-label">Customer Name <span class="required">*</span></label>
+                <p-autoComplete [(ngModel)]="customerName" [suggestions]="customerSuggestions"
+                    (completeMethod)="searchCustomer($event)" placeholder="Walk in customer" [forceSelection]="false"
+                    [disabled]="isViewMode" styleClass="w-full"></p-autoComplete>
+            </div>
         </div>
     </div>
-    <p-panel header="Customer Information" [toggleable]="true" [collapsed]="false" class="invoice-section">
-        <div class="form-group">
-            <label for="customerName" class="form-label">Customer Name *</label>
-            <p-autoComplete [(ngModel)]="customerName" [suggestions]="customerSuggestions"
-                (completeMethod)="searchCustomer($event)" field="label" placeholder="Walk in customer"
-                [forceSelection]="false" styleClass="w-full" id="customerName">
-            </p-autoComplete>
+
+    <!-- Invoice Items -->
+    <div class="form-card">
+        <div class="card-header">
+            <i class="pi pi-list card-icon"></i>
+            <h3>Invoice Items</h3>
         </div>
-    </p-panel>
-    <p-panel header="Invoice Items" [toggleable]="true" [collapsed]="false" class="invoice-section">
-        <div class="items-list">
-            @for (item of invoiceItems; let i = $index; track i) {
-            <div class="item-card">
-                <div class="item-delete">
-                    <p-button icon="pi pi-trash" [text]="true" severity="danger" (onClick)="removeItem(i)"
-                        pTooltip="Delete item" tooltipPosition="bottom">
-                    </p-button>
-                </div>
-                <div class="item-row">
-                    <div class="item-field full-width">
-                        <label class="field-label">Item {{ i + 1 }} *</label>
-                        <p-autoComplete [(ngModel)]="item.product_name" placeholder="Select an option"
-                            [forceSelection]="false" (onSelect)="onItemSelected(item)" styleClass="w-full">
-                        </p-autoComplete>
+        <div class="card-body">
+            <div class="items-list">
+                @for (item of invoiceItems; let i = $index; track i) {
+                <div class="item-card">
+                    <div class="item-header">
+                        <span class="item-label">Item {{ i + 1 }}</span>
+                        <button class="icon-btn delete" (click)="removeItem(i)" pTooltip="Remove item"
+                            tooltipPosition="bottom">
+                            <i class="pi pi-trash"></i>
+                        </button>
+                    </div>
+                    <div class="item-body">
+                        <div class="form-field full-width">
+                            <label class="field-label">Medicine Name <span class="required">*</span></label>
+                            <p-autoComplete [(ngModel)]="item.product_name" placeholder="Select or type medicine"
+                                [forceSelection]="false" (onSelect)="onItemSelected(item)" [disabled]="isViewMode"
+                                styleClass="w-full"></p-autoComplete>
+                        </div>
+                        <div class="field-grid">
+                            <div class="form-field">
+                                <label class="field-label">Quantity</label>
+                                <p-inputNumber [(ngModel)]="item.quantity" [min]="0" [disabled]="isViewMode"
+                                    (ngModelChange)="recalculate()"></p-inputNumber>
+                            </div>
+                            <div class="form-field">
+                                <label class="field-label">Unit Price (Rs.)</label>
+                                <p-inputNumber [(ngModel)]="item.unit_price" prefix="Rs. " [min]="0"
+                                    [minFractionDigits]="2" [maxFractionDigits]="2" [disabled]="isViewMode"
+                                    (ngModelChange)="recalculate()"></p-inputNumber>
+                            </div>
+                            <div class="form-field">
+                                <label class="field-label">Discount (Rs.)</label>
+                                <p-inputNumber [(ngModel)]="item.discount" prefix="Rs. " [min]="0"
+                                    [minFractionDigits]="2" [maxFractionDigits]="2" [disabled]="isViewMode"
+                                    (ngModelChange)="recalculate()"></p-inputNumber>
+                            </div>
+                        </div>
                     </div>
                 </div>
-                <div class="item-row">
-                    <div class="item-field">
-                        <label class="field-label">Quantity</label>
-                        <p-inputNumber [(ngModel)]="item.quantity" [min]="0"
-                            (ngModelChange)="recalculate()"></p-inputNumber>
-                    </div>
-                    <div class="item-field">
-                        <label class="field-label">Unit Price (Rs.)</label>
-                        <p-inputNumber [(ngModel)]="item.unit_price" prefix="Rs. " [min]="0" [minFractionDigits]="2"
-                            [maxFractionDigits]="2" (ngModelChange)="recalculate()">
-                        </p-inputNumber>
-                    </div>
-                    <div class="item-field">
-                        <label class="field-label">Item Discount (Rs.)</label>
-                        <p-inputNumber [(ngModel)]="item.discount" prefix="Rs. " [min]="0" [minFractionDigits]="2"
-                            [maxFractionDigits]="2" (ngModelChange)="recalculate()">
-                        </p-inputNumber>
-                    </div>
-                </div>
-                <div class="item-row">
-                    <div class="item-field full-width">
-                        <label class="field-label">Total (Rs.)</label>
-                        <p-inputNumber [(ngModel)]="item.total" [readonly]="true" prefix="Rs. " [minFractionDigits]="2"
-                            [maxFractionDigits]="2">
-                        </p-inputNumber>
-                    </div>
-                </div>
+                }
+                <button class="add-item-btn" (click)="addItem()">
+                    <i class="pi pi-plus"></i> Add Another Item
+                </button>
             </div>
-            }
-            <div class="add-item-container">
-                <p-button label="Add Item" icon="pi pi-plus" [outlined]="true" (onClick)="addItem()"
-                    styleClass="add-item-btn">
-                </p-button>
-            </div>
-        </div>
-    </p-panel>
-    <p-panel header="Order Summary" [toggleable]="true" [collapsed]="false" class="invoice-section">
-        <p-table [value]="invoiceItems" styleClass="p-datatable-sm">
-            <ng-template pTemplate="header">
-                <tr>
-                    <th>Item</th>
-                    <th>Qty</th>
-                    <th>Price</th>
-                    <th>Total</th>
-                </tr>
-            </ng-template>
-            <ng-template pTemplate="body" let-rowData>
-                <tr>
-                    <td>{{ rowData.product_name || 'N/A' }}</td>
-                    <td>{{ rowData.quantity }}</td>
-                    <td>Rs. {{ rowData.unit_price | number:'1.2-2' }}</td>
-                    <td>Rs. {{ rowData.total | number:'1.2-2' }}</td>
-                </tr>
-            </ng-template>
-            <ng-template pTemplate="footer">
-                <tr>
-                    <td colspan="2">
-                        <strong>{{ invoiceItems.length }} item(s)</strong>
-                    </td>
-                    <td><strong>Subtotal</strong></td>
-                    <td><strong>Rs. {{ subtotal | number:'1.2-2' }}</strong></td>
-                </tr>
-            </ng-template>
-        </p-table>
-    </p-panel>
-    <div class="payment-section">
-        <h3>Payment Details</h3>
-        <div class="payment-row">
-            <div class="payment-field">
-                <label class="field-label">Subtotal (Rs.)</label>
-                <p-inputNumber [(ngModel)]="subtotal" [readonly]="true" [disabled]="true" prefix="Rs. "></p-inputNumber>
-            </div>
-            <div class="payment-field">
-                <label class="field-label">Tax (%)</label>
-                <p-inputNumber [(ngModel)]="taxPercent" (ngModelChange)="recalculate()"></p-inputNumber>
-            </div>
-            <div class="payment-field">
-                <label class="field-label">Discount (Rs.)</label>
-                <p-inputNumber [(ngModel)]="discount" prefix="Rs. " (ngModelChange)="recalculate()"></p-inputNumber>
-            </div>
-        </div>
-        <div class="total-amount-row">
-            <label class="field-label">Total Amount (Rs.) *</label>
-            <p-inputNumber [(ngModel)]="totalAmount" [readonly]="true" prefix="Rs. ">
-            </p-inputNumber>
-        </div>
-        <div class="payment-row">
-            <div class="payment-field">
-                <label>Payment Method *</label>
-                <p-dropdown [(ngModel)]="paymentMethod" [options]="paymentMethods" optionLabel="label"
-                    optionValue="value" placeholder="Select payment method">
-                </p-dropdown>
-            </div>
-            <div class="payment-field">
-                <label>Status *</label>
-                <p-dropdown [(ngModel)]="status" [options]="statuses" optionLabel="label" optionValue="value"
-                    placeholder="Select status">
-                </p-dropdown>
-            </div>
-        </div>
-        <div class="notes-field">
-            <label>Notes (Optional)</label>
-            <textarea pTextarea [(ngModel)]="notes" rows="4" placeholder="Add any notes or comments..."
-                class="textarea">
-      </textarea>
         </div>
     </div>
-    <div class="action-buttons">
-        <p-button [label]="isEditMode ? 'Update' : 'Create'" styleClass="p-button-warning" (onClick)="submit()"
-            [disabled]="isSubmitting" [loading]="isSubmitting">
-        </p-button>
-        @if (!isEditMode) {
-        <p-button label="Create & create another" [outlined]="true"
-            (onClick)="submitAndCreateAnother()" [disabled]="isSubmitting">
-        </p-button>
+
+    <!-- Payment & Summary -->
+    <div class="form-card">
+        <div class="card-header">
+            <i class="pi pi-credit-card card-icon"></i>
+            <h3>Payment & Invoice Details</h3>
+        </div>
+        <div class="card-body">
+            <!-- Summary Box -->
+            <div class="summary-box">
+                <div class="summary-row">
+                    <span>Subtotal</span>
+                    <span class="summary-val">Rs. {{ subtotal | number:'1.2-2' }}</span>
+                </div>
+                <div class="summary-row">
+                    <span>Tax ({{ taxPercent }}%)</span>
+                    <span class="summary-val">Rs. {{ (subtotal * (taxPercent / 100)) | number:'1.2-2' }}</span>
+                </div>
+                <div class="summary-row">
+                    <span>Discount</span>
+                    <span class="summary-val">Rs. {{ discount | number:'1.2-2' }}</span>
+                </div>
+                <div class="summary-row total-row">
+                    <span>Total Amount</span>
+                    <span class="total-amount">Rs. {{ totalAmount | number:'1.2-2' }}</span>
+                </div>
+            </div>
+
+            <!-- Tax & Discount -->
+            <div class="field-grid two-col">
+                <div class="form-field">
+                    <label class="field-label">Tax Percentage (%)</label>
+                    <p-inputNumber [(ngModel)]="taxPercent" [min]="0" [max]="100" [disabled]="isViewMode"
+                        (ngModelChange)="recalculate()"></p-inputNumber>
+                </div>
+                <div class="form-field">
+                    <label class="field-label">Discount (Rs.)</label>
+                    <p-inputNumber [(ngModel)]="discount" prefix="Rs. " [min]="0" [minFractionDigits]="2"
+                        [maxFractionDigits]="2" [disabled]="isViewMode" (ngModelChange)="recalculate()"></p-inputNumber>
+                </div>
+            </div>
+
+            <!-- Payment & Status -->
+            <div class="field-grid two-col">
+                <div class="form-field">
+                    <label class="field-label">Payment Method <span class="required">*</span></label>
+                    <p-dropdown [(ngModel)]="paymentMethod" [options]="paymentMethods" optionLabel="label"
+                        optionValue="value" placeholder="Select payment method" [disabled]="isViewMode"></p-dropdown>
+                </div>
+                <div class="form-field">
+                    <label class="field-label">Invoice Status <span class="required">*</span></label>
+                    <p-dropdown [(ngModel)]="status" [options]="statuses" optionLabel="label" optionValue="value"
+                        placeholder="Select status" [disabled]="isViewMode"></p-dropdown>
+                </div>
+            </div>
+
+            <!-- Notes -->
+            <div class="form-field">
+                <label class="field-label">Notes <span class="optional">(Optional)</span></label>
+                <textarea [(ngModel)]="notes" rows="3" placeholder="Add any additional notes here..."
+                    class="notes-input" [readonly]="isViewMode"></textarea>
+            </div>
+        </div>
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="form-actions">
+        @if (isViewMode) {
+        <button class="btn btn-ghost btn-lg" (click)="cancel()">
+            <i class="pi pi-arrow-left"></i> Back
+        </button>
+        } @else if (isEditMode) {
+        <button class="btn btn-primary btn-lg" (click)="submit()" [disabled]="isSubmitting">
+            <i class="pi" [class.pi-check]="!isSubmitting" [class.pi-spin]="isSubmitting"
+                [class.pi-spinner]="isSubmitting"></i>
+            Update Invoice
+        </button>
+        <button class="btn btn-ghost btn-lg" (click)="cancel()">
+            <i class="pi pi-arrow-left"></i> Back
+        </button>
+        } @else {
+        <button class="btn btn-primary btn-lg" (click)="submit()" [disabled]="isSubmitting">
+            <i class="pi" [class.pi-check]="!isSubmitting" [class.pi-spin]="isSubmitting"
+                [class.pi-spinner]="isSubmitting"></i>
+            Create Invoice
+        </button>
+        <button class="btn btn-outline btn-lg" (click)="submitAndCreateAnother()" [disabled]="isSubmitting">
+            <i class="pi pi-plus"></i> Create & Add Another
+        </button>
+        <button class="btn btn-ghost btn-lg" (click)="cancel()">
+            <i class="pi pi-arrow-left"></i> Back
+        </button>
         }
-        <p-button label="Cancel" [outlined]="true" (onClick)="cancel()">
-        </p-button>
     </div>
 </div>
-
-    </main>
-
-</div>
-
 <p-toast></p-toast>

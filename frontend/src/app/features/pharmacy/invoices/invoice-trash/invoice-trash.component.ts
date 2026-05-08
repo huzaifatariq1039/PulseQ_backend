@@ -1,28 +1,24 @@
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, DestroyRef, OnInit, inject } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { RouterModule, Router } from '@angular/router';
+import { Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { TableModule } from 'primeng/table';
-import { CardModule } from 'primeng/card';
 import { ButtonModule } from 'primeng/button';
 import { ToastModule } from 'primeng/toast';
-import { BreadcrumbModule } from 'primeng/breadcrumb';
-import { TagModule } from 'primeng/tag';
 import { TooltipModule } from 'primeng/tooltip';
+import { TagModule } from 'primeng/tag';
 import { MessageService } from 'primeng/api';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 
-import { Invoice } from '../../../../shared/models/invoice.model';
 import { InvoiceService } from '../../../../core/services/invoice.service';
+import { Invoice } from '../../../../shared/models/invoice.model';
 import { PharmacySidebarComponent } from '../../shared/components/pharmacy-sidebar/pharmacy-sidebar.component';
 
 @Component({
     selector: 'app-invoice-trash',
     standalone: true,
     imports: [
-        CommonModule, RouterModule, FormsModule,
-        TableModule, CardModule, ButtonModule,
-        ToastModule, BreadcrumbModule, TagModule, TooltipModule,
+        CommonModule, FormsModule,
+        TableModule, ButtonModule, ToastModule, TooltipModule, TagModule,
         PharmacySidebarComponent
     ],
     providers: [MessageService],
@@ -33,8 +29,6 @@ import { PharmacySidebarComponent } from '../../shared/components/pharmacy-sideb
 export class InvoiceTrashComponent implements OnInit {
     trashedInvoices: Invoice[] = [];
     loading = false;
-    breadcrumbs = [{ label: 'Invoices' }, { label: 'Trash' }];
-    private readonly destroyRef = inject(DestroyRef);
 
     constructor(
         private invoiceService: InvoiceService,
@@ -50,11 +44,11 @@ export class InvoiceTrashComponent implements OnInit {
     loadTrash(): void {
         this.loading = true;
         this.cdr.markForCheck();
-        this.invoiceService.getTrash().pipe(
-            takeUntilDestroyed(this.destroyRef)
-        ).subscribe({
+
+        this.invoiceService.getTrash().subscribe({
             next: (res) => {
-                this.trashedInvoices = res.data || [];
+                // Trash API: { success, data: { invoices: [] } } — data has invoices property
+                this.trashedInvoices = (res.data as any)?.invoices || res.data || [];
                 this.loading = false;
                 this.cdr.markForCheck();
             },
@@ -63,27 +57,19 @@ export class InvoiceTrashComponent implements OnInit {
                 this.messageService.add({
                     severity: 'error',
                     summary: 'Error',
-                    detail: err?.error?.message || 'Failed to load trashed invoices'
+                    detail: err?.error?.message || 'Failed to load trash'
                 });
                 this.cdr.markForCheck();
             }
         });
     }
 
-    restore(id: string | undefined): void {
-        if (!id) {
-            this.messageService.add({
-                severity: 'warn',
-                summary: 'Warning',
-                detail: 'Invalid invoice ID'
-            });
-            return;
-        }
+    restore(id: string): void {
         this.invoiceService.restoreInvoice(id).subscribe({
             next: () => {
                 this.messageService.add({
                     severity: 'success',
-                    summary: 'Success',
+                    summary: 'Restored',
                     detail: 'Invoice restored successfully'
                 });
                 this.loadTrash();
@@ -98,10 +84,6 @@ export class InvoiceTrashComponent implements OnInit {
         });
     }
 
-    goBack(): void {
-        this.router.navigate(['/staff/pharmacy/invoices']);
-    }
-
     getStatusSeverity(status: string): 'success' | 'secondary' | 'info' | 'warning' | 'danger' | 'contrast' | undefined {
         switch (status) {
             case 'completed': return 'success';
@@ -110,5 +92,9 @@ export class InvoiceTrashComponent implements OnInit {
             case 'cancel': return 'danger';
             default: return 'info';
         }
+    }
+
+    goBack(): void {
+        this.router.navigate(['/staff/pharmacy/invoices']);
     }
 }

@@ -394,6 +394,13 @@
     padding: 0.5rem 0.25rem;
 }
 
+.dialog-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-bottom: 0.5rem;
+}
+
 .queue-dialog :deep(.p-field) {
     margin-bottom: 1.25rem !important;
 }
@@ -419,6 +426,109 @@
 
 .queue-dialog :deep(.p-inputtextarea) {
     border-radius: 10px !important;
+}
+
+/* ── REASON FIELD ── */
+.reason-field {
+    margin-bottom: 2rem !important;
+    margin-top: 1.5rem !important;
+}
+
+.reason-field :deep(label) {
+    display: block;
+    margin-bottom: 0.5rem !important;
+    font-weight: 700 !important;
+    font-size: 0.875rem !important;
+    color: #374151 !important;
+}
+
+.reason-field :deep(textarea) {
+    width: 100% !important;
+    padding: 0.85rem 1rem !important;
+    font-size: 0.875rem !important;
+    line-height: 1.6 !important;
+    border: 1.5px solid #e5e7eb !important;
+    border-radius: 10px !important;
+    resize: vertical !important;
+    font-family: inherit !important;
+    background: #ffffff !important;
+    transition: all 0.2s ease !important;
+    min-height: 90px !important;
+}
+
+.reason-field :deep(textarea:focus) {
+    outline: none !important;
+    border-color: #2563eb !important;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1) !important;
+}
+
+/* ── DIALOG ACTIONS ── */
+.dialog-actions {
+    display: flex;
+    gap: 0.75rem;
+    margin-top: 2rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid #e5e7eb;
+}
+
+.dialog-actions button {
+    flex: 1 !important;
+    padding: 0.85rem 1.5rem !important;
+    font-size: 0.9rem !important;
+    font-weight: 700 !important;
+    border-radius: 10px !important;
+    height: auto !important;
+    min-height: 44px !important;
+    transition: all 0.2s ease !important;
+}
+
+.dialog-actions :deep(.p-button-success) {
+    background-color: #10b981 !important;
+    border-color: #10b981 !important;
+}
+
+.dialog-actions :deep(.p-button-success:hover) {
+    background-color: #059669 !important;
+    border-color: #059669 !important;
+}
+
+.dialog-actions :deep(.p-button-secondary) {
+    background-color: #6b7280 !important;
+    border-color: #6b7280 !important;
+    color: #ffffff !important;
+}
+
+.dialog-actions :deep(.p-button-secondary:hover) {
+    background-color: #4b5563 !important;
+    border-color: #4b5563 !important;
+}
+
+/* ── RE-ADD SECTION ── */
+.readd-section {
+    margin: 1.5rem 0 2rem 0;
+    padding: 1rem;
+    background: #fef3c7;
+    border-left: 4px solid #f59e0b;
+    border-radius: 8px;
+}
+
+.skipped-notice {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    color: #92400e;
+    font-weight: 600;
+    font-size: 0.875rem;
+    margin-bottom: 1rem;
+}
+
+.skipped-notice i {
+    font-size: 1.25rem;
+    color: #f59e0b;
+}
+
+.readd-full-btn {
+    width: 100% !important;
 }
 
 /* ── EMPTY MESSAGE ── */

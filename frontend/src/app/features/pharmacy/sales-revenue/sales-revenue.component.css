@@ -1,41 +1,3 @@
-/* Sales Table Header and Export Button */
-.sales-table-header {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	flex-wrap: wrap;
-	gap: 0.75rem;
-	padding: 1rem 1.25rem 0.75rem;
-	border-bottom: 1px solid #f3f4f6;
-}
-
-.export-btn {
-	display: flex;
-	align-items: center;
-	gap: 0.4rem;
-	padding: 0.5rem 1rem;
-	background: #fff;
-	color: #374151;
-	border: 1px solid #e5e7eb;
-	border-radius: 8px;
-	cursor: pointer;
-	font-weight: 600;
-	font-size: 0.875rem;
-	white-space: nowrap;
-	flex-shrink: 0;
-	transition: all 0.2s;
-}
-
-.export-btn:hover:not(:disabled) {
-	background: #f0fdf4;
-	border-color: #16a34a;
-	color: #16a34a;
-}
-
-.export-btn:disabled {
-	opacity: 0.6;
-	cursor: not-allowed;
-}
 * {
 	margin: 0;
 	padding: 0;
@@ -56,40 +18,211 @@
 	min-height: 100vh;
 }
 
+/* ── PAGE HEADER ── */
+.page-header {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	margin-bottom: 1.1rem;
+	gap: 1rem;
+	flex-wrap: wrap;
+}
+
 .page-header h2 {
 	font-size: 1.5rem;
 	font-weight: 700;
 	color: #111827;
-	margin: 0 0 0.2rem;
+	margin: 0 0 0.15rem;
 }
 
 .page-header .subtitle {
 	color: #6b7280;
 	font-size: 0.85rem;
-	margin: 0 0 1.25rem;
+	margin: 0;
 }
 
-/* SUMMARY CARDS */
-.summary-grid {
-	display: grid;
-	grid-template-columns: 1fr 1fr 1fr 1fr;
+/* ── TAB BAR ── */
+.tab-bar {
+	display: flex;
+	gap: 0;
+	border-bottom: 2px solid #e5e7eb;
+	margin-bottom: 1.25rem;
+}
+
+.tab-btn {
+	padding: 0.6rem 1.25rem;
+	background: none;
+	border: none;
+	border-bottom: 2px solid transparent;
+	margin-bottom: -2px;
+	font-size: 0.9rem;
+	font-weight: 500;
+	color: #6b7280;
+	cursor: pointer;
+	transition: color 0.15s, border-color 0.15s;
+}
+
+.tab-btn:hover {
+	color: #374151;
+}
+
+.tab-btn.active {
+	color: #2563eb;
+	border-bottom-color: #2563eb;
+	font-weight: 600;
+}
+
+/* ── DATE FILTER ── */
+.filter-section {
+	background: #fff;
+	border-radius: 10px;
+	padding: 1rem 1.25rem;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.07);
+	margin-bottom: 0.5rem;
+	display: flex;
+	flex-direction: column;
 	gap: 0.875rem;
+}
+
+.date-inputs {
+	display: flex;
+	align-items: flex-end;
+	gap: 0.75rem;
+	flex-wrap: wrap;
+}
+
+.date-field {
+	display: flex;
+	flex-direction: column;
+	gap: 0.3rem;
+	flex: 1;
+	min-width: 150px;
+}
+
+.date-field label {
+	font-size: 0.78rem;
+	font-weight: 600;
+	color: #374151;
+}
+
+.calendar-wrapper {
+	display: flex;
+	align-items: center;
+	background: #fff;
+	border: 1px solid #e5e7eb;
+	border-radius: 8px;
+	padding: 0 0.75rem;
+	height: 40px;
+	gap: 0.5rem;
+	transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.calendar-wrapper.focused,
+.calendar-wrapper:focus-within {
+	border-color: #3b82f6;
+	box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.calendar-icon {
+	color: #9ca3af;
+	font-size: 0.85rem;
+	flex-shrink: 0;
+}
+
+:host ::ng-deep .range-calendar {
+	flex: 1;
+}
+
+:host ::ng-deep .range-calendar .p-inputtext {
+	border: none !important;
+	box-shadow: none !important;
+	outline: none !important;
+	padding: 0 !important;
+	font-size: 0.875rem !important;
+	color: #374151 !important;
+	background: transparent !important;
+	width: 100% !important;
+	height: 38px !important;
+}
+
+:host ::ng-deep .range-calendar .p-inputtext::placeholder {
+	color: #9ca3af;
+}
+
+:host ::ng-deep .p-datepicker {
+	border-radius: 10px !important;
+	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12) !important;
+}
+
+:host ::ng-deep .p-datepicker .p-highlight {
+	background: #2563eb !important;
+	color: #fff !important;
+}
+
+:host ::ng-deep .p-datepicker td.p-datepicker-today>span {
+	border: 1px solid #2563eb;
+}
+
+.update-btn {
+	padding: 0 1.1rem;
+	height: 40px;
+	background: #2563eb;
+	color: #fff;
+	border: none;
+	border-radius: 8px;
+	font-size: 0.875rem;
+	font-weight: 600;
+	cursor: pointer;
+	white-space: nowrap;
+	transition: background 0.15s;
+	flex-shrink: 0;
+}
+
+.update-btn:hover {
+	background: #1d4ed8;
+}
+
+.preset-buttons {
+	display: flex;
+	gap: 0.35rem;
+	flex-wrap: wrap;
+}
+
+.filter-btn {
+	padding: 0.35rem 0.875rem;
+	border-radius: 7px;
+	border: 1px solid #e5e7eb;
+	background: #fff;
+	color: #374151;
+	font-size: 0.8rem;
+	font-weight: 500;
+	cursor: pointer;
+	transition: all 0.15s;
+	white-space: nowrap;
+}
+
+.filter-btn:hover {
+	background: #f3f4f6;
+}
+
+.filter-btn.active {
+	background: #2563eb;
+	color: #fff;
+	border-color: #2563eb;
+}
+
+.filter-hint {
+	font-size: 0.75rem;
+	color: #9ca3af;
 	margin-bottom: 1rem;
 }
 
-.search-bar {
-	display: inline-flex;
-	align-items: center;
-	gap: 0.5rem;
-	margin-left: 1.5rem;
-}
-
-.search-input {
-	padding: 0.5rem 1rem;
-	border-radius: 8px;
-	border: 1px solid #e5e7eb;
-	font-size: 0.9rem;
-	min-width: 180px;
+/* ── STAT CARDS ── */
+.summary-grid {
+	display: grid;
+	grid-template-columns: repeat(4, 1fr);
+	gap: 0.875rem;
+	margin-bottom: 1.1rem;
 }
 
 .summary-card {
@@ -123,19 +256,19 @@
 	flex-shrink: 0;
 }
 
-.weekly-icon {
+.total-rev-icon {
 	background: #eff6ff;
 	color: #3b82f6;
 }
 
-.monthly-icon {
-	background: #f0fdf4;
-	color: #22c55e;
+.invoices-icon {
+	background: #fef3c7;
+	color: #d97706;
 }
 
-.total-icon {
-	background: rgba(255, 255, 255, 0.2);
-	color: #fff;
+.units-icon {
+	background: #f0fdf4;
+	color: #22c55e;
 }
 
 .card-label {
@@ -158,27 +291,6 @@
 	margin-top: 0.1rem;
 }
 
-.card-badge {
-	font-size: 0.72rem;
-	font-weight: 700;
-	display: flex;
-	align-items: center;
-	gap: 0.2rem;
-	padding: 0.25rem 0.5rem;
-	border-radius: 20px;
-	flex-shrink: 0;
-}
-
-.growth-badge {
-	background: #f0fdf4;
-	color: #16a34a;
-}
-
-.decline-badge {
-	background: #fef2f2;
-	color: #dc2626;
-}
-
 .total-card {
 	background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
 }
@@ -195,120 +307,197 @@
 	color: rgba(255, 255, 255, 0.65);
 }
 
-/* FILTER ROW */
-.filter-section {
-	display: flex;
-	align-items: center;
+/* ── CHARTS ── */
+/* ─────────────────────────────────────────
+   CHARTS SECTION
+───────────────────────────────────────── */
+
+.charts-row {
+	display: grid;
+	grid-template-columns: 1fr 320px;
 	gap: 1rem;
-	background: #fff;
-	border-radius: 9px;
-	padding: 0.6rem 1.1rem;
-	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
-	margin-bottom: 0.875rem;
-	flex-wrap: wrap;
+	margin-bottom: 1.25rem;
 }
 
-.filter-label {
-	font-size: 0.85rem;
-	font-weight: 600;
-	color: #374151;
-	white-space: nowrap;
+.chart-card {
+	background: #ffffff;
+	border-radius: 20px;
+	border: 1px solid #eef2f7;
+
+	box-shadow:
+		0 1px 2px rgba(0, 0, 0, 0.04),
+		0 8px 24px rgba(0, 0, 0, 0.04);
+
+	overflow: hidden;
+	position: relative;
 }
 
-.filter-buttons {
-	display: flex;
-	gap: 0.35rem;
-	flex-wrap: wrap;
+.chart-card-header {
+	padding: 1.1rem 1.25rem 0;
+	border-bottom: none;
 }
 
-.filter-btn {
-	padding: 0.35rem 0.875rem;
-	border-radius: 7px;
-	border: 1px solid #e5e7eb;
-	background: #fff;
-	color: #374151;
-	font-size: 0.8rem;
-	font-weight: 500;
-	cursor: pointer;
-	transition: all 0.15s;
-	white-space: nowrap;
+.chart-card-header h3 {
+	font-size: 0.95rem;
+	font-weight: 700;
+	color: #111827;
+	margin: 0;
+	letter-spacing: -0.01em;
 }
 
-.filter-btn:hover {
-	background: #f3f4f6;
+.chart-body {
+	padding: 1rem 1.25rem 1.25rem;
+	height: 260px;
 }
 
-.filter-btn.active {
-	background: #2563eb;
-	color: #fff;
-	border-color: #2563eb;
+.chart-bar {
+	position: relative;
 }
 
-/* CALENDAR */
-.calendar-row {
-	margin-bottom: 0.875rem;
+.chart-donut {
+	position: relative;
 }
 
-.calendar-wrapper {
+/* ─────────────────────────────────────────
+   BAR CHART
+───────────────────────────────────────── */
+
+:host ::ng-deep .chart-bar p-chart,
+:host ::ng-deep .chart-bar canvas {
+	width: 100% !important;
+	height: 100% !important;
+}
+
+/* ─────────────────────────────────────────
+   DONUT CHART
+───────────────────────────────────────── */
+
+.donut-body {
 	display: flex;
 	align-items: center;
-	background: #fff;
-	border: 1px solid #e5e7eb;
-	border-radius: 9px;
-	padding: 0 1rem;
-	height: 42px;
-	gap: 0.6rem;
-	transition: border-color 0.2s, box-shadow 0.2s;
-	width: 100%;
+	justify-content: center;
+	gap: 1.25rem;
+	height: 260px;
 }
 
-.calendar-wrapper:focus-within {
-	border-color: #3b82f6;
-	box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-}
-
-.calendar-icon {
-	color: #9ca3af;
-	font-size: 0.9rem;
+:host ::ng-deep .chart-donut p-chart {
+	width: 140px !important;
 	flex-shrink: 0;
 }
 
-:host ::ng-deep .range-calendar {
+:host ::ng-deep .chart-donut canvas {
+	width: 140px !important;
+	height: 140px !important;
+}
+
+/* ─────────────────────────────────────────
+   DONUT LEGEND
+───────────────────────────────────────── */
+
+.donut-legend {
+	display: flex;
+	flex-direction: column;
+	gap: 0.65rem;
 	flex: 1;
-	width: 100%;
 }
 
-:host ::ng-deep .range-calendar .p-inputtext {
-	border: none !important;
-	box-shadow: none !important;
-	outline: none !important;
-	padding: 0 !important;
-	font-size: 0.875rem !important;
-	color: #374151 !important;
-	background: transparent !important;
-	width: 100% !important;
-	height: 40px !important;
+.legend-item {
+	display: flex;
+	align-items: center;
+	gap: 0.55rem;
+	font-size: 0.82rem;
 }
 
-:host ::ng-deep .range-calendar .p-inputtext::placeholder {
-	color: #9ca3af;
+.legend-dot {
+	width: 10px;
+	height: 10px;
+	border-radius: 50%;
+	flex-shrink: 0;
 }
 
-:host ::ng-deep .p-datepicker {
-	border-radius: 10px !important;
-	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12) !important;
+.legend-label {
+	color: #374151;
+	flex: 1;
+	font-weight: 500;
 }
 
-:host ::ng-deep .p-datepicker .p-highlight {
-	background: #2563eb !important;
-	color: #fff !important;
+.legend-pct {
+	color: #6b7280;
+	font-weight: 700;
 }
 
-:host ::ng-deep .p-datepicker td.p-datepicker-today>span {
-	border: 1px solid #2563eb;
+/* ─────────────────────────────────────────
+   CHART RENDER FIX
+───────────────────────────────────────── */
+
+:host ::ng-deep .chartjs-render-monitor {
+	animation: none !important;
 }
 
-/* SALES TABLE */
+:host ::ng-deep canvas {
+	image-rendering: auto;
+}
+
+/* ─────────────────────────────────────────
+   RESPONSIVE
+───────────────────────────────────────── */
+
+@media (max-width: 900px) {
+
+	.charts-row {
+		grid-template-columns: 1fr;
+	}
+
+	.chart-card {
+		width: 100%;
+	}
+
+	.donut-body {
+		flex-direction: column;
+		height: auto;
+		padding-top: 1rem;
+		padding-bottom: 1rem;
+	}
+
+	:host ::ng-deep .chart-donut p-chart {
+		width: 160px !important;
+	}
+
+	:host ::ng-deep .chart-donut canvas {
+		width: 160px !important;
+		height: 160px !important;
+	}
+}
+/* ── EXPORT BTN (page header level) ── */
+.export-btn {
+	display: flex;
+	align-items: center;
+	gap: 0.4rem;
+	padding: 0.5rem 1rem;
+	background: #fff;
+	color: #374151;
+	border: 1px solid #e5e7eb;
+	border-radius: 8px;
+	cursor: pointer;
+	font-weight: 600;
+	font-size: 0.875rem;
+	white-space: nowrap;
+	flex-shrink: 0;
+	transition: all 0.2s;
+}
+
+.export-btn:hover:not(:disabled) {
+	background: #f0fdf4;
+	border-color: #16a34a;
+	color: #16a34a;
+}
+
+.export-btn:disabled {
+	opacity: 0.6;
+	cursor: not-allowed;
+}
+
+/* ── TABLE CARD ── */
 .table-card {
 	background: #fff;
 	border-radius: 10px;
@@ -316,32 +505,69 @@
 	overflow: hidden;
 }
 
-.table-card-header {
+.sales-table-header {
 	display: flex;
-	align-items: baseline;
-	gap: 0.6rem;
-	padding: 1rem 1.25rem 0.65rem;
+	align-items: center;
+	justify-content: space-between;
+	flex-wrap: wrap;
+	gap: 0.75rem;
+	padding: 1rem 1.25rem 0.75rem;
 	border-bottom: 1px solid #f3f4f6;
 }
 
-.table-card-header h3 {
+.sales-table-header h3 {
 	font-size: 0.95rem;
 	font-weight: 700;
 	color: #111827;
-	margin: 0;
+	margin: 0 0 0.1rem;
 }
 
-.transaction-count {
+.table-subtitle {
 	font-size: 0.75rem;
 	color: #9ca3af;
 }
 
+.table-header-actions {
+	display: flex;
+	align-items: center;
+	gap: 0.75rem;
+	flex-wrap: wrap;
+}
+
+.search-bar {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.5rem;
+}
+
+.search-bar i {
+	color: #9ca3af;
+	font-size: 0.875rem;
+}
+
+.search-input {
+	padding: 0.45rem 0.875rem;
+	border-radius: 8px;
+	border: 1px solid #e5e7eb;
+	font-size: 0.875rem;
+	min-width: 180px;
+	color: #374151;
+	outline: none;
+	transition: border-color 0.2s;
+}
+
+.search-input:focus {
+	border-color: #3b82f6;
+	box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+/* p-table overrides */
 :host ::ng-deep .sales-table .p-datatable-wrapper {
 	overflow-x: auto;
 }
 
 :host ::ng-deep .sales-table .p-datatable-table {
-	min-width: 500px;
+	min-width: 480px;
 }
 
 :host ::ng-deep .sales-table .p-datatable-thead>tr>th {
@@ -373,9 +599,22 @@
 	background: #f9fafb;
 }
 
+:host ::ng-deep .sales-table .p-datatable-tfoot>tr>td {
+	background: #f9fafb;
+	border-top: 2px solid #e5e7eb;
+	border-bottom: none;
+	padding: 0.75rem 1.25rem;
+	font-size: 0.875rem;
+	color: #374151;
+}
+
 .amount-cell {
 	color: #16a34a !important;
 	font-weight: 700;
+}
+
+.totals-row td {
+	background: #f9fafb;
 }
 
 .empty-state {
@@ -395,6 +634,23 @@
 	font-size: 0.875rem;
 }
 
+/* Paginator */
+.paginator-row {
+	border-top: 1px solid #f3f4f6;
+}
+
+:host ::ng-deep .custom-paginator {
+	background: #fff;
+	border: none;
+	padding: 0.5rem 1rem;
+}
+
+:host ::ng-deep .custom-paginator .p-paginator-page.p-highlight {
+	background: #2563eb;
+	color: #fff;
+	border-radius: 6px;
+}
+
 /* ── RESPONSIVE ── */
 @media (max-width: 900px) {
 	.main-content {
@@ -410,6 +666,14 @@
 	.total-card {
 		grid-column: span 2;
 	}
+
+	.charts-row {
+		grid-template-columns: 1fr;
+	}
+
+	.chart-donut {
+		max-width: 100%;
+	}
 }
 
 @media (max-width: 768px) {
@@ -418,23 +682,23 @@
 		padding-top: calc(56px + 1rem);
 	}
 
-	.filter-section {
+	.date-inputs {
 		flex-direction: column;
-		align-items: flex-start;
-		gap: 0.5rem;
+		align-items: stretch;
 	}
 
-	.card-inner {
-		flex-wrap: wrap;
-		gap: 0.5rem;
-	}
-
-	.card-badge {
-		margin-left: 0;
+	.update-btn {
+		width: 100%;
+		justify-content: center;
 	}
 }
 
 @media (max-width: 480px) {
+	.main-content {
+		padding: 0.75rem !important;
+		padding-top: calc(56px + 0.75rem) !important;
+	}
+
 	.summary-grid {
 		grid-template-columns: 1fr;
 	}
@@ -447,80 +711,38 @@
 		font-size: 1rem;
 	}
 
-	.filter-section {
-		flex-direction: column;
-		align-items: stretch;
-		gap: 0.5rem;
-	}
-
-	.card-inner {
+	.page-header {
 		flex-direction: column;
 		align-items: flex-start;
-	}
-
-	/* make filter controls full width */
-	.filter-section .filter-label,
-	.filter-section .filter-buttons,
-	.filter-section .calendar-wrapper {
-		width: 100%;
-	}
-
-	/* table adjustments */
-	:host ::ng-deep .sales-table .p-datatable-table {
-		min-width: auto !important;
-		width: 100% !important;
-	}
-	:host ::ng-deep .sales-table .p-datatable-wrapper {
-		overflow-x: auto;
-		-webkit-overflow-scrolling: touch;
-	}
-
-	/* improve table cell spacing on mobile */
-	:host ::ng-deep .sales-table .p-datatable-tbody>tr>td {
-		padding: 0.5rem 0.4rem;
-		font-size: 0.75rem;
-		white-space: normal;
-		word-break: break-word;
-	}
-	:host ::ng-deep .sales-table .p-datatable-thead>tr>th {
-		padding: 0.4rem;
-		font-size: 0.6rem;
-	}
-
-	/* hide less important columns on very small screens */
-	:host ::ng-deep .sales-table .p-datatable-tbody>tr>td:nth-child(n+3),
-	:host ::ng-deep .sales-table .p-datatable-thead>tr>th:nth-child(n+3) {
-		display: none;
-	}
-
-	/* show transaction ID, amount, and date on mobile */
-	:host ::ng-deep .sales-table .p-datatable-tbody>tr>td:nth-child(2),
-	:host ::ng-deep .sales-table .p-datatable-thead>tr>th:nth-child(2),
-	:host ::ng-deep .sales-table .p-datatable-tbody>tr>td:nth-child(4),
-	:host ::ng-deep .sales-table .p-datatable-thead>tr>th:nth-child(4),
-	:host ::ng-deep .sales-table .p-datatable-tbody>tr>td:nth-child(5),
-	:host ::ng-deep .sales-table .p-datatable-thead>tr>th:nth-child(5) {
-		display: table-cell;
-	}
-
-	/* adjust paginator for mobile */
-	:host ::ng-deep .sales-table .p-paginator {
-		padding: 0.5rem !important;
-		font-size: 0.75rem !important;
-	}
-
-	/* improve summary card readability */
-	.card-left {
-		flex-wrap: wrap;
 	}
 
 	.page-header h2 {
 		font-size: 1.25rem;
 	}
 
-	/* make main content padding tighter */
-	.main-content {
-		padding: 0.75rem !important;
-		padding-top: calc(56px + 0.75rem) !important;
+	.table-header-actions {
+		flex-direction: column;
+		align-items: flex-start;
+		width: 100%;
+	}
+
+	.search-input {
+		min-width: unset;
+		width: 100%;
+	}
+
+	.export-btn {
+		width: 100%;
+		justify-content: center;
+	}
+
+	:host ::ng-deep .sales-table .p-datatable-tbody>tr>td {
+		padding: 0.5rem 0.75rem;
+		font-size: 0.78rem;
+	}
+
+	:host ::ng-deep .sales-table .p-datatable-thead>tr>th {
+		padding: 0.5rem 0.75rem;
+		font-size: 0.62rem;
 	}
 }

@@ -152,6 +152,30 @@
 	color: #991b1b;
 }
 
+.status-badge.status-skipped {
+	background: #f3e8ff;
+	color: #6b21a8;
+}
+
+.skipped-notice {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	margin-top: 0.75rem;
+	padding: 0.5rem 0.75rem;
+	background: #fef3c7;
+	border-left: 3px solid #f59e0b;
+	border-radius: 4px;
+	font-size: 0.85rem;
+	color: #78350f;
+	font-weight: 500;
+}
+
+.skipped-notice .pi {
+	font-size: 0.9rem;
+	flex-shrink: 0;
+}
+
 .mrn-display {
 	font-size: 0.82rem;
 	color: var(--muted);

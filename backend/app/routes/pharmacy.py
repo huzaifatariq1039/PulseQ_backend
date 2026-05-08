@@ -914,8 +914,6 @@ async def create_invoice(
         created_by=getattr(current, "user_id", None),
         items=[item.model_dump() for item in payload.items],
     )
-    db.commit()
-    db.refresh(invoice)
     data = invoice.to_dict()
     data["items"] = PharmacyInvoiceService.get_invoice_items(db=db, invoice_id=invoice.id)
     data["item_count"] = len(data["items"])

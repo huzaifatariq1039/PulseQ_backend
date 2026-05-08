@@ -29,6 +29,11 @@
                     {{ isExporting ? 'Exporting...' : 'Export Excel' }}
                 </button>
 
+                <button class="trash-btn" (click)="goToTrash()">
+                    <i class="pi pi-trash"></i>
+                    Trash
+                </button>
+
                 <button (click)="addMedicine()" class="add-btn">
                     <i class="pi pi-plus"></i>
                     Add Medicine
@@ -40,8 +45,8 @@
         <div class="search-filter-row">
             <span class="search-wrapper">
                 <i class="pi pi-search"></i>
-                <input pInputText type="text" placeholder="Search by medicine name or salt" [(ngModel)]="searchText"
-                    (input)="onSearchChange()" class="search-input" />
+                <input type="text" placeholder="Search by medicine name or salt" [(ngModel)]="searchText"
+                    (ngModelChange)="onSearchChange()" class="search-input" />
             </span>
 
             <p-dropdown [options]="sortOptions" [(ngModel)]="selectedSort" optionLabel="label" optionValue="value"
@@ -166,7 +171,9 @@
                             <td colspan="18">
                                 <div class="empty-state">
                                     <i class="pi pi-inbox"></i>
-                                    @if (medicineStatusFilter === 'active') {
+                                    @if (searchText) {
+                                    <p>No medicine found</p>
+                                    } @else if (medicineStatusFilter === 'active') {
                                     <p>No active medicines</p>
                                     } @else {
                                     <p>No medicines found</p>

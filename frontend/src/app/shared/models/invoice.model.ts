@@ -33,8 +33,25 @@ export interface Invoice {
     deleted_at?: string | null;
     created_at?: string;
     updated_at?: string | null;
-    items: InvoiceItem[];
+    items?: InvoiceItem[];
     item_count?: number;
+}
+
+export interface InvoiceCounts {
+    all: number;
+    completed: number;
+    pending: number;
+    partial: number;
+    cancelled: number;
+}
+
+export interface InvoiceListData {
+    invoices: Invoice[];
+    counts: InvoiceCounts;
+    total: number;
+    page: number;
+    per_page: number;
+    total_pages: number;
 }
 
 export interface InvoiceListParams {
