@@ -44,7 +44,6 @@
 /* ── TAB BAR ── */
 .tab-bar {
 	display: flex;
-	gap: 0;
 	border-bottom: 2px solid #e5e7eb;
 	margin-bottom: 1.25rem;
 }
@@ -307,11 +306,7 @@
 	color: rgba(255, 255, 255, 0.65);
 }
 
-/* ── CHARTS ── */
-/* ─────────────────────────────────────────
-   CHARTS SECTION
-───────────────────────────────────────── */
-
+/* ── CHARTS ROW ── */
 .charts-row {
 	display: grid;
 	grid-template-columns: 1fr 320px;
@@ -323,18 +318,12 @@
 	background: #ffffff;
 	border-radius: 20px;
 	border: 1px solid #eef2f7;
-
-	box-shadow:
-		0 1px 2px rgba(0, 0, 0, 0.04),
-		0 8px 24px rgba(0, 0, 0, 0.04);
-
+	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.04);
 	overflow: hidden;
-	position: relative;
 }
 
 .chart-card-header {
 	padding: 1.1rem 1.25rem 0;
-	border-bottom: none;
 }
 
 .chart-card-header h3 {
@@ -345,33 +334,80 @@
 	letter-spacing: -0.01em;
 }
 
+.chart-header-inner {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+}
+
+.chart-subtitle {
+	font-size: 0.75rem;
+	color: #9ca3af;
+	margin: 3px 0 0;
+}
+
+.chart-legend-inline {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding-top: 2px;
+}
+
+.legend-line-swatch {
+	display: inline-block;
+	width: 24px;
+	height: 2.5px;
+	background: #6366f1;
+	border-radius: 2px;
+}
+
+.legend-line-label {
+	font-size: 0.75rem;
+	color: #6b7280;
+	font-weight: 500;
+}
+
+/* ── CHART BODY ── */
 .chart-body {
 	padding: 1rem 1.25rem 1.25rem;
 	height: 260px;
 }
 
-.chart-bar {
-	position: relative;
-}
-
-.chart-donut {
-	position: relative;
-}
-
-/* ─────────────────────────────────────────
-   BAR CHART
-───────────────────────────────────────── */
-
-:host ::ng-deep .chart-bar p-chart,
-:host ::ng-deep .chart-bar canvas {
+/* Line chart canvas fill */
+:host ::ng-deep .chart-line p-chart,
+:host ::ng-deep .chart-line canvas {
 	width: 100% !important;
 	height: 100% !important;
 }
 
-/* ─────────────────────────────────────────
-   DONUT CHART
-───────────────────────────────────────── */
+/* ── SKELETON LOADER ── */
+.chart-skeleton {
+	width: 100%;
+	height: 100%;
+	border-radius: 10px;
+	overflow: hidden;
+}
 
+.skeleton-pulse {
+	width: 100%;
+	height: 100%;
+	background: linear-gradient(90deg, #f3f4f6 25%, #e5e7eb 50%, #f3f4f6 75%);
+	background-size: 200% 100%;
+	animation: shimmer 1.5s infinite;
+	border-radius: 10px;
+}
+
+@keyframes shimmer {
+	0% {
+		background-position: 200% 0;
+	}
+
+	100% {
+		background-position: -200% 0;
+	}
+}
+
+/* ── DONUT CHART ── */
 .donut-body {
 	display: flex;
 	align-items: center;
@@ -389,10 +425,6 @@
 	width: 140px !important;
 	height: 140px !important;
 }
-
-/* ─────────────────────────────────────────
-   DONUT LEGEND
-───────────────────────────────────────── */
 
 .donut-legend {
 	display: flex;
@@ -426,10 +458,6 @@
 	font-weight: 700;
 }
 
-/* ─────────────────────────────────────────
-   CHART RENDER FIX
-───────────────────────────────────────── */
-
 :host ::ng-deep .chartjs-render-monitor {
 	animation: none !important;
 }
@@ -438,37 +466,7 @@
 	image-rendering: auto;
 }
 
-/* ─────────────────────────────────────────
-   RESPONSIVE
-───────────────────────────────────────── */
-
-@media (max-width: 900px) {
-
-	.charts-row {
-		grid-template-columns: 1fr;
-	}
-
-	.chart-card {
-		width: 100%;
-	}
-
-	.donut-body {
-		flex-direction: column;
-		height: auto;
-		padding-top: 1rem;
-		padding-bottom: 1rem;
-	}
-
-	:host ::ng-deep .chart-donut p-chart {
-		width: 160px !important;
-	}
-
-	:host ::ng-deep .chart-donut canvas {
-		width: 160px !important;
-		height: 160px !important;
-	}
-}
-/* ── EXPORT BTN (page header level) ── */
+/* ── EXPORT BTN ── */
 .export-btn {
 	display: flex;
 	align-items: center;
@@ -561,7 +559,6 @@
 	box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
 }
 
-/* p-table overrides */
 :host ::ng-deep .sales-table .p-datatable-wrapper {
 	overflow-x: auto;
 }
@@ -613,10 +610,6 @@
 	font-weight: 700;
 }
 
-.totals-row td {
-	background: #f9fafb;
-}
-
 .empty-state {
 	text-align: center;
 	padding: 2.5rem;
@@ -634,7 +627,6 @@
 	font-size: 0.875rem;
 }
 
-/* Paginator */
 .paginator-row {
 	border-top: 1px solid #f3f4f6;
 }
@@ -669,10 +661,6 @@
 
 	.charts-row {
 		grid-template-columns: 1fr;
-	}
-
-	.chart-donut {
-		max-width: 100%;
 	}
 }
 

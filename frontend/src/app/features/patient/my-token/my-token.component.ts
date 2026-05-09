@@ -126,16 +126,24 @@ export class MyTokenComponent implements OnInit, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (res: any) => {
-          if (res && res.token) {
-            const mapped = this.mapToken(res.token, res.queue);
-            this.mergeToken(mapped);
-            
-            // Setup WebSocket for this token's doctor
-            const doctorId = res.token.doctor_id;
-            if (doctorId && doctorId !== this.currentDoctorId) {
-              this.setupRealtimeListener(doctorId);
+          // Handle both array response and single object response
+          const detailsArray = Array.isArray(res) ? res : (res && res.token ? [res] : []);
+
+          detailsArray.forEach((item: any) => {
+            const token = item.token || item;
+            const queue = item.queue || null;
+
+            if (token) {
+              const mapped = this.mapToken(token, queue);
+              this.mergeToken(mapped);
+
+              // Setup WebSocket for the first token's doctor
+              const doctorId = token.doctor_id;
+              if (doctorId && doctorId !== this.currentDoctorId) {
+                this.setupRealtimeListener(doctorId);
+              }
             }
-          }
+          });
         },
         error: (err) => {
           console.error('Failed to get active token details', err);
@@ -145,15 +153,15 @@ export class MyTokenComponent implements OnInit, OnDestroy {
 
   private setupRealtimeListener(doctorId: string): void {
     if (this.realtimeConnected && this.currentDoctorId === doctorId) return;
-    
+
     // Clean up old connection if switching doctors
     if (this.currentDoctorId && this.currentDoctorId !== doctorId) {
       this.realtimeService.disconnect(`doctor_${this.currentDoctorId}`);
     }
-    
+
     this.currentDoctorId = doctorId;
     const room = `doctor_${doctorId}`;
-    
+
     this.realtimeService.connect(room)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
@@ -166,7 +174,7 @@ export class MyTokenComponent implements OnInit, OnDestroy {
           console.error(`WebSocket error for room ${room}:`, err);
         }
       });
-    
+
     this.realtimeConnected = true;
   }
 

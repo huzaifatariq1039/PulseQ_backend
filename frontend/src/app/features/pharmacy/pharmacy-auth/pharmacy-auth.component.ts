@@ -1,4 +1,3 @@
-
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
@@ -45,7 +44,12 @@ export class PharmacyAuthComponent implements OnInit {
 
   submitForm() {
     if (this.loginForm.invalid) {
-      this.messageService.add({ severity: 'warn', summary: 'Error', detail: 'Please fill in all fields correctly', life: 3000 });
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Validation Error',
+        detail: 'Please fill in all fields correctly',
+        life: 3000
+      });
       return;
     }
 
@@ -55,27 +59,40 @@ export class PharmacyAuthComponent implements OnInit {
     this.authService.pharmacyLogin(email, password).subscribe({
       next: (success) => {
         this.isLoading = false;
-        if (success) {
-          this.messageService.add({
-            severity: 'success',
-            summary: 'Success',
-            detail: 'Logged in successfully',
-            life: 2000
-          });
-          setTimeout(() => {
-            this.router.navigate(['../dashboard'], { relativeTo: this.route });
-          }, 500);
-        } else {
+
+        const token = localStorage.getItem('pulseq_token');
+        console.log('[PharmacyAuth] Login success flag:', success);
+        console.log('[PharmacyAuth] Token in storage:', token);
+
+        if (!success || !token) {
           this.messageService.add({
             severity: 'error',
             summary: 'Login Failed',
-            detail: 'Invalid email or password.',
+            detail: 'Authentication failed. Please check your credentials.',
             life: 4000
           });
+          return;
         }
+
+        this.messageService.add({
+          severity: 'success',
+          summary: 'Success',
+          detail: 'Logged in successfully',
+          life: 2000
+        });
+
+        setTimeout(() => {
+          this.router.navigate(['/staff/pharmacy/dashboard']).then(navigated => {
+            console.log('[PharmacyAuth] Navigation to dashboard result:', navigated);
+            if (!navigated) {
+              console.error('[PharmacyAuth] Navigation failed — check route config and auth guard');
+            }
+          });
+        }, 500);
       },
       error: (err) => {
         this.isLoading = false;
+        console.error('[PharmacyAuth] Login error:', err);
         this.messageService.add({
           severity: 'error',
           summary: 'Login Failed',
@@ -87,6 +104,6 @@ export class PharmacyAuthComponent implements OnInit {
   }
 
   goBack() {
-    this.router.navigate(['../auth'], { relativeTo: this.route });
+    this.router.navigate(['/auth']);
   }
 }

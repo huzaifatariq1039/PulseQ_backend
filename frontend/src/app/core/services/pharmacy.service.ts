@@ -306,6 +306,117 @@ export class PharmacyService {
   }
 
   // ============================================================
+  // New Staff Portal Sales APIs
+  // ============================================================
+
+  /**
+   * Sales Overview - Total Revenue, Invoices, Units Sold, Avg Order Value
+   */
+  getSalesOverview(
+    hospitalId?: string,
+    preset: string = 'last_30_days'
+  ): Observable<any> {
+
+    let params = new HttpParams()
+      .set('preset', preset);
+
+    if (hospitalId) {
+      params = params.set('hospital_id', hospitalId);
+    }
+
+    return this.http.get(
+      `${environment.apiBaseUrl}/staff/portal/sales/overview`,
+      { params }
+    );
+  }
+
+  /**
+   * Sales Over Time - Daily sales breakdown for charts
+   */
+  getSalesOverTime(
+    hospitalId?: string,
+    preset: string = 'last_30_days'
+  ): Observable<any> {
+
+    let params = new HttpParams()
+      .set('preset', preset);
+
+    if (hospitalId) {
+      params = params.set('hospital_id', hospitalId);
+    }
+
+    return this.http.get(
+      `${environment.apiBaseUrl}/staff/portal/sales/over-time`,
+      { params }
+    );
+  }
+
+  /**
+   * Payment Methods Breakdown - Revenue by payment method (Cash, Card, Online)
+   */
+  getPaymentMethodBreakdown(
+    hospitalId?: string,
+    preset: string = 'last_30_days'
+  ): Observable<any> {
+
+    let params = new HttpParams()
+      .set('preset', preset);
+
+    if (hospitalId) {
+      params = params.set('hospital_id', hospitalId);
+    }
+
+    return this.http.get(
+      `${environment.apiBaseUrl}/staff/portal/sales/payment-methods`,
+      { params }
+    );
+  }
+
+  /**
+   * Top Selling Medicines - Top medicines by quantity sold
+   */
+  getTopSellingMedicines(
+    hospitalId?: string,
+    preset: string = 'last_30_days',
+    limit: number = 10
+  ): Observable<any> {
+
+    let params = new HttpParams()
+      .set('preset', preset)
+      .set('limit', limit.toString());
+
+    if (hospitalId) {
+      params = params.set('hospital_id', hospitalId);
+    }
+
+    return this.http.get(
+      `${environment.apiBaseUrl}/staff/portal/sales/top-medicines`,
+      { params }
+    );
+  }
+
+  /**
+   * Export Sales to Excel
+   */
+  exportSalesExcel(
+    hospitalId?: string,
+    preset: string = 'last_30_days'
+  ): Observable<Blob> {
+
+    let params = new HttpParams()
+      .set('preset', preset);
+
+    if (hospitalId) {
+      params = params.set('hospital_id', hospitalId);
+    }
+
+    return this.http.get(
+      `${environment.apiBaseUrl}/staff/portal/sales/export`,
+      { params, responseType: 'blob' }
+    );
+  }
+
+  // ============================================================
   // Load Medicines
   // ============================================================
 
