@@ -530,6 +530,7 @@ class CancellationResponse(BaseModel):
     cancellation_reason: CancellationReason
     refund_info: RefundCalculation
     refund_id: Optional[str] = None
+    queue: Optional[dict] = None 
 
 # Doctor with Queue Info
 class DoctorWithQueue(BaseModel):
