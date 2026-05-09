@@ -6,7 +6,7 @@ import logging
 from app.security import get_current_active_user
 from app.database import get_db
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from app.db_models import User, Doctor, Hospital, Token, ActivityLog
 from app.security import require_roles
 from app.utils.responses import ok
@@ -15,6 +15,7 @@ from app.services.notification_service import NotificationService
 from app.services.whatsapp_service import send_template_message
 from app.templates import TEMPLATES
 from app.utils.date_utils import to_dt, is_empty
+from app.models import TokenData
 
 
 router = APIRouter()
@@ -292,22 +293,7 @@ async def consultation_end(
 
     # Auto-call next token logic
     today = now.date()
-    next_token_obj = db.query(Token).filter(
-        Token.doctor_id == doctor_id,
-        Token.status.in_(["pending", "waiting", "confirmed"]),
-        func.date(Token.appointment_date) == today,
-        Token.token_number > token.token_number
-    ).order_by(Token.token_number.asc()).first()
-
     next_token_data = None
-    if next_token_obj:
-        next_token_obj.status = "called"
-        next_token_obj.called_at = now
-        next_token_obj.updated_at = now
-        
-        db.commit()
-        next_token_data = {k: v for k, v in next_token_obj.__dict__.items() if not k.startswith('_')}
-
     try:
         log_action(current_user.user_id, role, action="DONE", token_id=token_id)
     except Exception:
@@ -375,20 +361,15 @@ async def consultation_skip_token(
     doctor_id = token.doctor_id
     today = now.date()
     next_token_obj = db.query(Token).filter(
-        Token.doctor_id == doctor_id,
-        Token.status.in_(["pending", "waiting", "confirmed"]),
-        func.date(Token.appointment_date) == today,
-        Token.token_number > token.token_number
+    Token.doctor_id == doctor_id,
+    Token.status.in_(["pending", "waiting", "confirmed"]),
+    func.date(Token.appointment_date) == today,
+    Token.token_number > token.token_number
     ).order_by(Token.token_number.asc()).first()
-
-    next_token_data = None
+    
+    next_token_data = None 
     if next_token_obj:
-        next_token_obj.status = "called"
-        next_token_obj.called_at = now
-        next_token_obj.updated_at = now
-        
-        db.commit()
-        next_token_data = {k: v for k, v in next_token_obj.__dict__.items() if not k.startswith('_')}
+       next_token_data = {k: v for k, v in next_token_obj.__dict__.items() if not k.startswith('_')}
 
     return ok(
         data={
@@ -451,4 +432,94 @@ async def re_add_skipped_patient(
             "previous_status": "skipped"
         },
         message="Patient re-added to queue successfully"
+    )
+
+@router.get("/patient/{patient_id}/history", dependencies=[Depends(require_roles("doctor", "receptionist", "admin"))])
+async def get_patient_consultation_history(
+    patient_id: str,
+    db: Session = Depends(get_db),
+    current: TokenData = Depends(get_current_active_user),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+) -> Dict[str, Any]:
+    """Get full consultation history for a specific patient"""
+
+    # ✅ Verify patient exists
+    patient = db.query(User).filter(User.id == patient_id).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+
+    query = db.query(Token).filter(Token.patient_id == patient_id)
+
+    # ✅ Doctor can only see their own patients
+    role = str(getattr(current, "role", "")).lower()
+    if role == "doctor":
+        doctor = db.query(Doctor).filter(
+            or_(
+                Doctor.user_id == current.user_id,
+                Doctor.id == current.user_id
+            )
+        ).first()
+        if not doctor:
+            raise HTTPException(status_code=404, detail="Doctor profile not found")
+        query = query.filter(Token.doctor_id == doctor.id)
+
+    total = query.count()
+    skip = (page - 1) * page_size
+    tokens = query.order_by(Token.appointment_date.desc()).offset(skip).limit(page_size).all()
+
+    # ✅ Batch fetch doctors to avoid N+1
+    doctor_ids = list({t.doctor_id for t in tokens if t.doctor_id})
+    doctors_map = {
+        d.id: d for d in db.query(Doctor).filter(Doctor.id.in_(doctor_ids)).all()
+    }
+
+    items = []
+    for t in tokens:
+        doctor_obj = doctors_map.get(t.doctor_id)
+        start = t.started_at or t.created_at
+        end = t.completed_at or t.updated_at
+        duration = 0
+        if start and end and end > start:
+            duration = round((end - start).total_seconds() / 60)
+
+        items.append({
+            "token_id": t.id,
+            "token_number": t.display_code or str(t.token_number),
+            "mrn": getattr(t, "mrn", None) or "N/A",
+            "appointment_date": t.appointment_date,
+            "status": str(t.status).lower(),
+            "department": t.department or (doctor_obj.specialization if doctor_obj else "General"),
+            "doctor_name": t.doctor_name or (doctor_obj.name if doctor_obj else "Unknown"),
+            "doctor_id": t.doctor_id,
+            "reason_for_visit": t.reason_for_visit or "",
+            "consultation_notes": t.consultation_notes or "",
+            "patient_age": t.patient_age,
+            "patient_gender": t.patient_gender,
+            "payment_status": str(t.payment_status or "pending").lower(),
+            "consultation_fee": t.consultation_fee,
+            "total_fee": t.total_fee,
+            "started_at": start,
+            "completed_at": end,
+            "duration_minutes": duration,
+        })
+
+    return ok(
+        data={
+            "patient": {
+                "id": patient.id,
+                "name": patient.name,
+                "phone": patient.phone,
+                "email": getattr(patient, "email", None),
+                "date_of_birth": getattr(patient, "date_of_birth", None),
+                "gender": getattr(patient, "gender", None),
+            },
+            "history": items,
+        },
+        meta={
+            "page": page,
+            "page_size": page_size,
+            "total": total,
+            "total_pages": max(1, (total + page_size - 1) // page_size),
+        }
     )
