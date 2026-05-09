@@ -13,12 +13,61 @@ from app.config import (
     TWILIO_REMINDER_CONFIRM_SID,
     TWILIO_QUEUE_UPDATE_SID,
     TWILIO_TOKEN_NUMBER_SID,
-    TWILIO_OTP_SID  # ✅ Add this import
+    TWILIO_OTP_SID 
 )
 import logging
 import json
+import re
 
 logger = logging.getLogger(__name__)
+
+def format_whatsapp_number(phone: str) -> str:
+    """
+    Normalize a phone number for Twilio WhatsApp delivery.
+
+    Accepts local Pakistani numbers or numbers already starting with 92 or +92,
+    strips any leading 0, and always returns a whatsapp:+92XXXXXXXXXX string.
+    """
+    if not phone:
+        return ""
+
+    clean_phone = str(phone).strip()
+    if clean_phone.startswith("whatsapp:"):
+        clean_phone = clean_phone[len("whatsapp:"):].strip()
+
+    clean_phone = re.sub(r"[^\d+]", "", clean_phone)
+    clean_phone = clean_phone.lstrip("+")
+
+    while clean_phone.startswith("0"):
+        clean_phone = clean_phone[1:]
+
+    if clean_phone.startswith("92"):
+        clean_phone = clean_phone[2:]
+
+    if clean_phone.startswith("0"):
+        clean_phone = clean_phone[1:]
+
+    return f"whatsapp:+92{clean_phone}"
+
+
+def _template_param(params: list, index: int, default: str = "") -> str:
+    try:
+        if not params or index < 0 or index >= len(params):
+            return default
+
+        val = params[index]
+        if val is None:
+            return default
+
+        s = str(val)
+        # Replace newlines, carriage returns, and tabs with a single space
+        s = re.sub(r"[\r\n\t]+", " ", s)
+        # Collapse multiple spaces and strip leading/trailing whitespace
+        s = re.sub(r" +", " ", s).strip()
+
+        return s if s else default
+    except Exception:
+        return default
 
 
 def send_queue_message(phone: str, name: str, position: int, wait_time: int, doctor_name: str = "N/A", hospital_name: str = "PulseQ Clinic", room_number: str = "Room 1"):
@@ -27,20 +76,12 @@ def send_queue_message(phone: str, name: str, position: int, wait_time: int, doc
         return
 
     try:
-        if not phone:
+        formatted_phone = format_whatsapp_number(phone)
+        if not formatted_phone:
             return None
 
         client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
-        
-        formatted_phone = str(phone)
-        if not formatted_phone.startswith("whatsapp:"):
-            if not formatted_phone.startswith("+"):
-                formatted_phone = f"+{formatted_phone}"
-            formatted_phone = f"whatsapp:{formatted_phone}"
-
-        from_number = TWILIO_WHATSAPP_NUMBER
-        if from_number and not from_number.startswith("whatsapp:"):
-            from_number = f"whatsapp:{from_number}"
+        from_number = format_whatsapp_number(TWILIO_WHATSAPP_NUMBER)
 
         if TWILIO_TEMPLATE_SID:
             message = client.messages.create(
@@ -70,19 +111,11 @@ async def send_template_message(phone: str, template_name: str, params: list):
         return
 
     try:
+        formatted_phone = format_whatsapp_number(phone)
+        from_number = format_whatsapp_number(TWILIO_WHATSAPP_NUMBER)
         client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
-        
-        formatted_phone = phone
-        if not formatted_phone.startswith("whatsapp:"):
-            if not formatted_phone.startswith("+"):
-                formatted_phone = f"+{formatted_phone}"
-            formatted_phone = f"whatsapp:{formatted_phone}"
 
-        from_number = TWILIO_WHATSAPP_NUMBER
-        if from_number and not from_number.startswith("whatsapp:"):
-            from_number = f"whatsapp:{from_number}"
-
-        # ✅ OTP — moved to TOP before the generic fallback
+        # ✅ OTP
         if template_name == "otp_verification":
             if TWILIO_OTP_SID:
                 message = client.messages.create(
@@ -93,18 +126,11 @@ async def send_template_message(phone: str, template_name: str, params: list):
                         "1": str(params[0]) if params else "000000"
                     })
                 )
-                logger.info(f"WhatsApp OTP sent to {formatted_phone}: SID {message.sid}")
                 return message.sid
             else:
                 otp = str(params[0]) if params else "000000"
                 body = f"{otp} is your verification code. For your security, do not share this code."
-                message = client.messages.create(
-                    from_=from_number,
-                    to=formatted_phone,
-                    body=body
-                )
-                logger.info(f"WhatsApp OTP fallback sent to {formatted_phone}: SID {message.sid}")
-                return message.sid
+                return client.messages.create(from_=from_number, to=formatted_phone, body=body).sid
 
         if template_name == "token_number":
             if TWILIO_TOKEN_NUMBER_SID:
@@ -113,15 +139,15 @@ async def send_template_message(phone: str, template_name: str, params: list):
                     to=formatted_phone,
                     content_sid=TWILIO_TOKEN_NUMBER_SID,
                     content_variables=json.dumps({
-                        "1": str(params[0]) if params else "Doctor",
-                        "2": str(params[1]) if len(params) > 1 else "Patient",
-                        "3": str(params[2]) if len(params) > 2 else "Clinic",
-                        "4": str(params[3]) if len(params) > 3 else "General",
+                        "1": _template_param(params, 0, "Doctor"),
+                        "2": _template_param(params, 1, "Patient"),
+                        "3": _template_param(params, 2, "Hospital"),
+                        "4": _template_param(params, 3, "Department")
                     })
                 )
                 return message.sid
             else:
-                body = f"""Apki appointment book ho chuki h!\n\nDoctor: {params[0]}\nPatient: {params[1]}\nHospital: {params[2]}\nDepartment: {params[3]}\n\nReply YES to receive live updates.\n\nPulseQ"""
+                body = f"""Apki appointment book ho chuki h!\n\nDoctor: {_template_param(params, 0, 'Doctor')}\nPatient: {_template_param(params, 1, 'Patient')}\nHospital: {_template_param(params, 2, 'Hospital')}\nDepartment: {_template_param(params, 3, 'Department')}\n\nReply YES to receive live updates.\n\nPulseQ"""
                 return client.messages.create(from_=from_number, to=formatted_phone, body=body).sid
 
         if template_name == "patient_call_alert" and TWILIO_CALL_ALERT_SID:
@@ -146,7 +172,7 @@ async def send_template_message(phone: str, template_name: str, params: list):
                 )
                 return message.sid
             else:
-                body = f"""Hello {params[0]},\n\nAapki turn kisi bhi waqt aa sakti hai. Please hospital ki taraf rawana ho jayein.\n\nAapka token number {params[1]} hai.\n\nKindly arrive on time.\n\nPulseQ"""
+                body = f"""Hello {params[0]},\n\nAapki turn kisi bhi waqt aa sakti hai. Please hospital ki taraf rawana ho jayein.\n\nAapka token number {params[1]} hai.\n\nPulseQ"""
                 return client.messages.create(from_=from_number, to=formatted_phone, body=body).sid
 
         if template_name == "appointment_doctor_change":
@@ -174,14 +200,7 @@ async def send_template_message(phone: str, template_name: str, params: list):
                 )
                 return message.sid
             else:
-                body = f"""Hello {params[0]},\n\nAapki appointment cancel ho chuki hai.\n\nAgr ap dobara book krna chahte hain to is website ka through book kr skte hain: https://pulseq.blog/\nYa Hospital reception sa rabta karein.\n\nThankyou\n\nPulseQ"""
-                return client.messages.create(from_=from_number, to=formatted_phone, body=body).sid
-
-        if template_name == "template":
-            if TWILIO_THANKYOU_SID:
-                return client.messages.create(from_=from_number, to=formatted_phone, content_sid=TWILIO_THANKYOU_SID).sid
-            else:
-                body = """Thankyou for visiting PulseQ.\n\nFor future appointments use this link:\nhttps://pulseq.blog/\n\nDid you like our service?\n\n(Reply with one of the options below)\n1. Yes, It was Great\n2. No, I didn't like it"""
+                body = f"""Hello {params[0]},\n\nAapki appointment cancel ho chuki hai.\n\nPulseQ"""
                 return client.messages.create(from_=from_number, to=formatted_phone, body=body).sid
 
         if template_name == "skipped":
@@ -196,16 +215,6 @@ async def send_template_message(phone: str, template_name: str, params: list):
                     })
                 )
                 return message.sid
-            else:
-                body = f"""Hello {params[0]},\n\nLagta hai ke aap apni scheduled appointment miss kar chuke hain. Aapka token number {params[1]} tha.\n\nKindly jald az jald hospital reception se rabta karein taake aap apni appointment reschedule kar saken ya mazeed madad le saken.\n\nThank you for your attention.\n\nPulseQ"""
-                return client.messages.create(from_=from_number, to=formatted_phone, body=body).sid
-
-        if template_name == "reminder_for_confirmation":
-            if TWILIO_REMINDER_CONFIRM_SID:
-                return client.messages.create(from_=from_number, to=formatted_phone, content_sid=TWILIO_REMINDER_CONFIRM_SID).sid
-            else:
-                body = """Aapki appointment ke liye koi response receive nahi hua.\n\nReply YES karein updates confirm karne ke liye aur NO karein cancel karne ke liye."""
-                return client.messages.create(from_=from_number, to=formatted_phone, body=body).sid
 
         if template_name == "queue_update_alert":
             if TWILIO_QUEUE_UPDATE_SID:
@@ -222,12 +231,8 @@ async def send_template_message(phone: str, template_name: str, params: list):
                     })
                 )
                 return message.sid
-            else:
-                body = f"""Dear {params[0]},\n\nAapki turn qareeb aa rahi hai. Aap se pehle {params[1]} patients hain. Taqreeban wait {params[2]} hai. Please {params[3]} ki taraf chle jayein.\nToken: {params[4]}\n\nKindly tayar rhein.\n\nPulseQ"""
-                return client.messages.create(from_=from_number, to=formatted_phone, body=body).sid
 
-        # Unknown template — log warning, don't send garbage to patient
-        logger.warning(f"send_template_message: unknown template_name '{template_name}' — message not sent.")
+        logger.warning(f"send_template_message: unknown template_name '{template_name}'")
         return None
 
     except Exception as e:

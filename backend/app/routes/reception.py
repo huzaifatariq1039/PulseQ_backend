@@ -22,6 +22,7 @@ from app.services.queue_management_service import (
     avg_last_5, avg_last_10, count_available_doctors, get_hour_history,
     get_weekday_history, get_doctor_history
 )
+from app.services.whatsapp_service import format_whatsapp_number, send_template_message
 
 logger = logging.getLogger(__name__)
 
@@ -436,48 +437,40 @@ async def receptionist_create_walkin_token(
     # ---------------------------------------------------------
     # 🚀 WHATSAPP MESSAGING & SCHEDULING (Mirrored from Patient App)
     # ---------------------------------------------------------
-    def normalize_phone(phone_num: str) -> str:
-        if not phone_num:
-            return phone_num
-        phone_num = str(phone_num).strip().replace(" ", "").replace("-", "")
-        if phone_num.startswith("0") and len(phone_num) == 11:
-            return "+92" + phone_num[1:]  # 03325293408 → +923325293408
-        if not phone_num.startswith("+"):
-            return "+" + phone_num
-        return phone_num
-
     if phone:
-        normalized_phone = normalize_phone(phone)
-        logger.info(f"DEBUG: Raw phone={phone}, Normalized={normalized_phone}")  # ✅ add
-        # 1. Send the initial Token template
         try:
-            from app.services.whatsapp_service import send_template_message
+            formatted_phone = format_whatsapp_number(phone)
+            logger.info(f"DEBUG: Raw phone={phone}, Formatted={formatted_phone}")
+            
+            # Send the initial Token template with exactly 4 parameters:
+            # 1. Doctor Name, 2. Patient Name, 3. Hospital Name, 4. Department
+            print("DEBUG: Attempting to send Walk-in WhatsApp")
             await send_template_message(
-                phone=normalized_phone,
+                phone=formatted_phone,
                 template_name="token_number",
                 params=[
                     doctor.name or "Doctor",
                     patient_name or "Patient",
                     hospital_name_str or "Clinic",
-                    doctor.specialization or "General", 
-                    str(estimated_wait_time or 0)
+                    doctor.specialization or "Department"
                 ]
             )
-            logger.info(f"WhatsApp walk-in confirmation sent to {normalized_phone} for token {token_id}")
+            logger.info(f"WhatsApp walk-in token notification sent to {formatted_phone} for token {token_id}")
+            
+            # Schedule the confirmation reminders
+            try:
+                from app.services.confirmation_scheduler import schedule_confirmation_checks
+                await schedule_confirmation_checks(
+                    token_id=token_id,
+                    first_delay_minutes=15,
+                    second_delay_minutes=15
+                )
+                logger.info(f"Confirmation reminder scheduled for walk-in token {token_id}")
+            except Exception as e:
+                logger.error(f"Failed to schedule confirmation reminder for walk-in token {token_id}: {e}")
         except Exception as e:
-            logger.error(f"Failed to send WhatsApp walk-in confirmation for token {token_id}: {e}")
-    
-        # 2. Schedule the confirmation reminders
-        try:
-            from app.services.confirmation_scheduler import schedule_confirmation_checks
-            await schedule_confirmation_checks(
-                token_id=token_id,
-                first_delay_minutes=15,
-                second_delay_minutes=15
-            )
-            logger.info(f"Confirmation reminder scheduled for walk-in token {token_id}")
-        except Exception as e:
-            logger.error(f"Failed to schedule confirmation reminder for walk-in token {token_id}: {e}")
+            # Log but do not fail the entire request if WhatsApp notification fails
+            logger.warning(f"WhatsApp notification skipped for walk-in token {token_id}: {e}")
     # ---------------------------------------------------------
     
     return ok(
