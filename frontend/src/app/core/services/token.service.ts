@@ -123,8 +123,10 @@ export class TokenService {
   }
 
   /** Get my tokens */
-  getMyTokens(onlyActive = true): Observable<any> {
-    const params = new HttpParams().set('only_active', onlyActive.toString());
+  getMyTokens(onlyActive = true, includeSkipped = true): Observable<any> {
+    let params = new HttpParams()
+      .set('only_active', onlyActive.toString())
+      .set('include_skipped', includeSkipped.toString());
     return this.http.get<any>(`${this.API}/my-tokens`, { params });
   }
 

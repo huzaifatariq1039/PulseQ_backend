@@ -11,7 +11,8 @@
                 <h2>Sales & Revenue</h2>
                 <p class="subtitle">Monitor pharmacy performance and revenue trends</p>
             </div>
-            <button (click)="exportToExcel()" class="export-btn" [disabled]="isExporting">
+            <button *ngIf="activeTab === 'overview'" (click)="exportToExcel()" class="export-btn"
+                [disabled]="isExporting">
                 <i class="pi" [ngClass]="isExporting ? 'pi-spin pi-spinner' : 'pi-download'"></i>
                 {{ isExporting ? 'Exporting...' : 'Export Excel' }}
             </button>
@@ -19,17 +20,13 @@
 
         <!-- TAB BAR -->
         <div class="tab-bar">
-            <button class="tab-btn" [class.active]="activeTab === 'overview'" (click)="activeTab = 'overview'">
-                Overview
-            </button>
-            <button class="tab-btn" [class.active]="activeTab === 'products'" (click)="activeTab = 'products'">
-                Products
-            </button>
+            <button class="tab-btn" [class.active]="activeTab === 'overview'"
+                (click)="activeTab = 'overview'">Overview</button>
+            <button class="tab-btn" [class.active]="activeTab === 'products'"
+                (click)="activeTab = 'products'">Products</button>
         </div>
 
-        <!-- ══════════════════════════════
-         TAB 1 — OVERVIEW
-    ══════════════════════════════ -->
+        <!-- ══════════════════ TAB 1 — OVERVIEW ══════════════════ -->
         <div *ngIf="activeTab === 'overview'">
 
             <!-- Date Filter -->
@@ -40,8 +37,8 @@
                         <div class="calendar-wrapper" [class.focused]="fromFocused">
                             <i class="pi pi-calendar calendar-icon"></i>
                             <p-calendar [(ngModel)]="fromDate" dateFormat="dd/mm/yy" placeholder="Start date"
-                                [showIcon]="false" [readonlyInput]="false" styleClass="range-calendar"
-                                (onFocus)="fromFocused=true" (onBlur)="fromFocused=false">
+                                [showIcon]="false" styleClass="range-calendar" (onFocus)="fromFocused=true"
+                                (onBlur)="fromFocused=false">
                             </p-calendar>
                         </div>
                     </div>
@@ -50,8 +47,8 @@
                         <div class="calendar-wrapper" [class.focused]="toFocused">
                             <i class="pi pi-calendar calendar-icon"></i>
                             <p-calendar [(ngModel)]="toDate" dateFormat="dd/mm/yy" placeholder="End date"
-                                [showIcon]="false" [readonlyInput]="false" styleClass="range-calendar"
-                                (onFocus)="toFocused=true" (onBlur)="toFocused=false">
+                                [showIcon]="false" styleClass="range-calendar" (onFocus)="toFocused=true"
+                                (onBlur)="toFocused=false">
                             </p-calendar>
                         </div>
                     </div>
@@ -65,10 +62,9 @@
                 </div>
             </div>
 
-            <!-- Hint -->
             <p class="filter-hint">
-                Figures use invoices as sales (cancelled invoices excluded). Use Update after changing dates; preset
-                buttons apply immediately.
+                Figures use invoices as sales (cancelled invoices excluded).
+                Use Update after changing dates; preset buttons apply immediately.
             </p>
 
             <!-- Stat Cards -->
@@ -124,39 +120,66 @@
 
             <!-- Charts Row -->
             <div class="charts-row">
-                <div class="chart-card chart-bar">
+
+                <!-- LINE CHART -->
+                <div class="chart-card chart-line">
                     <div class="chart-card-header">
-                        <h3>Sales over time</h3>
+                        <div class="chart-header-inner">
+                            <div>
+                                <h3>Sales over time</h3>
+                                <p class="chart-subtitle">{{ dateRangeLabel }} · Rs</p>
+                            </div>
+                            <div class="chart-legend-inline">
+                                <span class="legend-line-swatch"></span>
+                                <span class="legend-line-label">Revenue</span>
+                            </div>
+                        </div>
                     </div>
                     <div class="chart-body">
-                        <p-chart type="bar" [data]="salesOverTimeData" [options]="barChartOptions"></p-chart>
+                        <ng-container *ngIf="showSalesChart && salesOverTimeData; else salesSkeleton">
+                            <p-chart type="line" [data]="salesOverTimeData" [options]="lineChartOptions">
+                            </p-chart>
+                        </ng-container>
+                        <ng-template #salesSkeleton>
+                            <div class="chart-skeleton">
+                                <div class="skeleton-pulse"></div>
+                            </div>
+                        </ng-template>
                     </div>
                 </div>
+
+                <!-- DONUT CHART -->
                 <div class="chart-card chart-donut">
                     <div class="chart-card-header">
                         <h3>Payment method</h3>
                     </div>
                     <div class="chart-body donut-body">
-                        <p-chart type="doughnut" [data]="paymentMethodData" [options]="donutChartOptions"></p-chart>
-                        <div class="donut-legend" *ngIf="paymentMethodData?.labels?.length">
-                            <div class="legend-item" *ngFor="let lbl of paymentMethodData.labels; let i = index">
-                                <span class="legend-dot"
-                                    [style.background]="paymentMethodData.datasets[0].backgroundColor[i]"></span>
-                                <span class="legend-label">{{ lbl }}</span>
-                                <span class="legend-pct">{{ getPaymentPct(i) }}%</span>
+                        <ng-container *ngIf="showPaymentChart && paymentMethodData; else paymentSkeleton">
+                            <p-chart type="doughnut" [data]="paymentMethodData" [options]="donutChartOptions">
+                            </p-chart>
+                            <div class="donut-legend" *ngIf="paymentMethodData?.labels?.length">
+                                <div class="legend-item" *ngFor="let lbl of paymentMethodData.labels; let i = index">
+                                    <span class="legend-dot"
+                                        [style.background]="paymentMethodData.datasets[0].backgroundColor[i]">
+                                    </span>
+                                    <span class="legend-label">{{ lbl }}</span>
+                                    <span class="legend-pct">{{ getPaymentPct(i) }}%</span>
+                                </div>
                             </div>
-                        </div>
+                        </ng-container>
+                        <ng-template #paymentSkeleton>
+                            <div class="chart-skeleton">
+                                <div class="skeleton-pulse"></div>
+                            </div>
+                        </ng-template>
                     </div>
                 </div>
-            </div>
 
+            </div>
         </div><!-- /overview -->
 
-        <!-- ══════════════════════════════
-         TAB 2 — PRODUCTS REPORT
-    ══════════════════════════════ -->
+        <!-- ══════════════════ TAB 2 — PRODUCTS ══════════════════ -->
         <div *ngIf="activeTab === 'products'">
-
             <div class="table-card">
                 <div class="sales-table-header">
                     <div>
@@ -193,7 +216,6 @@
                             <td class="amount-cell">{{ formatRs(p.profit) }}</td>
                         </tr>
                     </ng-template>
-                    <!-- Summary totals row -->
                     <ng-template pTemplate="footer">
                         <tr class="totals-row">
                             <td><strong>Totals</strong></td>
@@ -214,14 +236,12 @@
                     </ng-template>
                 </p-table>
 
-                <!-- Paginator -->
                 <div class="paginator-row">
                     <p-paginator [rows]="productRows" [totalRecords]="filteredProducts.length"
-                        [rowsPerPageOptions]="[10, 25, 50]" (onPageChange)="onProductPageChange($event)"
+                        [rowsPerPageOptions]="[10,25,50]" (onPageChange)="onProductPageChange($event)"
                         styleClass="custom-paginator">
                     </p-paginator>
                 </div>
-
             </div>
         </div><!-- /products -->
 
