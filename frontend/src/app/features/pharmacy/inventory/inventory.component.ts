@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef, Injector, effect, inject } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
@@ -15,10 +15,11 @@ import { TooltipModule } from 'primeng/tooltip';
 import { MessageService, ConfirmationService } from 'primeng/api';
 import { PharmacyService, AddMedicineApiRequest } from '../../../core/services/pharmacy.service';
 import { Subject } from 'rxjs';
-import { takeUntil, debounceTime } from 'rxjs/operators';
+import { takeUntil, debounceTime, distinctUntilChanged } from 'rxjs/operators';
 import { Medicine, MedicineStatus } from '../../../shared/models/medicine.model';
 import { PharmacySidebarComponent } from '../shared/components/pharmacy-sidebar/pharmacy-sidebar.component';
 import { AuthService } from '../../../core/services/auth.service';
+import { pharmacyPath } from '../../../core/utils/portal-path.util';
 
 import * as XLSX from 'xlsx';
 
@@ -64,7 +65,6 @@ export class InventoryComponent implements OnInit, OnDestroy {
     private importInputRef: HTMLInputElement | null = null;
     private destroy$ = new Subject<void>();
     private searchSubject$ = new Subject<string>();
-    private readonly injector = inject(Injector);
 
     constructor(
         public pharmacyService: PharmacyService,
@@ -78,20 +78,15 @@ export class InventoryComponent implements OnInit, OnDestroy {
     ngOnInit(): void {
         this.searchSubject$.pipe(
             debounceTime(300),
+            distinctUntilChanged(),
             takeUntil(this.destroy$)
-        ).subscribe(() => {
-            this.applyFilters();
-            this.cdr.markForCheck();
-        });
-
-        effect(() => {
-            this.medicines = this.pharmacyService.medicines();
-            this.isLoading = this.pharmacyService.loading();
-            this.applyFilters();
-            this.cdr.markForCheck();
-        }, { injector: this.injector });
+        ).subscribe(() => this.applyFilters());
 
         this.fetchAllMedicines();
+
+        this.pharmacyService.medicinesChanged$
+            .pipe(takeUntil(this.destroy$))
+            .subscribe(() => this.fetchAllMedicines());
     }
 
     ngOnDestroy(): void {
@@ -100,11 +95,37 @@ export class InventoryComponent implements OnInit, OnDestroy {
     }
 
     fetchAllMedicines(): void {
+        this.isLoading = true;
         this.selectedMedicineIds.clear();
         this.cdr.markForCheck();
 
         const hid = (this.authService.getCurrentUser() as any)?.hospitalId || '';
-        this.pharmacyService.loadMedicinesFromApi(hid);
+
+        this.pharmacyService.fetchAllMedicines(hid).pipe(
+            takeUntil(this.destroy$)
+        ).subscribe({
+            next: (res: any) => {
+                const raw: any[] = Array.isArray(res)
+                    ? res
+                    : (res?.data ?? res?.results ?? res?.medicines ?? res?.items ?? []);
+                // ADD THIS DEBUG LOG to confirm medicines load correctly
+                console.log('[Inventory] Loaded medicines count:', raw.length, '| Sample:', raw[0]);
+
+                this.medicines = raw.map(m => this.mapApiItem(m));
+                this.isLoading = false;
+                this.applyFilters();
+            },
+            error: (err: any) => {
+                console.error('Failed to load medicines', err);
+                this.medicines = [];
+                this.isLoading = false;
+                this.applyFilters();
+                this.messageService.add({
+                    severity: 'error', summary: 'Load failed',
+                    detail: 'Could not fetch medicines. Please try again.', life: 4000
+                });
+            }
+        });
     }
 
     /**
@@ -229,10 +250,9 @@ export class InventoryComponent implements OnInit, OnDestroy {
         return map[status] ?? 'pi-circle';
     }
 
-    view(medicine: Medicine): void { this.router.navigate(['/staff/pharmacy/view', medicine.id]); }
-    edit(medicine: Medicine): void { this.router.navigate(['/staff/pharmacy/edit', medicine.id]); }
-    addMedicine(): void { this.router.navigate(['/staff/pharmacy/add']); }
-    goToTrash(): void { this.router.navigate(['/staff/pharmacy/trash']); }
+    view(medicine: Medicine): void { this.router.navigate([pharmacyPath('view'), medicine.id]); }
+    edit(medicine: Medicine): void { this.router.navigate([pharmacyPath('edit'), medicine.id]); }
+    addMedicine(): void { this.router.navigate([pharmacyPath('add')]); }
 
     delete(medicine: Medicine): void {
         this.confirmationService.confirm({
@@ -242,7 +262,7 @@ export class InventoryComponent implements OnInit, OnDestroy {
             accept: () => {
                 this.pharmacyService.deletePharmacyItemApi(medicine.id).subscribe({
                     next: () => {
-                        this.pharmacyService.delete(medicine.id);
+                        this.medicines = this.medicines.filter(m => m.id !== medicine.id);
                         this.selectedMedicineIds.delete(medicine.id);
                         this.applyFilters();
                         this.messageService.add({
@@ -321,7 +341,7 @@ export class InventoryComponent implements OnInit, OnDestroy {
                     this.pharmacyService.deletePharmacyItemApi(id).subscribe({
                         next: () => {
                             done++;
-                            this.pharmacyService.delete(id);
+                            this.medicines = this.medicines.filter(m => m.id !== id);
                             if (done + failed === ids.length) this.onBulkDeleteComplete(done, failed);
                         },
                         error: () => {

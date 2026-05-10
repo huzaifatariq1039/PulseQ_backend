@@ -1,13 +1,15 @@
+
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
-import { ActivatedRoute, Router } from '@angular/router';
+import { Router } from '@angular/router';
 import { CardModule } from 'primeng/card';
 import { ButtonModule } from 'primeng/button';
 import { InputTextModule } from 'primeng/inputtext';
 import { ToastModule } from 'primeng/toast';
 import { MessageService } from 'primeng/api';
 
+import { environment } from '../../../../environments/environment';
 import { AuthService } from '../../../core/services/auth.service';
 
 @Component({
@@ -25,7 +27,6 @@ export class PharmacyAuthComponent implements OnInit {
 
   constructor(
     private fb: FormBuilder,
-    private route: ActivatedRoute,
     private router: Router,
     private messageService: MessageService,
     private authService: AuthService
@@ -44,12 +45,7 @@ export class PharmacyAuthComponent implements OnInit {
 
   submitForm() {
     if (this.loginForm.invalid) {
-      this.messageService.add({
-        severity: 'warn',
-        summary: 'Validation Error',
-        detail: 'Please fill in all fields correctly',
-        life: 3000
-      });
+      this.messageService.add({ severity: 'warn', summary: 'Error', detail: 'Please fill in all fields correctly', life: 3000 });
       return;
     }
 
@@ -59,40 +55,34 @@ export class PharmacyAuthComponent implements OnInit {
     this.authService.pharmacyLogin(email, password).subscribe({
       next: (success) => {
         this.isLoading = false;
+        if (success) {
+          this.messageService.add({
+            severity: 'success',
+            summary: 'Success',
+            detail: 'Logged in successfully',
+            life: 2000
+          });
+          setTimeout(() => {
+            const isLocalhost = window.location.hostname === 'localhost' ||
+                                window.location.hostname === '127.0.0.1';
 
-        const token = localStorage.getItem('pulseq_token');
-        console.log('[PharmacyAuth] Login success flag:', success);
-        console.log('[PharmacyAuth] Token in storage:', token);
-
-        if (!success || !token) {
+            if (isLocalhost) {
+              this.router.navigate(['/staff/pharmacy/dashboard']);
+            } else {
+              this.router.navigate(['/dashboard']);
+            }
+          }, 500);
+        } else {
           this.messageService.add({
             severity: 'error',
             summary: 'Login Failed',
-            detail: 'Authentication failed. Please check your credentials.',
+            detail: 'Invalid email or password.',
             life: 4000
           });
-          return;
         }
-
-        this.messageService.add({
-          severity: 'success',
-          summary: 'Success',
-          detail: 'Logged in successfully',
-          life: 2000
-        });
-
-        setTimeout(() => {
-          this.router.navigate(['/staff/pharmacy/dashboard']).then(navigated => {
-            console.log('[PharmacyAuth] Navigation to dashboard result:', navigated);
-            if (!navigated) {
-              console.error('[PharmacyAuth] Navigation failed — check route config and auth guard');
-            }
-          });
-        }, 500);
       },
       error: (err) => {
         this.isLoading = false;
-        console.error('[PharmacyAuth] Login error:', err);
         this.messageService.add({
           severity: 'error',
           summary: 'Login Failed',
@@ -104,6 +94,6 @@ export class PharmacyAuthComponent implements OnInit {
   }
 
   goBack() {
-    this.router.navigate(['/auth']);
+    this.router.navigate(['/']);
   }
 }

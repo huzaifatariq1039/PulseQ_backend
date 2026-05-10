@@ -1,7 +1,8 @@
 import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { RouterModule, Router, ActivatedRoute } from '@angular/router';
+import { RouterModule, Router } from '@angular/router';
 import { AuthService } from '../../../../../core/services/auth.service';
+import { pharmacyPath } from '../../../../../core/utils/portal-path.util';
 
 @Component({
     selector: 'app-pharmacy-sidebar',
@@ -12,12 +13,19 @@ import { AuthService } from '../../../../../core/services/auth.service';
 })
 export class PharmacySidebarComponent {
     sidebarOpen = false;
+    dashboardPath = pharmacyPath('dashboard');
+    inventoryPath = pharmacyPath('inventory');
+    salesPath = pharmacyPath('sales');
+    addPath = pharmacyPath('add');
+    trashPath = pharmacyPath('trash');
 
-    constructor(private router: Router, private route: ActivatedRoute, private authService: AuthService) { }
+    constructor(private router: Router, private authService: AuthService) { }
 
     signOut(): void {
         this.authService.logout();
-        this.router.navigate(['../auth'], { relativeTo: this.route });
+        const isLocalhost = window.location.hostname === 'localhost' ||
+                            window.location.hostname === '127.0.0.1';
+        this.router.navigate([isLocalhost ? '/staff/pharmacy/auth' : '/auth']);
     }
 
     toggleSidebar(): void {

@@ -7,9 +7,7 @@
 </div>
 
 <!-- SIDEBAR OVERLAY -->
-@if (sidebarOpen) {
-<div class="sidebar-overlay" (click)="toggleSidebar()"></div>
-}
+<div class="sidebar-overlay" *ngIf="sidebarOpen" (click)="toggleSidebar()"></div>
 
 <!-- SIDEBAR -->
 <aside class="sidebar" [class.open]="sidebarOpen">
@@ -19,30 +17,30 @@
     </div>
 
     <nav class="sidebar-menu">
-        <a routerLink="/staff/pharmacy/dashboard" routerLinkActive="active" class="menu-item"
+        <a [routerLink]="dashboardPath" routerLinkActive="active" class="menu-item"
             [routerLinkActiveOptions]="{ exact: false }" (click)="sidebarOpen = false">
             <i class="pi pi-th-large"></i>
             <span>Dashboard</span>
         </a>
-        <a routerLink="/staff/pharmacy/inventory" routerLinkActive="active" class="menu-item"
+        <a [routerLink]="inventoryPath" routerLinkActive="active" class="menu-item"
             [routerLinkActiveOptions]="{ exact: false }" (click)="sidebarOpen = false">
             <i class="pi pi-box"></i>
             <span>Inventory</span>
         </a>
-        <a routerLink="/staff/pharmacy/add" routerLinkActive="active" class="menu-item"
-            [routerLinkActiveOptions]="{ exact: false }" (click)="sidebarOpen = false">
-            <i class="pi pi-plus-circle"></i>
-            <span>Add Medicine</span>
-        </a>
-        <a routerLink="/staff/pharmacy/sales" routerLinkActive="active" class="menu-item"
+        <a [routerLink]="salesPath" routerLinkActive="active" class="menu-item"
             [routerLinkActiveOptions]="{ exact: false }" (click)="sidebarOpen = false">
             <i class="pi pi-chart-line"></i>
             <span>Sales & Revenue</span>
         </a>
-        <a routerLink="/staff/pharmacy/invoices" routerLinkActive="active" class="menu-item"
+        <a [routerLink]="addPath" routerLinkActive="active" class="menu-item"
             [routerLinkActiveOptions]="{ exact: false }" (click)="sidebarOpen = false">
-            <i class="pi pi-receipt"></i>
-            <span>Invoices</span>
+            <i class="pi pi-plus-circle"></i>
+            <span>Add Medicine</span>
+        </a>
+        <a [routerLink]="trashPath" routerLinkActive="active" class="menu-item"
+            [routerLinkActiveOptions]="{ exact: false }" (click)="sidebarOpen = false">
+            <i class="pi pi-trash"></i>
+            <span>Trash</span>
         </a>
     </nav>
 
