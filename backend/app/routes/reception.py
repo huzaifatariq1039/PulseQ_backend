@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone, time
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status, BackgroundTasks
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from app.db_models import User, Doctor, Hospital, Token, ActivityLog, Queue as DBQueue
@@ -14,6 +14,7 @@ from app.utils.mrn import get_or_create_patient_mrn
 from app.utils.date_utils import to_dt
 import uuid
 import logging
+import asyncio
 
 # --- AI Engine Imports ---
 from app.services.ai_engine import ai_engine
@@ -27,6 +28,63 @@ from app.services.whatsapp_service import format_whatsapp_number, send_template_
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+# ============================================================================
+# BACKGROUND TASK: Send WhatsApp Walk-in Token Notification
+# ============================================================================
+async def _send_walkin_token_notification(
+    token_id: str,
+    phone: str,
+    doctor_name: str,
+    patient_name: str,
+    hospital_name: str,
+    department: str,
+) -> None:
+    """
+    Background task to send WhatsApp token notification without blocking API response.
+    
+    This function:
+    1. Sanitizes/formats the phone number to E.164 standard
+    2. Calls send_template_message with the token details
+    3. Logs any errors without raising exceptions
+    
+    Called via BackgroundTasks.add_task() so it runs after HTTP response is sent.
+    """
+    try:
+        if not phone:
+            logger.warning(f"Skipping WhatsApp for token {token_id}: no phone number provided")
+            return
+        
+        # Format phone to E.164 standard (e.g., +923001234567 for Pakistan)
+        formatted_phone = format_whatsapp_number(phone)
+        logger.info(f"[Walk-in WhatsApp] Raw phone={phone}, Formatted={formatted_phone}")
+        
+        # Send template message with exactly 4 parameters
+        await send_template_message(
+            phone=formatted_phone,
+            template_name="token_number",
+            params=[
+                doctor_name or "Doctor",
+                patient_name or "Patient",
+                hospital_name or "Clinic",
+                department or "Department"
+            ]
+        )
+        logger.info(
+            f"[Walk-in WhatsApp SUCCESS] Sent token notification to {formatted_phone} "
+            f"for token {token_id}"
+        )
+        
+    except Exception as e:
+        # Log the error but do NOT raise - background tasks should not fail the request
+        logger.error(
+            f"[Walk-in WhatsApp FAILED] Unable to send WhatsApp for token {token_id}: {str(e)}",
+            exc_info=True
+        )
+
+
+
 
 
 @router.post("/receptionists", response_model=ReceptionistResponse, dependencies=[Depends(require_roles("admin"))])
@@ -221,6 +279,7 @@ async def reception_tokens(
 @router.post("/walkin-token", dependencies=[Depends(require_roles("receptionist", "admin"))])
 async def receptionist_create_walkin_token(
     payload: Dict[str, Any],
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current: TokenData = Depends(get_current_active_user),
 ) -> Dict[str, Any]:
@@ -435,42 +494,34 @@ async def receptionist_create_walkin_token(
     db.commit()
 
     # ---------------------------------------------------------
-    # 🚀 WHATSAPP MESSAGING & SCHEDULING (Mirrored from Patient App)
+    # 🚀 WHATSAPP MESSAGING - BACKGROUND TASK (Non-blocking)
     # ---------------------------------------------------------
+    # Queue WhatsApp notification as a background task so it doesn't block the receptionist's response
+    if phone:
+        background_tasks.add_task(
+            _send_walkin_token_notification,
+            token_id=token_id,
+            phone=phone,
+            doctor_name=doctor.name or "Doctor",
+            patient_name=patient_name or "Patient",
+            hospital_name=hospital_name_str or "Clinic",
+            department=doctor.specialization or "Department"
+        )
+        logger.info(f"Queued WhatsApp notification task for walk-in token {token_id}")
+    
+    # Schedule confirmation reminders (only if WhatsApp was queued)
     if phone:
         try:
-            formatted_phone = format_whatsapp_number(phone)
-            logger.info(f"DEBUG: Raw phone={phone}, Formatted={formatted_phone}")
-            
-            # Send the initial Token template with exactly 4 parameters:
-            # 1. Doctor Name, 2. Patient Name, 3. Hospital Name, 4. Department
-            print("DEBUG: Attempting to send Walk-in WhatsApp")
-            await send_template_message(
-                phone=formatted_phone,
-                template_name="token_number",
-                params=[
-                    doctor.name or "Doctor",
-                    patient_name or "Patient",
-                    hospital_name_str or "Clinic",
-                    doctor.specialization or "Department"
-                ]
+            from app.services.confirmation_scheduler import schedule_confirmation_checks
+            background_tasks.add_task(
+                schedule_confirmation_checks,
+                token_id=token_id,
+                first_delay_minutes=15,
+                second_delay_minutes=15
             )
-            logger.info(f"WhatsApp walk-in token notification sent to {formatted_phone} for token {token_id}")
-            
-            # Schedule the confirmation reminders
-            try:
-                from app.services.confirmation_scheduler import schedule_confirmation_checks
-                await schedule_confirmation_checks(
-                    token_id=token_id,
-                    first_delay_minutes=15,
-                    second_delay_minutes=15
-                )
-                logger.info(f"Confirmation reminder scheduled for walk-in token {token_id}")
-            except Exception as e:
-                logger.error(f"Failed to schedule confirmation reminder for walk-in token {token_id}: {e}")
+            logger.info(f"Queued confirmation reminder scheduler for walk-in token {token_id}")
         except Exception as e:
-            # Log but do not fail the entire request if WhatsApp notification fails
-            logger.warning(f"WhatsApp notification skipped for walk-in token {token_id}: {e}")
+            logger.error(f"Failed to queue confirmation reminder for walk-in token {token_id}: {e}")
     # ---------------------------------------------------------
     
     return ok(
