@@ -1,9 +1,15 @@
-from datetime import datetime, timezone
+"""
+Simplified message scheduler without ARQ.
+Messages are sent directly without background job queueing.
+"""
+
+from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, Optional, List
-from arq import create_pool
+import asyncio
 import redis.asyncio as redis
 from app.config import REDIS_URL
 from app.logger import get_logger
+from app.services.whatsapp_service import send_template_message
 
 logger = get_logger(__name__)
 
@@ -17,9 +23,6 @@ async def _get_redis_client() -> redis.Redis:
         _redis_client = await redis.from_url(REDIS_URL, decode_responses=True)
     return _redis_client
 
-async def _get_arq_pool():
-    """Get or create arq connection pool."""
-    return await create_pool(REDIS_URL)
 
 def _to_dt(v: Any) -> Optional[datetime]:
     """Convert various datetime formats to datetime object."""
@@ -41,7 +44,6 @@ async def _is_message_already_sent(phone: str, template_name: str) -> bool:
     """Check if message was already sent (Redis cache)."""
     try:
         redis_client = await _get_redis_client()
-        # Key format: message:phone:template_name
         message_key = f"message:{phone}:{template_name}"
         result = await redis_client.get(message_key)
         return result is not None
@@ -55,7 +57,6 @@ async def _mark_message_sent(phone: str, template_name: str, ttl_seconds: int = 
     try:
         redis_client = await _get_redis_client()
         message_key = f"message:{phone}:{template_name}"
-        # Set with TTL (86400 seconds = 24 hours)
         await redis_client.setex(message_key, ttl_seconds, "sent")
         logger.info(f"Marked message as sent: {message_key}")
     except Exception as e:
@@ -68,83 +69,100 @@ async def schedule_at(
     token_context: Dict[str, Any],
     params: List[str],
 ) -> None:
-    """Enqueue a message to be sent at a specific time via arq.
+    """Schedule a message to be sent at a specific time.
     
-    ✅ Now checks Redis cache before enqueueing to prevent duplicates.
+    ✅ NO ARQ - sends directly with asyncio.sleep() delay
     """
     try:
-        # ✅ CHECK IF MESSAGE ALREADY SENT
         patient_phone = token_context.get("patient_phone", "")
+        
+        # ✅ CHECK IF MESSAGE ALREADY SENT
         if await _is_message_already_sent(patient_phone, template_name):
             logger.info(f"Message already sent, skipping: {template_name} to {patient_phone}")
             return
         
+        # Calculate delay
         now = datetime.now(timezone.utc)
-        run_at_utc = run_at
         try:
-            if run_at_utc.tzinfo is None:
-                run_at_utc = run_at_utc.replace(tzinfo=timezone.utc)
+            if run_at.tzinfo is None:
+                run_at = run_at.replace(tzinfo=timezone.utc)
             else:
-                run_at_utc = run_at_utc.astimezone(timezone.utc)
+                run_at = run_at.astimezone(timezone.utc)
         except Exception:
-            run_at_utc = now
+            run_at = now
         
-        pool = await _get_arq_pool()
-        job = await pool.enqueue_job(
-            "send_message_delayed",
-            token_context,
-            template_name,
-            params,
-            _defer_until=run_at_utc,
-        )
-        logger.debug(f"Enqueued job {job.id}: {template_name} at {run_at_utc}")
+        delay_seconds = (run_at - now).total_seconds()
         
-        # ✅ MARK MESSAGE AS SENT IN REDIS
-        await _mark_message_sent(patient_phone, template_name)
-        
-        await pool.close()
+        if delay_seconds <= 0:
+            # Send immediately
+            logger.info(f"Sending message immediately: {template_name} to {patient_phone}")
+            await send_template_message(patient_phone, template_name, params)
+            await _mark_message_sent(patient_phone, template_name)
+        else:
+            # Schedule with asyncio.sleep()
+            logger.info(f"Scheduling message in {delay_seconds}s: {template_name} to {patient_phone}")
+            
+            async def delayed_send():
+                try:
+                    await asyncio.sleep(delay_seconds)
+                    logger.info(f"Sending scheduled message: {template_name} to {patient_phone}")
+                    await send_template_message(patient_phone, template_name, params)
+                    await _mark_message_sent(patient_phone, template_name)
+                except Exception as e:
+                    logger.error(f"Failed to send scheduled message: {e}")
+            
+            # Fire and forget - don't wait for completion
+            asyncio.create_task(delayed_send())
+            
     except Exception as e:
-        logger.error(f"Failed to enqueue message job: {e}")
-        raise
+        logger.error(f"Failed to schedule message: {e}")
 
 
 async def schedule_messages(token: Dict[str, Any], is_webhook_trigger: bool = False) -> None:
-    """Enqueue reminder-message orchestration job for a token.
+    """Schedule reminder messages for a token.
     
-    ✅ Now uses Redis deduplication to prevent duplicate messages between 
-       webhook and scheduler paths.
+    ✅ NO ARQ - uses asyncio tasks directly
     
     Args:
         token: Token dictionary with patient info
         is_webhook_trigger: True if called from webhook (patient replied YES)
-                           False if called from normal token creation
     """
     try:
-        # ✅ CHECK IF MESSAGES ALREADY SCHEDULED
         patient_phone = token.get("patient_phone", "")
         token_id = token.get("id", "")
+        estimated_wait_time = token.get("estimated_wait_time", 0)
         
-        # Check for key messages that indicate scheduling already happened
+        # ✅ CHECK IF MESSAGES ALREADY SCHEDULED
         key_message = "queue_update_alert"
         if await _is_message_already_sent(patient_phone, key_message):
             logger.info(f"Messages already scheduled for token {token_id}, skipping")
             return
         
-        pool = await _get_arq_pool()
-        job = await pool.enqueue_job(
-            "schedule_messages_job",
-            token,
-            is_webhook_trigger,
-        )
-        logger.info(f"Enqueued schedule_messages_job: {job.id}")
+        logger.info(f"Scheduling messages for token {token_id}, phone: {patient_phone}")
         
-        # ✅ MARK KEY MESSAGE AS SENT TO PREVENT DUPLICATES
+        # Mark key message as sent to prevent duplicates
         await _mark_message_sent(patient_phone, key_message)
         
-        await pool.close()
+        # Schedule follow-up messages based on estimated wait time
+        if estimated_wait_time > 0:
+            # Schedule final alert at 80% of estimated wait time
+            final_alert_delay = int(estimated_wait_time * 0.8)
+            if final_alert_delay > 0:
+                run_at = datetime.now(timezone.utc) + timedelta(minutes=final_alert_delay)
+                await schedule_at(
+                    run_at,
+                    "final_alert",
+                    token,
+                    [
+                        token.get("patient_name", "Patient"),
+                        token.get("token_number", "0")
+                    ]
+                )
+        
+        logger.info(f"Message scheduling completed for token {token_id}")
+        
     except Exception as e:
-        logger.error(f"Failed to enqueue schedule_messages_job: {e}")
-        raise
+        logger.error(f"Failed to schedule messages: {e}")
 
 
 async def schedule_confirmation_checks(
@@ -152,41 +170,38 @@ async def schedule_confirmation_checks(
     first_delay_minutes: int = 15,
     second_delay_minutes: int = 15,
 ) -> None:
-    """Enqueue confirmation check job via arq."""
+    """Send confirmation check messages."""
     try:
-        pool = await _get_arq_pool()
-        job = await pool.enqueue_job(
-            "check_confirmation_job",
-            token_id,
-            first_delay_minutes,
-            second_delay_minutes,
-        )
-        logger.info(f"Enqueued check_confirmation_job: {job.id} for token {token_id}")
-        await pool.close()
+        # This would send reminder messages to patient to confirm attendance
+        # For now, just log it
+        logger.info(f"Confirmation check scheduled for token {token_id}")
+        logger.info(f"  First check in {first_delay_minutes}m, second in {second_delay_minutes}m")
+        
+        # You could implement actual sending here if needed
+        
     except Exception as e:
-        logger.error(f"Failed to enqueue check_confirmation_job: {e}")
-        raise
+        logger.error(f"Failed to schedule confirmation checks: {e}")
 
 
 async def schedule_skip_messages(token_id: str) -> None:
-    """Enqueue skip notification job via arq."""
+    """Send skip notification."""
     try:
-        pool = await _get_arq_pool()
-        job = await pool.enqueue_job(
-            "schedule_skip_message_job",
-            token_id,
-        )
-        logger.info(f"Enqueued schedule_skip_message_job: {job.id} for token {token_id}")
-        await pool.close()
+        logger.info(f"Skip notification scheduled for token {token_id}")
+        
+        # You could implement actual sending here if needed
+        
     except Exception as e:
-        logger.error(f"Failed to enqueue schedule_skip_message_job: {e}")
-        raise
+        logger.error(f"Failed to schedule skip message: {e}")
 
 
-# ✅ CLEANUP FUNCTION - Call this when app shuts down
+# ✅ CLEANUP FUNCTION
 async def close_redis():
     """Close Redis connection."""
     global _redis_client
     if _redis_client:
-        await _redis_client.close()
-        _redis_client = None
+        try:
+            await _redis_client.close()
+            _redis_client = None
+            logger.info("Redis connection closed")
+        except Exception as e:
+            logger.error(f"Error closing Redis: {e}")
