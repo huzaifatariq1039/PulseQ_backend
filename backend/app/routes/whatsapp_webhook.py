@@ -45,7 +45,7 @@ async def twilio_whatsapp_webhook(
     signature = request.headers.get("X-Twilio-Signature", "")
     body      = await request.body()
 
-    webhook_url = "https://oyster-app-notep.ondigitalocean.app/api/v1/webhooks/twilio/webhook"
+    webhook_url = "https://api.pulseq.health/api/v1/webhooks/twilio/webhook"
     is_prod      = os.getenv("ENVIRONMENT") == "production"
 
     if is_prod and signature:
@@ -106,7 +106,7 @@ async def twilio_whatsapp_webhook(
     now = datetime.utcnow()
 
     # ── YES ────────────────────────────────────────────────────────────────────
-    if effective_message in ["yes", "y"]:
+    if effective_message in ["yes", "y", "YES"]:
         token.status              = "confirmed"
         token.confirmed           = True
         token.confirmed_at        = now
