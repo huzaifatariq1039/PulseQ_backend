@@ -100,7 +100,7 @@ async def twilio_whatsapp_webhook(
     signature = request.headers.get("X-Twilio-Signature", "")
     body      = await request.body()
 
-    webhook_url = "https://oyster-app-notep.ondigitalocean.app/api/v1/webhooks/twilio/webhook"
+    webhook_url = "https://PulseQ-API-env.eba-i2evcmmi.ap-south-1.elasticbeanstalk.com/api/v1/webhooks/twilio/webhook"
     is_prod      = os.getenv("ENVIRONMENT") == "production"
 
     if is_prod and signature:
