@@ -95,13 +95,15 @@ async def twilio_whatsapp_webhook(
     signature = request.headers.get("X-Twilio-Signature", "")
     body = await request.body()
 
-    # ✅ FIX: Build URL dynamically from the actual request
-    # This ensures the URL matches exactly what Twilio signed against
-    webhook_url = str(request.url)
-    # Force http since EB doesn't have SSL cert yet
-    webhook_url = webhook_url.replace("https://", "http://")
-    
-    logger.info(f"[WEBHOOK] Incoming request URL: {webhook_url}")
+    # ✅ STATIC URL for Twilio signature validation
+    forwarded_host = request.headers.get("X-Forwarded-Host", "")
+    forwarded_proto = request.headers.get("X-Forwarded-Proto", "http")
+    if forwarded_host:
+        webhook_url = f"{forwarded_proto}://{forwarded_host}/api/v1/webhooks/twilio/webhook"
+    else:
+        webhook_url = "http://pulseq-api-env.eba-i2evcmmi.ap-south-1.elasticbeanstalk.com/api/v1/webhooks/twilio/webhook"
+
+    logger.info(f"[WEBHOOK] Validating against URL: {webhook_url}")
 
     is_prod = os.getenv("ENVIRONMENT") == "production"
 
@@ -118,7 +120,7 @@ async def twilio_whatsapp_webhook(
             if not validator.validate(webhook_url, form_data_raw, signature):
                 logger.warning(f"[WEBHOOK] Invalid Twilio signature for URL: {webhook_url}")
                 raise HTTPException(status_code=403, detail="Invalid Twilio Signature")
-            
+
             logger.info(f"[WEBHOOK] Signature validated successfully")
 
         except HTTPException:
@@ -189,6 +191,19 @@ async def twilio_whatsapp_webhook(
         db.commit()
         logger.info(f"[YES] Token status updated to CONFIRMED: {token.token_number}")
 
+        # Cancel reminder jobs
+        try:
+            from app.services.app_scheduler import get_scheduler
+            sch = get_scheduler()
+            if sch:
+                for job_id in [f"confirm_reminder:{token.id}", f"confirm_final:{token.id}"]:
+                    try:
+                        sch.remove_job(job_id)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
         patient_name  = _safe_str(token.patient_name,  "Patient")
         hospital_name = _safe_str(token.hospital_name, "Clinic")
         token_display = _safe_str(token.display_code or token.token_number, "0")
@@ -210,13 +225,12 @@ async def twilio_whatsapp_webhook(
         except Exception as e:
             logger.error(f"[YES] patients_ahead query failed: {e}")
 
-        logger.info(f"[YES] Sending queue_update_alert to {normalized_incoming}")
-        logger.info(f"[YES] patient_name={patient_name}, patients_ahead={patients_ahead}, wait_time={wait_time}")
+        logger.info(f"[YES] user_number={normalized_incoming}")
+        logger.info(f"[YES] patient_name={patient_name}, patients_ahead={patients_ahead}, wait_time={wait_time}, hospital={hospital_name}, token={token_display}")
 
         try:
-            # ✅ CHECK IF MESSAGE ALREADY SENT (deduplication)
             if await _is_message_already_sent(normalized_incoming, "queue_update_alert"):
-                logger.warning(f"[YES] queue_update_alert already sent, skipping")
+                logger.warning(f"[YES] queue_update_alert already sent to {normalized_incoming}, skipping")
             else:
                 result = await send_template_message(
                     normalized_incoming,
@@ -229,11 +243,27 @@ async def twilio_whatsapp_webhook(
                         token_display,
                     ],
                 )
-                logger.info(f"[YES] queue_update_alert sent successfully: {result}")
+                logger.info(f"[YES] queue_update_alert sent successfully: sid={result}")
                 await _mark_message_sent(normalized_incoming, "queue_update_alert")
 
         except Exception as e:
             logger.error(f"[YES] Failed to send queue_update_alert: {e}", exc_info=True)
+
+        # Schedule follow-up messages
+        try:
+            from app.services.message_scheduler import schedule_messages
+            token_dict = {k: v for k, v in token.__dict__.items() if not k.startswith("_")}
+            token_dict.update({
+                "patient_name":        patient_name,
+                "hospital_name":       hospital_name,
+                "token_number":        token_display,
+                "estimated_wait_time": wait_time,
+                "patient_phone":       normalized_incoming,
+            })
+            await schedule_messages(token_dict, is_webhook_trigger=True)
+            logger.info(f"[YES] Follow-up sequence scheduled for token {token.id}")
+        except Exception as e:
+            logger.error(f"[YES] schedule_messages failed: {e}", exc_info=True)
 
         return Response(content=str(MessagingResponse()), media_type="application/xml")
 
@@ -262,7 +292,7 @@ async def twilio_whatsapp_webhook(
                     "cancelled",
                     [_safe_str(token.patient_name, "Patient")],
                 )
-                logger.info(f"[NO] Cancellation message sent")
+                logger.info(f"[NO] Cancellation message sent to {normalized_incoming}")
                 await _mark_message_sent(normalized_incoming, "cancelled")
         except Exception as e:
             logger.error(f"[NO] Failed to send cancellation message: {e}")
