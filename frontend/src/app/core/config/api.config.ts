@@ -5,29 +5,11 @@
  * Falls back to sensible defaults if environment variables are not set.
  */
 
-const DEFAULT_API_BASE_URL = 'https://api.pulseq.health/api/v1';
+import { environment } from '../../../environments/environment';
+
 const DEFAULT_SSR_DEV_URL = 'http://localhost:4000';
 
-/**
- * Get the API base URL for client-side requests.
- * Uses VITE_API_URL environment variable, defaults to the PulseQ production API.
- */
-export function getApiBaseUrl(): string {
-  // Try Vite environment variable (client-side)
-  try {
-    // For Vite builds, import.meta.env is available
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const env = (import.meta as any)?.env?.VITE_API_URL;
-    if (env) {
-      return env;
-    }
-  } catch {
-    // Silent fallback for non-module environments
-  }
-
-  // Fallback to default
-  return DEFAULT_API_BASE_URL;
-}
+export const API_BASE_URL = environment.apiBaseUrl;
 
 /**
  * Get the SSR base URL for server-side requests.
@@ -80,7 +62,7 @@ export function isDevelopmentEnvironment(): boolean {
  * @returns Full API URL
  */
 export function getApiUrl(path: string): string {
-  const baseUrl = getApiBaseUrl();
+  const baseUrl = API_BASE_URL;
   const cleanPath = path.startsWith('/') ? path : `/${path}`;
   return `${baseUrl}${cleanPath}`;
 }
@@ -97,7 +79,7 @@ export function getSsrUrl(path: string): string {
 }
 
 export const apiConfig = {
-  apiBaseUrl: getApiBaseUrl(),
+  apiBaseUrl: API_BASE_URL,
   ssrBaseUrl: getSsrBaseUrl(),
   isDevelopment: isDevelopmentEnvironment(),
   getApiUrl,

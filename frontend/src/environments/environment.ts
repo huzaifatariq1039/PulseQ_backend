@@ -1,7 +1,5 @@
-import { getApiBaseUrl } from '../app/core/config/api.config';
-
 export const environment = {
   production: false,
-  apiBaseUrl: getApiBaseUrl(),
+  apiBaseUrl: 'http://localhost:8000/api/v1',
   portal: 'main'
 };

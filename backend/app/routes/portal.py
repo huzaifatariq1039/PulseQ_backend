@@ -866,27 +866,38 @@ async def receptionist_create_walkin_token(
     
     db.add(new_token)
     db.commit()
-    
-    return ok(
-        data={
-            "token_id": token_id,
-            "token_number": display_code,
-            "hospital_name": hospital_name_str,
-            "department": reason,
-            "doctor_name": doctor.name,
-            "patient_name": patient_name,
-            "phone": phone,
-            "mrn": mrn,
-            "age": age,
-            "gender": gender,
-            "payment": "UNPAID",
-            "status": "PENDING",
-            "consultation_fee": doc_fee,
-            "token_fee": token_fee,
-            "total_fee": total_fee
-        }, 
-        message="Walk-in token created via AI Engine"
-    )
+
+    # ✅ Send WhatsApp appointment confirmation to patient
+    if phone:
+        try:
+            from app.services.whatsapp_service import send_template_message
+
+            def _normalize_phone(p: str) -> str:
+                p = str(p).strip().replace(" ", "").replace("-", "")
+                if p.startswith("0") and len(p) == 11:
+                    return "+92" + p[1:]
+                if not p.startswith("+"):
+                    return "+" + p
+                return p
+
+            room_number = getattr(doctor, 'room_number', None) or getattr(doctor, 'room', None) or "TBD"
+
+            await send_template_message(
+                phone=_normalize_phone(phone),
+                template_name="token_number",  # ← replace with your actual template name
+                params=[
+                    doctor.name,                  # {doctor_name}
+                    patient_name,                 # {name}
+                    hospital_name_str,            # {hospital_name}
+                    str(room_number),             # {room_number}
+                    str(estimated_wait_time),     # {wait_time}
+                ]
+            )
+            logger.info(f"WhatsApp walk-in confirmation sent to {phone} for token {token_id}")
+        except Exception as e:
+            logger.error(f"Failed to send WhatsApp walk-in confirmation for token {token_id}: {e}")
+
+    return ok(data={"token_id": token_id})
 
 @router.post("/receptionist/tokens/{token_id}/skip", dependencies=[Depends(require_roles("receptionist", "patient", "admin"))])
 async def receptionist_skip_token(

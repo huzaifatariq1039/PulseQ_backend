@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
+from dotenv import load_dotenv
 import os
 import asyncio
 import time
@@ -44,29 +45,11 @@ from app.routes.pharmacy import public_router as pharmacy_public_router
 from app.routes.pharmacy import router as pharmacy_portal_router
 from app.routes.token_alias import token_alias_router
 from app.routes.auth_otp import router as otp_router
+
+load_dotenv()
  
 # FIX 2: Compute cors_origins BEFORE lifespan so the startup log doesn't crash
-_origins_env = os.getenv("ALLOWED_ORIGINS", "")
-_allowed_origins = [o.strip() for o in _origins_env.split(",") if o.strip()]
-_default_origins = [o for o in [WEB_BASE_URL, MOBILE_BASE_URL, "https://pulseq.health",               # Main Landing Page
-    "https://www.pulseq.health",
-    "https://patient.pulseq.health",       # Patient Portal
-    "https://doctor.pulseq.health",        # Doctor Portal
-    "https://reception.pulseq.health",     # Reception Portal
-    "https://pharmacy.pulseq.health",      # Pharmacy Portal
-    "https://admin.pulseq.health",         # Admin Portal
-    "https://demo.pulseq.health",
-    "http://patient.localhost:4200/",
-    "http://doctor.localhost:4200/",
-    "http://reception.localhost:4200/",
-    "http://pharmacy.localhost:4200/",
-    "http://admin.localhost:4200/",
-    "http://demo.localhost:4200/"
-] if o]
-_extra = EXTRA_CORS_ORIGINS or []
-if not (_allowed_origins or _default_origins or _extra):
-    _allowed_origins = ["*"]
-cors_origins = _allowed_origins or (_default_origins + _extra)
+cors_origins = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:4200,http://localhost:3000,https://pulseq.health,https://www.pulseq.health").split(",") if o.strip()]
 
 # Initialize logger for main module
 logger = get_logger(__name__)

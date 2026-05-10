@@ -8,6 +8,8 @@
  * 
  * This enables a single build artifact to serve multiple portal applications
  * from different subdomains or paths.
+ * 
+ * ⚠️ SSR-Safe: Returns 'main' immediately if window is not defined (server-side)
  */
 
 export type PortalType = 'main' | 'patient' | 'doctor' | 'pharmacy' | 'reception' | 'admin' | 'demo';
@@ -26,9 +28,16 @@ export type PortalType = 'main' | 'patient' | 'doctor' | 'pharmacy' | 'reception
  * - localhost:4200 with /patient path -> 'patient'
  * - localhost:4200 with /staff path -> 'main'
  * 
+ * ⚠️ Returns 'main' if called during SSR (window is undefined)
+ * 
  * @returns The detected portal type
  */
 export function detectPortal(): PortalType {
+  // ✅ SSR-safe: Return 'main' immediately if window is not available (server-side rendering)
+  if (typeof window === 'undefined') {
+    return 'main';
+  }
+
   try {
     const hostname = window.location.hostname.toLowerCase();
     const pathname = window.location.pathname;
@@ -85,7 +94,7 @@ export function detectPortal(): PortalType {
     // Default to main if nothing matches
     return 'main';
   } catch (error) {
-    console.error('Error detecting portal:', error);
+    console.warn('Error detecting portal, defaulting to main:', error);
     return 'main';
   }
 }

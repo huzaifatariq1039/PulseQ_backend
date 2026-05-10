@@ -28,9 +28,12 @@ const portalRouteMap: Record<string, Routes> = {
  * 1. Hostname subdomain (e.g., patient.pulseq.health)
  * 2. URL path if multi-portal (e.g., localhost:4200/patient)
  * 3. Defaults to 'main' if no portal detected
+ * 4. Returns 'main' if window is undefined (SSR/server-side)
+ * 
+ * ⚠️ SSR-Safe: detectPortal() returns 'main' when called during server-side rendering
  */
 export const routes: Routes = (() => {
-  // Log portal detection for debugging (disable in production if needed)
+  // Only log portal detection in browser environment
   if (typeof window !== 'undefined') {
     logPortalDetection();
   }
