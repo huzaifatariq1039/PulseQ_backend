@@ -721,7 +721,20 @@ async def generate_smart_token(
     user = db.query(User).filter(User.id == current_user.user_id).first()
     patient_name = payload.patient_name if payload.patient_name else (user.name if user else None)
     patient_phone = payload.patient_phone if payload.patient_phone else (user.phone if user else None)
-    
+
+    # ✅ NORMALIZE PHONE BEFORE SAVING TO DATABASE
+    def normalize_phone(phone: str) -> str:
+        if not phone:
+            return phone
+        phone = str(phone).strip().replace(" ", "").replace("-", "")
+        if phone.startswith("0") and len(phone) == 11:
+            return "+92" + phone[1:]  # 03325293408 → +923325293408
+        if not phone.startswith("+"):
+            return "+" + phone
+        return phone
+
+    if patient_phone:
+        patient_phone = normalize_phone(patient_phone)
     status_val = TokenStatus.PENDING.value if hasattr(TokenStatus.PENDING, 'value') else "pending"
     payment_val = PaymentStatus.PENDING.value if hasattr(PaymentStatus.PENDING, 'value') else "pending"
     
@@ -932,11 +945,24 @@ async def create_token(
 
     token_id = str(uuid.uuid4())
     mrn = get_or_create_patient_mrn(db, current_user.user_id, spec.hospital_id)
-    
+
     user = db.query(User).filter(User.id == current_user.user_id).first()
     patient_name = user.name if user else None
     patient_phone = user.phone if user else None
 
+    # ✅ NORMALIZE PHONE BEFORE SAVING TO DATABASE
+    def normalize_phone(phone: str) -> str:
+        if not phone:
+            return phone
+        phone = str(phone).strip().replace(" ", "").replace("-", "")
+        if phone.startswith("0") and len(phone) == 11:
+            return "+92" + phone[1:]  # 03325293408 → +923325293408
+        if not phone.startswith("+"):
+            return "+" + phone
+        return phone
+
+    if patient_phone:
+        patient_phone = normalize_phone(patient_phone)
     status_val = TokenStatus.PENDING.value if hasattr(TokenStatus.PENDING, 'value') else "pending"
     payment_val = PaymentStatus.PENDING.value if hasattr(PaymentStatus.PENDING, 'value') else "pending"
 
