@@ -1,5 +1,5 @@
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
@@ -79,7 +79,9 @@ async def twilio_whatsapp_webhook(
     local_suffix = digits[-10:] if len(digits) >= 10 else digits
 
     twiml_response = MessagingResponse()
-
+    today = datetime.utcnow().date()
+    
+    # ✅ FIX: Removed "pending" from exclusion - now it finds pending tokens too
     token = (
         db.query(Token)
         .outerjoin(User, Token.patient_id == User.id)
@@ -91,7 +93,8 @@ async def twilio_whatsapp_webhook(
                 User.phone.like(f"%{digits}"),
             )
         )
-        .filter(~Token.status.in_(["cancelled", "completed"]))
+        .filter(Token.status.in_(["pending", "waiting", "confirmed", "in_queue"]))  # ✅ FIXED: Explicit whitelist
+        .filter(func.date(Token.appointment_date) == today)
         .order_by(Token.created_at.desc())
         .first()
     )
