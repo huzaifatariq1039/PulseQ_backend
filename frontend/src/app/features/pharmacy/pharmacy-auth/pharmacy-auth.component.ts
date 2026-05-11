@@ -2,7 +2,7 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
-import { Router } from '@angular/router';
+import { Router, ActivatedRoute } from '@angular/router';
 import { CardModule } from 'primeng/card';
 import { ButtonModule } from 'primeng/button';
 import { InputTextModule } from 'primeng/inputtext';
@@ -28,6 +28,7 @@ export class PharmacyAuthComponent implements OnInit {
   constructor(
     private fb: FormBuilder,
     private router: Router,
+    private route: ActivatedRoute,
     private messageService: MessageService,
     private authService: AuthService
   ) {
@@ -63,14 +64,7 @@ export class PharmacyAuthComponent implements OnInit {
             life: 2000
           });
           setTimeout(() => {
-            const isLocalhost = window.location.hostname === 'localhost' ||
-              window.location.hostname === '127.0.0.1';
-
-            if (isLocalhost) {
-              this.router.navigate(['/staff/pharmacy/dashboard']);
-            } else {
-              this.router.navigate(['/dashboard']);
-            }
+            this.router.navigate(['../dashboard'], { relativeTo: this.route });
           }, 500);
         } else {
           this.messageService.add({

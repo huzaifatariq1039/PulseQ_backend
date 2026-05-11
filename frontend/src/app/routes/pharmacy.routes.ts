@@ -78,5 +78,6 @@ export const pharmacyRoutes: Routes = [
             import('../features/pharmacy/invoices/invoice-trash/invoice-trash.component')
                 .then(m => m.InvoiceTrashComponent),
         canActivate: [authGuard]
-    }
+    },
+    { path: '**', redirectTo: 'auth' }
 ];

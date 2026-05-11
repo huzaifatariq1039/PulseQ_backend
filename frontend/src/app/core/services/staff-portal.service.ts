@@ -94,6 +94,11 @@ export class StaffPortalService {
     return this.http.get(`${this.API}/portal/doctor/tokens`, { params });
   }
 
+  /** Get patient consultation history — /api/v1/staff/consultation/patient/{patient_id}/history */
+  getPatientConsultationHistory(patientId: string): Observable<any> {
+    return this.http.get(`${this.API}/consultation/patient/${patientId}/history`);
+  }
+
   /** Get doctor dashboard */
   getDoctorDashboard(upcomingLimit = 5, skippedLimit = 5): Observable<any> {
     const params = new HttpParams()

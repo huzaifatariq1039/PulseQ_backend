@@ -47,5 +47,6 @@ export const adminRoutes: Routes = [
     // Legacy route redirects for backward compatibility
     { path: 'overview', redirectTo: 'dashboard' },
     { path: 'doctors', redirectTo: 'manage-doctors' },
-    { path: 'departments', redirectTo: 'manage-departments' }
+    { path: 'departments', redirectTo: 'manage-departments' },
+    { path: '**', redirectTo: 'auth' }
 ];

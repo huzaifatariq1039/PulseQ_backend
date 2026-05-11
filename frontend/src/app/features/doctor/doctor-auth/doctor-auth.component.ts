@@ -74,7 +74,7 @@ export class DoctorAuthComponent implements OnInit {
               life: 2000
             });
             setTimeout(() => {
-              this.router.navigate(['/staff/doctor/dashboard']);
+              this.router.navigate(['../dashboard'], { relativeTo: this.route });
             }, 500);
           } else {
             this.messageService.add({

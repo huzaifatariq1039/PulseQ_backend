@@ -1,7 +1,7 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute, Router } from '@angular/router';
+import { Router } from '@angular/router';
 
 import { CardModule } from 'primeng/card';
 import { ButtonModule } from 'primeng/button';
@@ -118,7 +118,6 @@ export class ReceptionDashboardComponent implements OnInit, OnDestroy {
   }
 
   constructor(
-    private route: ActivatedRoute,
     private router: Router,
     private messageService: MessageService,
     private queueService: QueueService,
@@ -500,7 +499,6 @@ export class ReceptionDashboardComponent implements OnInit, OnDestroy {
           }
         }
 
-        // ── Download slip on skip ──
         this.downloadSlip(skippedPatient);
 
         this.messageService.add({
@@ -728,12 +726,13 @@ export class ReceptionDashboardComponent implements OnInit, OnDestroy {
     return !isNaN(n) && Number.isInteger(n) && n > 0 && n <= 150;
   }
 
+  // ── FIXED: flat routes, no staff/reception prefix ──
   navigateTo(page: 'dashboard' | 'queue' | 'manage-doctors'): void {
     this.currentNav = page;
     this.sidebarOpen = false;
-    if (page === 'dashboard') this.router.navigate(['../dashboard'], { relativeTo: this.route });
-    else if (page === 'queue') this.router.navigate(['../queue'], { relativeTo: this.route });
-    else if (page === 'manage-doctors') this.router.navigate(['../manage-doctors'], { relativeTo: this.route });
+    if (page === 'dashboard') this.router.navigate(['/dashboard']);
+    else if (page === 'queue') this.router.navigate(['/queue']);
+    else if (page === 'manage-doctors') this.router.navigate(['/manage-doctors']);
   }
 
   toggleSidebar(): void { this.sidebarOpen = !this.sidebarOpen; }

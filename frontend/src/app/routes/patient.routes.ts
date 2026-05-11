@@ -64,5 +64,6 @@ export const patientRoutes: Routes = [
             import('../features/patient/patient-profile/patient-profile.component')
                 .then(m => m.PatientProfileComponent),
         canActivate: [authGuard]
-    }
+    },
+    { path: '**', redirectTo: 'auth' }
 ];

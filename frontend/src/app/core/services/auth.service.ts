@@ -125,12 +125,6 @@ export class AuthService {
     );
   }
 
-  // ─── Forgot Password Flow (phone-based) ───────────────────────────────────
-
-  /**
-   * Step 1: Send OTP to phone number
-   * Backend expects: { phone: "1234567890" }
-   */
   forgotPassword(phone: string): Observable<any> {
     return this.http.post(`${this.API}/auth/forgot-password`, { phone }).pipe(
       catchError(err => {
@@ -140,10 +134,6 @@ export class AuthService {
     );
   }
 
-  /**
-   * Step 2: Verify OTP sent to phone
-   * Backend expects: { phone: "1234567890", otp: "123456" }
-   */
   verifyOtp(phone: string, otp: string): Observable<any> {
     return this.http.post(`${this.API}/auth/verify-otp`, { phone, otp }).pipe(
       catchError(err => {
@@ -153,10 +143,6 @@ export class AuthService {
     );
   }
 
-  /**
-   * Step 3: Reset password using phone + otp
-   * Backend expects: { phone: "1234567890", otp: "123456", new_password: "..." }
-   */
   resetPasswordWithOtp(phone: string, otp: string, newPassword: string): Observable<any> {
     return this.http.post(`${this.API}/auth/reset-password`, {
       phone,
@@ -170,10 +156,6 @@ export class AuthService {
     );
   }
 
-  /**
-   * Resend OTP to phone number
-   * Backend expects: { phone: "1234567890" }
-   */
   resendOtp(phone: string): Observable<any> {
     return this.http.post(`${this.API}/auth/resend-otp`, { phone }).pipe(
       catchError(err => {
@@ -182,8 +164,6 @@ export class AuthService {
       })
     );
   }
-
-  // ─── Phone Verification During Registration ───────────────────────────────
 
   sendPhoneVerificationOtp(phone: string): Observable<any> {
     return this.http.post(`${this.API}/auth/send-phone-otp`, { phone }).pipe(
@@ -212,8 +192,6 @@ export class AuthService {
     );
   }
 
-  // ─── Phone Number Management ──────────────────────────────────────────────
-
   updatePhoneNumber(newPhone: string, otp?: string): Observable<any> {
     const body = otp ? { phone: newPhone, otp } : { phone: newPhone };
     return this.http.post(`${this.API}/auth/update-phone`, body).pipe(
@@ -223,8 +201,6 @@ export class AuthService {
       })
     );
   }
-
-  // ─── Misc ─────────────────────────────────────────────────────────────────
 
   resetPassword(token: string, newPassword: string): Observable<any> {
     return this.http.post(`${this.API}/auth/reset-password`, {
@@ -272,34 +248,15 @@ export class AuthService {
       localStorage.removeItem('pulseq_token');
     } catch { }
 
-    // 🔐 Clear browser history and prevent back button access
     if (typeof window !== 'undefined') {
-      // Replace current history entry to prevent back button
       window.history.replaceState(null, '', window.location.origin);
     }
 
-    // Determine which auth page to navigate to based on current URL
-    const currentPath = typeof window !== 'undefined' ? window.location.pathname : '';
-    let authPath = '/patient/auth'; // Default fallback
-
-    if (currentPath.startsWith('/patient')) {
-      authPath = '/patient/auth';
-    } else if (currentPath.startsWith('/staff/doctor')) {
-      authPath = '/staff/doctor/auth';
-    } else if (currentPath.startsWith('/staff/reception')) {
-      authPath = '/staff/reception/auth';
-    } else if (currentPath.startsWith('/staff/pharmacy')) {
-      authPath = '/staff/pharmacy/auth';
-    } else if (currentPath.startsWith('/staff/admin')) {
-      authPath = '/staff/admin/auth';
-    }
-
-    // Navigate to auth page with replaceUrl: true to remove current route from history
-    this.router.navigate([authPath], { replaceUrl: true }).catch(err => {
-      console.warn('[AuthService] Navigation to auth failed:', err);
-      // Fallback: redirect via window.location if router fails
+    // ── FIXED: since portal is detected dynamically at root,
+    //    auth is always at /auth regardless of portal type ──
+    this.router.navigate(['/auth'], { replaceUrl: true }).catch(() => {
       if (typeof window !== 'undefined') {
-        window.location.href = authPath;
+        window.location.href = '/auth';
       }
     });
   }
@@ -318,6 +275,31 @@ export class AuthService {
 
   getCurrentUser(): AuthUser | null {
     return this.userSubject.value;
+  }
+
+  /**
+   * Restores the user session from localStorage on app startup.
+   * This ensures the auth state is available before routing guards evaluate.
+   * Called by APP_INITIALIZER in app.config.ts
+   */
+  restoreSession(): void {
+    try {
+      if (typeof window === 'undefined') return;
+
+      const token = localStorage.getItem('pulseq_token');
+      const userJson = localStorage.getItem('pulseq_user');
+
+      // Only restore if BOTH token and user data exist
+      if (token && userJson) {
+        const user = JSON.parse(userJson);
+        this.userSubject.next(user);
+        console.log('[AuthService] Session restored from localStorage');
+      }
+    } catch (error) {
+      console.warn('[AuthService] Failed to restore session:', error);
+      // If restoration fails, clear the invalid data
+      this.logout();
+    }
   }
 
   private storeToken(token: string): void {

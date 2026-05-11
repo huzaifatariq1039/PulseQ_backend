@@ -29,5 +29,7 @@ export const receptionRoutes: Routes = [
             import('../features/reception/reception-manage-doctors/reception-manage-doctors.component')
                 .then(m => m.ReceptionManageDoctorsComponent),
         canActivate: [authGuard]
-    }
+    },
+    { path: '**', redirectTo: 'auth' }
+
 ];
