@@ -1,8 +1,9 @@
 import { Component, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { StaffPortalService } from '../../../core/services/staff-portal.service';
+import { AuthService } from '../../../core/services/auth.service';
 import { Consultation } from '../../../shared/models/consultation.model';
 import { ButtonModule } from 'primeng/button';
 import { CardModule } from 'primeng/card';
@@ -23,7 +24,7 @@ interface PatientGroup {
 @Component({
   selector: 'app-doctor-patient-history',
   standalone: true,
-  imports: [CommonModule, FormsModule, ButtonModule, CardModule, ScrollerModule, InputTextModule, CalendarModule, DoctorSidebarComponent],
+  imports: [CommonModule, FormsModule, ButtonModule, CardModule, ScrollerModule, InputTextModule, CalendarModule, DoctorSidebarComponent, RouterModule],
   templateUrl: './patient-history.component.html',
   styleUrl: './patient-history.component.css'
 })
@@ -38,6 +39,7 @@ export class PatientHistoryComponent implements OnInit {
 
   private staffService = inject(StaffPortalService);
   private consultationService = inject(ConsultationService);
+  private authService = inject(AuthService);
   private activatedRoute = inject(ActivatedRoute);
   private router = inject(Router);
 
@@ -210,6 +212,6 @@ export class PatientHistoryComponent implements OnInit {
   }
 
   logout(): void {
-    this.router.navigate(['auth'], { relativeTo: this.activatedRoute.parent?.parent });
+    this.authService.logout();
   }
 }

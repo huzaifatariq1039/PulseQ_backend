@@ -256,74 +256,116 @@
     background: #94a3b8;
 }
 
-/* ── TABLE ── */
-.inventory-table {
-    width: 100%;
-    border-collapse: collapse;
-    min-width: 1440px;
-    table-layout: auto;
+/* ── TABLE STYLING FOR PRIMENG ── */
+:host ::ng-deep .trash-table {
+    width: 100% !important;
 }
 
-.inventory-table th {
+:host ::ng-deep .trash-table .p-datatable-header {
+    background: #fafafa !important;
+    border: none !important;
+    padding: 0 !important;
+}
+
+:host ::ng-deep .trash-table .p-datatable-thead > tr > th {
     text-align: left;
-    padding: 10px 16px;
+    padding: 10px 16px !important;
     font-size: 11px;
     color: #9ca3af;
     text-transform: uppercase;
     letter-spacing: 0.04em;
-    border-top: 1px solid #f1f1f1;
-    border-bottom: 1px solid #f1f1f1;
+    border-top: 1px solid #f1f1f1 !important;
+    border-bottom: 1px solid #f1f1f1 !important;
     white-space: nowrap;
-    background: #fafafa;
+    background: #fafafa !important;
+    font-weight: 600 !important;
 }
 
-.inventory-table td {
-    padding: 13px 16px;
+:host ::ng-deep .trash-table .p-datatable-tbody > tr > td {
+    padding: 13px 16px !important;
     font-size: 13.5px;
     color: #374151;
-    border-bottom: 1px solid #f3f4f6;
+    border-bottom: 1px solid #f3f4f6 !important;
     white-space: nowrap;
+}
+
+:host ::ng-deep .trash-table .p-datatable-tbody > tr.row--selected > td {
+    background: #fff5f5 !important;
+}
+
+:host ::ng-deep .trash-table .p-datatable-tbody > tr:hover > td {
+    background: #f9fafb !important;
+}
+
+:host ::ng-deep .trash-table .p-datatable-tbody > tr.row--selected:hover > td {
+    background: #fee2e2 !important;
+}
+
+:host ::ng-deep .trash-table .p-datatable-tbody > tr > td.sticky-col-right {
+    background: #ffffff !important;
+    position: sticky !important;
+    right: 0 !important;
+    z-index: 3 !important;
+    border-left: 1px solid #e5e7eb !important;
+    box-shadow: -3px 0 8px rgba(0, 0, 0, 0.08) !important;
+    min-width: 90px !important;
+    text-align: center !important;
+}
+
+:host ::ng-deep .trash-table .p-datatable-tbody > tr:hover > td.sticky-col-right {
+    background: #f9fafb !important;
+}
+
+:host ::ng-deep .trash-table .p-datatable-thead > tr > th.sticky-col-right {
+    position: sticky !important;
+    right: 0 !important;
+    z-index: 3 !important;
+    background: #fafafa !important;
+    border-left: 1px solid #e5e7eb !important;
+    box-shadow: -3px 0 8px rgba(0, 0, 0, 0.08) !important;
+    min-width: 90px !important;
+    text-align: center !important;
+}
+
+/* ── PAGINATOR STYLING ── */
+:host ::ng-deep .trash-table .p-paginator {
+    background: #ffffff !important;
+    border: none !important;
+    border-top: 1px solid #e5e7eb !important;
+    padding: 12px 16px !important;
+    justify-content: flex-end !important;
+}
+
+:host ::ng-deep .trash-table .p-paginator .p-paginator-left-content {
+    display: none;
+}
+
+:host ::ng-deep .trash-table .p-paginator .p-paginator-current {
+    color: #6b7280 !important;
+    font-size: 0.875rem !important;
+    margin-right: 16px !important;
+}
+
+:host ::ng-deep .trash-table .p-paginator .p-paginator-element {
+    color: #6b7280 !important;
+    padding: 6px 8px !important;
+}
+
+:host ::ng-deep .trash-table .p-paginator .p-paginator-pages .p-paginator-page.p-highlight {
+    background: #3b82f6 !important;
+    color: #ffffff !important;
+    border-radius: 6px !important;
+}
+
+/* ── TABLE ── */
+.inventory-table {
+    width: 100%;
+    border-collapse: collapse;
 }
 
 .inventory-table td.bold {
     font-weight: 700;
     color: #111827;
-}
-
-.inventory-table tr:last-child td {
-    border-bottom: none;
-}
-
-.inventory-table tbody tr:hover td {
-    background: #f9fafb;
-}
-
-.inventory-table tbody tr.row--selected:hover td {
-    background: #fee2e2 !important;
-}
-
-.inventory-table tbody tr.row--selected:hover td.sticky-col-right {
-    background: #fee2e2 !important;
-}
-
-/* ── STICKY ACTIONS COLUMN ── */
-.sticky-col-right {
-    position: sticky;
-    right: 0;
-    z-index: 3;
-    background: #fafafa;
-    border-left: 1px solid #e5e7eb;
-    box-shadow: -3px 0 8px rgba(0, 0, 0, 0.08);
-    min-width: 90px;
-    text-align: center;
-}
-
-.inventory-table tbody td.sticky-col-right {
-    background: #ffffff;
-}
-
-.inventory-table tbody tr:hover td.sticky-col-right {
-    background: #f9fafb;
 }
 
 /* ── ACTION BUTTONS ── */
@@ -360,15 +402,6 @@
 
 .action-btn.delete:hover {
     background: #fef2f2;
-}
-
-/* ── SCROLL HINT ── */
-.scroll-hint {
-    display: block;
-    text-align: center;
-    color: #bdbdbd;
-    font-size: 0.85rem;
-    padding: 6px 16px 10px;
 }
 
 /* ── EMPTY STATE ── */

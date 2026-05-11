@@ -440,6 +440,70 @@ async def sync_medicines_from_legacy(
     return ok(data=result, message=f"Successfully imported {result['synced']} medicines from legacy storage")
 
 
+@router.get("/medicines", dependencies=[Depends(require_roles("pharmacy", "admin"))])
+async def get_all_medicines_staff(
+    db: Session = Depends(get_db),
+    current: TokenData = Depends(get_current_active_user),
+    hospital_id: Optional[str] = Query(None, description="Filter by hospital ID"),
+    product_id: Optional[int] = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(500, ge=1, le=1000),  
+) -> Dict[str, Any]:
+    """Staff endpoint to get medicines for their hospital"""
+    # Use current user's hospital_id if not provided
+    hid = hospital_id or current.hospital_id or ""
+    
+    cols = (
+        PharmacyMedicine.id, PharmacyMedicine.product_id, PharmacyMedicine.batch_no,
+        PharmacyMedicine.name, PharmacyMedicine.generic_name, PharmacyMedicine.type,
+        PharmacyMedicine.distributor, PharmacyMedicine.purchase_price,
+        PharmacyMedicine.selling_price, PharmacyMedicine.stock_unit,
+        PharmacyMedicine.quantity, PharmacyMedicine.expiration_date,
+        PharmacyMedicine.category, PharmacyMedicine.sub_category,
+        PharmacyMedicine.hospital_id, PharmacyMedicine.created_at,
+        PharmacyMedicine.updated_at,
+    )
+    base = db.query(*cols).filter(PharmacyMedicine.is_deleted.isnot(True))
+    if hid:
+        base = base.filter(PharmacyMedicine.hospital_id == hid)
+    
+    if product_id is not None:
+        base = base.filter(PharmacyMedicine.product_id == product_id)
+
+    total = base.count()
+    rows = base.order_by(PharmacyMedicine.name).offset((page-1)*page_size).limit(page_size).all()
+
+    results = [
+        {
+            "id": r.id, "product_id": r.product_id, "batch_no": r.batch_no,
+            "name": r.name, "generic_name": r.generic_name, "type": r.type,
+            "distributor": r.distributor,
+            "purchase_price": float(r.purchase_price or 0),
+            "selling_price": float(r.selling_price or 0),
+            "stock_unit": r.stock_unit,
+            "quantity": int(r.quantity or 0),
+            "low_stock": (r.quantity or 0) < 5,
+            "expiration_date": r.expiration_date.isoformat() if r.expiration_date else None,
+            "category": r.category, "sub_category": r.sub_category,
+            "hospital_id": r.hospital_id,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+            "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+        }
+        for r in rows
+    ]
+
+    return ok(
+        data=results,
+        meta={
+            "total": total, "page": page, "page_size": page_size,
+            "hospital_id": hid,
+            "total_pages": (total + page_size - 1) // page_size,
+            "has_next": page * page_size < total,
+            "has_prev": page > 1
+        }
+    )
+
+
 @public_router.get("/medicines")
 async def get_all_medicines(
     db: Session = Depends(get_db),

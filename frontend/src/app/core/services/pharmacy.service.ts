@@ -65,10 +65,10 @@ export class PharmacyService {
   readonly medicines = signal<Medicine[]>([]);
   readonly loading = signal<boolean>(false);
 
-  // Convert medicines signal to observable for backward compatibility
-  get medicines$(): Observable<Medicine[]> {
-    return toObservable(this.medicines);
-  }
+  // FIX: toObservable must be called inside constructor (injection context).
+  // Previously this was a getter which created a NEW observable on every
+  // access and broke signal tracking outside of injection context.
+  readonly medicines$: Observable<Medicine[]>;
 
   // ============================================================
   // Sales Data
@@ -76,7 +76,10 @@ export class PharmacyService {
 
   private sales: Sale[] = [];
 
-  constructor(private http: HttpClient) { }
+  constructor(private http: HttpClient) {
+    // FIX: initialise here — constructor IS a valid injection context
+    this.medicines$ = toObservable(this.medicines);
+  }
 
   // ============================================================
   // Backend API methods
@@ -201,12 +204,14 @@ export class PharmacyService {
   }
 
   /**
-   * Get deleted medicines
+   * Get deleted medicines (with pagination support)
    */
-  getDeletedMedicinesApi(hospitalId?: string): Observable<any> {
+  getDeletedMedicinesApi(hospitalId?: string, page: number = 1, pageSize: number = 100): Observable<any> {
 
     let params = new HttpParams()
-      .set('is_deleted', 'true');
+      .set('is_deleted', 'true')
+      .set('page', page.toString())
+      .set('page_size', pageSize.toString());
 
     if (hospitalId) {
       params = params.set('hospital_id', hospitalId);
@@ -271,8 +276,7 @@ export class PharmacyService {
   }
 
   /**
-   * TOP SELLING PRODUCTS REPORT
-   * FIXED METHOD
+   * Top selling products report
    */
   getTopSellingProducts(hospitalId?: string): Observable<any> {
 
@@ -358,7 +362,7 @@ export class PharmacyService {
   }
 
   /**
-   * Payment Methods Breakdown - Revenue by payment method (Cash, Card, Online)
+   * Payment Methods Breakdown
    */
   getPaymentMethodBreakdown(
     hospitalId?: string,
@@ -379,7 +383,7 @@ export class PharmacyService {
   }
 
   /**
-   * Top Selling Medicines - Top medicines by quantity sold
+   * Top Selling Medicines
    */
   getTopSellingMedicines(
     hospitalId?: string,
@@ -432,6 +436,13 @@ export class PharmacyService {
       return;
     }
 
+    // FIX: prevent duplicate concurrent API calls.
+    // Previously multiple components calling this at the same time caused
+    // 3-4 simultaneous /medicines requests visible in the network tab.
+    if (this.loading()) {
+      return;
+    }
+
     this.loading.set(true);
 
     this.fetchAllMedicines(hospitalId)
@@ -451,7 +462,7 @@ export class PharmacyService {
             err
           );
 
-          return of(null);
+          return of([]);
         }),
 
         finalize(() => {

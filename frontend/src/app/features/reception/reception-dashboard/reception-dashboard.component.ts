@@ -909,5 +909,7 @@ export class ReceptionDashboardComponent implements OnInit, OnDestroy {
     }, 500);
   }
 
-  signOut(): void { this.router.navigate(['/']); }
+  signOut(): void {
+    this.authService.logout();
+  }
 }

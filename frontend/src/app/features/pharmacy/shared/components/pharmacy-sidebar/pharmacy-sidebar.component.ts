@@ -24,7 +24,6 @@ export class PharmacySidebarComponent {
 
     signOut(): void {
         this.authService.logout();
-        this.router.navigate(['/staff/pharmacy/auth']);
     }
 
     toggleSidebar(): void {

@@ -10,6 +10,7 @@ import { TokenService } from '../../../core/services/token.service';
 import { DashboardService } from '../../../core/services/dashboard.service';
 import { UserProfileService, UserProfile } from '../../../core/services/user-profile.service';
 import { RealtimeService } from '../../../core/services/realtime.service';
+import { AuthService } from '../../../core/services/auth.service';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 
@@ -57,6 +58,7 @@ export class PatientDashboardComponent implements OnInit, OnDestroy {
   constructor(
     private route: ActivatedRoute,
     private router: Router,
+    private authService: AuthService,
     private queueService: QueueService,
     private tokenService: TokenService,
     private userProfileService: UserProfileService,
@@ -234,7 +236,7 @@ export class PatientDashboardComponent implements OnInit, OnDestroy {
   }
 
   // ── Navigation ──────────────────────────────────────────────────
-  logout(): void { this.router.navigate(['auth'], { relativeTo: this.route.parent?.parent }); }
+  logout(): void { this.authService.logout(); }
   goGenerateToken(): void { this.router.navigate(['../new-token'], { relativeTo: this.route }); }
   viewToken(): void { this.router.navigate(['../my-token'], { relativeTo: this.route }); }
   viewSpecificToken(id?: string): void {

@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
+import { Router } from '@angular/router';
 import { BehaviorSubject, Observable, of, throwError } from 'rxjs';
 import { map, tap, catchError, switchMap } from 'rxjs/operators';
 import { environment } from '../../../environments/environment';
@@ -49,7 +50,7 @@ export class AuthService {
   private userSubject = new BehaviorSubject<AuthUser | null>(null);
   user$ = this.userSubject.asObservable();
 
-  constructor(private http: HttpClient) {
+  constructor(private http: HttpClient, private router: Router) {
     try {
       const raw = typeof window !== 'undefined' ? localStorage.getItem('pulseq_user') : null;
       if (raw) {
@@ -270,6 +271,37 @@ export class AuthService {
       localStorage.removeItem('pulseq_user');
       localStorage.removeItem('pulseq_token');
     } catch { }
+
+    // 🔐 Clear browser history and prevent back button access
+    if (typeof window !== 'undefined') {
+      // Replace current history entry to prevent back button
+      window.history.replaceState(null, '', window.location.origin);
+    }
+
+    // Determine which auth page to navigate to based on current URL
+    const currentPath = typeof window !== 'undefined' ? window.location.pathname : '';
+    let authPath = '/patient/auth'; // Default fallback
+
+    if (currentPath.startsWith('/patient')) {
+      authPath = '/patient/auth';
+    } else if (currentPath.startsWith('/staff/doctor')) {
+      authPath = '/staff/doctor/auth';
+    } else if (currentPath.startsWith('/staff/reception')) {
+      authPath = '/staff/reception/auth';
+    } else if (currentPath.startsWith('/staff/pharmacy')) {
+      authPath = '/staff/pharmacy/auth';
+    } else if (currentPath.startsWith('/staff/admin')) {
+      authPath = '/staff/admin/auth';
+    }
+
+    // Navigate to auth page with replaceUrl: true to remove current route from history
+    this.router.navigate([authPath], { replaceUrl: true }).catch(err => {
+      console.warn('[AuthService] Navigation to auth failed:', err);
+      // Fallback: redirect via window.location if router fails
+      if (typeof window !== 'undefined') {
+        window.location.href = authPath;
+      }
+    });
   }
 
   getToken(): string | null {
