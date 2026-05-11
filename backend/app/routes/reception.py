@@ -239,6 +239,29 @@ async def reception_queue(
         meta={"page": page, "page_size": page_size, "total": total},
     )
 
+@router.get("/doctors", dependencies=[Depends(require_roles("receptionist", "admin"))])
+async def get_hospital_doctors(
+    hospital_id: str = Query(..., description="Hospital ID"),
+    db: Session = Depends(get_db),
+    current: TokenData = Depends(get_current_active_user),
+) -> Dict[str, Any]:
+    """Get list of doctors for a hospital — for receptionist queue filter dropdown."""
+    doctors = db.query(Doctor).filter(
+        Doctor.hospital_id == hospital_id
+    ).order_by(Doctor.name.asc()).all()
+
+    items = [
+        {
+            "doctor_id": d.id,
+            "doctor_name": d.name,
+            "specialization": d.specialization,
+            "status": d.status,
+        }
+        for d in doctors
+    ]
+
+    return ok(data=items, meta={"total": len(items)})
+
 
 @router.get("/tokens", dependencies=[Depends(require_roles("receptionist", "admin"))])
 async def reception_tokens(
