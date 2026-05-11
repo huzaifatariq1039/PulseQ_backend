@@ -24,7 +24,7 @@ interface PatientGroup {
 @Component({
   selector: 'app-doctor-patient-history',
   standalone: true,
-  imports: [CommonModule, FormsModule, ButtonModule, CardModule, ScrollerModule, InputTextModule, CalendarModule, DoctorSidebarComponent, RouterModule],
+  imports: [CommonModule, FormsModule, ButtonModule, CardModule, ScrollerModule, InputTextModule, CalendarModule, DoctorSidebarComponent],
   templateUrl: './patient-history.component.html',
   styleUrl: './patient-history.component.css'
 })

@@ -1,4 +1,4 @@
-import { Injectable } from '@angular/core';
+import { Injectable, DestroyRef, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { BehaviorSubject, Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
@@ -45,6 +45,10 @@ export class ConsultationService {
     return this.http.post(`${this.API}/end`, payload);
   }
 
+  /**
+   * Fetches full consultation history for a patient.
+   * Endpoint: GET /api/v1/staff/consultation/patient/{patient_id}/history
+   */
   getPatientHistoryApi(patientId: string): Observable<any> {
     return this.http.get(`${this.API}/patient/${patientId}/history`);
   }
@@ -126,7 +130,7 @@ export class ConsultationService {
   }
 
   /**
-   * ✅ Local start — marks token IN_PROGRESS AND removes it from the queue array
+   * Local start — marks token IN_PROGRESS AND removes it from the queue array
    * so getUpcomingQueue() never returns a serving token.
    */
   startConsultation(tokenId: string): void {
@@ -150,7 +154,7 @@ export class ConsultationService {
     this.consultationsSubject.next([...current, consultation]);
     this.saveToStorage();
 
-    // ✅ Remove from local queue so upcoming list updates immediately
+    // Remove from local queue so upcoming list updates immediately
     this.queueService.removeToken(tokenId);
   }
 
@@ -286,7 +290,6 @@ export class ConsultationService {
         `${this.RATINGS_CACHE_KEY_PREFIX}${appointmentId}`,
         JSON.stringify(ratingData)
       );
-      console.log(`[Rating Cache] Cached rating for ${appointmentId}:`, ratingData);
     } catch (e) {
       console.warn('[Rating Cache] Failed to cache rating:', e);
     }
@@ -299,9 +302,7 @@ export class ConsultationService {
         `${this.RATINGS_CACHE_KEY_PREFIX}${appointmentId}`
       );
       if (!cached) return undefined;
-      const ratingData = JSON.parse(cached);
-      console.log(`[Rating Cache] Retrieved cached rating for ${appointmentId}:`, ratingData);
-      return ratingData;
+      return JSON.parse(cached);
     } catch (e) {
       console.warn('[Rating Cache] Failed to retrieve cached rating:', e);
       return undefined;
@@ -312,7 +313,6 @@ export class ConsultationService {
     try {
       if (typeof window === 'undefined' || !window.localStorage) return;
       window.localStorage.removeItem(`${this.RATINGS_CACHE_KEY_PREFIX}${appointmentId}`);
-      console.log(`[Rating Cache] Cleared cached rating for ${appointmentId}`);
     } catch (e) {
       console.warn('[Rating Cache] Failed to clear cached rating:', e);
     }
