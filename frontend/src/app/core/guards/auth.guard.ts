@@ -17,6 +17,6 @@ export const authGuard: CanActivateFn = (route, state) => {
             return router.parseUrl(targetUrl);
         }
     }
-    // On server, always deny navigation
-    return false;
+    // On server, redirect to auth to prevent prerendering protected content
+    return router.parseUrl('/auth');
 };

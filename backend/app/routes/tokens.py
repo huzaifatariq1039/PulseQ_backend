@@ -133,6 +133,7 @@ def _to_smart_token_response(t: Token) -> SmartTokenResponse:
         "patient_age": t.patient_age,
         "patient_gender": t.patient_gender,
         "reason_for_visit": t.reason_for_visit,
+        "consultation_notes": t.consultation_notes,  
         "patient": {
             "name": t.patient_name,
             "phone": t.patient_phone,
@@ -388,37 +389,55 @@ async def get_my_active_token_details(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_active_user)
 ):
-    token = db.query(Token).filter(
+    # ✅ Include skipped tokens, exclude only cancelled & completed
+    tokens = db.query(Token).filter(
         Token.patient_id == current_user.user_id,
-        Token.status.notin_(["cancelled", "completed", "skipped", "TokenStatus.CANCELLED", "TokenStatus.COMPLETED", "TokenStatus.SKIPPED"])
-    ).order_by(Token.created_at.desc()).first()
+        Token.status.notin_([
+            "cancelled", "completed",
+            "TokenStatus.CANCELLED", "TokenStatus.COMPLETED"  # string fallbacks
+        ])
+    ).order_by(Token.created_at.desc()).all()  # ✅ .all() instead of .first()
 
-    if not token:
+    if not tokens:
         raise HTTPException(status_code=404, detail="No active token found")
 
-    if not token.patient_name or not token.patient_phone:
-        user = db.query(User).filter(User.id == current_user.user_id).first()
-        if user:
-            if not token.patient_name:
-                token.patient_name = user.name
-            if not token.patient_phone:
-                token.patient_phone = user.phone
-            try:
-                db.commit()
-            except Exception:
-                db.rollback()
+    # ✅ Backfill patient name/phone if missing
+    user = None
+    for token in tokens:
+        if not token.patient_name or not token.patient_phone:
+            if user is None:
+                user = db.query(User).filter(User.id == current_user.user_id).first()
+            if user:
+                if not token.patient_name:
+                    token.patient_name = user.name
+                if not token.patient_phone:
+                    token.patient_phone = user.phone
+    if user:
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
 
-    doctor = db.query(Doctor).filter(Doctor.id == token.doctor_id).first()
-    hospital = db.query(Hospital).filter(Hospital.id == token.hospital_id).first()
+    # ✅ Build response list for all tokens
+    result = []
+    for token in tokens:
+        doctor = db.query(Doctor).filter(Doctor.id == token.doctor_id).first()
+        hospital = db.query(Hospital).filter(Hospital.id == token.hospital_id).first()
+        queue = SmartTokenService.get_queue_status(
+            token.doctor_id, 
+            token.token_number, 
+            token.appointment_date
+        )
 
-    queue = SmartTokenService.get_queue_status(token.doctor_id, token.token_number, token.appointment_date)
+        result.append({
+            "token": _to_smart_token_response(token),
+            "doctor": {k: v for k, v in doctor.__dict__.items() if not k.startswith('_')} if doctor else {},
+            "hospital": {k: v for k, v in hospital.__dict__.items() if not k.startswith('_')} if hospital else {},
+            "queue": queue,
+            "is_skipped": str(token.status).lower().replace("tokenstatus.", "") == "skipped"  # ✅ flag for frontend
+        })
 
-    return {
-        "token": _to_smart_token_response(token),
-        "doctor": {k: v for k, v in doctor.__dict__.items() if not k.startswith('_')} if doctor else {},
-        "hospital": {k: v for k, v in hospital.__dict__.items() if not k.startswith('_')} if hospital else {},
-        "queue": queue
-    }
+    return result
 
 
 @router.get("/my-active", response_model=SmartTokenResponse)
@@ -700,9 +719,22 @@ async def generate_smart_token(
     # Token Creation & Saving 
     # ---------------------------------------------------------
     user = db.query(User).filter(User.id == current_user.user_id).first()
-    patient_name = user.name if user else None
-    patient_phone = user.phone if user else None
-    
+    patient_name = payload.patient_name if payload.patient_name else (user.name if user else None)
+    patient_phone = payload.patient_phone if payload.patient_phone else (user.phone if user else None)
+
+    # ✅ NORMALIZE PHONE BEFORE SAVING TO DATABASE
+    def normalize_phone(phone: str) -> str:
+        if not phone:
+            return phone
+        phone = str(phone).strip().replace(" ", "").replace("-", "")
+        if phone.startswith("0") and len(phone) == 11:
+            return "+92" + phone[1:]  # 03325293408 → +923325293408
+        if not phone.startswith("+"):
+            return "+" + phone
+        return phone
+
+    if patient_phone:
+        patient_phone = normalize_phone(patient_phone)
     status_val = TokenStatus.PENDING.value if hasattr(TokenStatus.PENDING, 'value') else "pending"
     payment_val = PaymentStatus.PENDING.value if hasattr(PaymentStatus.PENDING, 'value') else "pending"
     
@@ -913,11 +945,24 @@ async def create_token(
 
     token_id = str(uuid.uuid4())
     mrn = get_or_create_patient_mrn(db, current_user.user_id, spec.hospital_id)
-    
+
     user = db.query(User).filter(User.id == current_user.user_id).first()
     patient_name = user.name if user else None
     patient_phone = user.phone if user else None
 
+    # ✅ NORMALIZE PHONE BEFORE SAVING TO DATABASE
+    def normalize_phone(phone: str) -> str:
+        if not phone:
+            return phone
+        phone = str(phone).strip().replace(" ", "").replace("-", "")
+        if phone.startswith("0") and len(phone) == 11:
+            return "+92" + phone[1:]  # 03325293408 → +923325293408
+        if not phone.startswith("+"):
+            return "+" + phone
+        return phone
+
+    if patient_phone:
+        patient_phone = normalize_phone(patient_phone)
     status_val = TokenStatus.PENDING.value if hasattr(TokenStatus.PENDING, 'value') else "pending"
     payment_val = PaymentStatus.PENDING.value if hasattr(PaymentStatus.PENDING, 'value') else "pending"
 

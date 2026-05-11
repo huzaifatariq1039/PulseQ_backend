@@ -170,21 +170,21 @@ class UserStatistics(BaseModel):
     pending_payments: int = 0
 
 class ActivityLog(BaseModel):
-    model_config = ConfigDict(extra='forbid')
+    model_config = ConfigDict(extra='forbid', from_attributes=True)
     
     id: str
     user_id: str
     activity_type: ActivityType
     description: str
-    metadata: Optional[dict] = None
-    created_at: datetime
+    metadata: Optional[Dict[str, Any]] = None
+    created_at: Optional[datetime] = None
 
 class ActivityLogCreate(BaseModel):
     model_config = ConfigDict(extra='forbid')
     
     activity_type: ActivityType
     description: str
-    metadata: Optional[dict] = None
+    metadata: Optional[Dict[str, Any]] = None
 
 class QuickAction(BaseModel):
     model_config = ConfigDict(extra='forbid')
@@ -530,6 +530,7 @@ class CancellationResponse(BaseModel):
     cancellation_reason: CancellationReason
     refund_info: RefundCalculation
     refund_id: Optional[str] = None
+    queue: Optional[dict] = None 
 
 # Doctor with Queue Info
 class DoctorWithQueue(BaseModel):

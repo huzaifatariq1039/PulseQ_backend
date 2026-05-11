@@ -87,8 +87,4 @@ export class ReceptionAuthComponent implements OnInit {
     });
   }
 
-  goBack(): void {
-    this.router.navigate(['/']);
-  }
-
 }

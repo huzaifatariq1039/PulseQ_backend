@@ -29,7 +29,7 @@ TESTING_MODE = os.getenv("TESTING_MODE", "False").lower() == "true"
 DATABASE_URL = os.getenv("DATABASE_URL")
 if not DATABASE_URL:
     # Default fallback for development
-    DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/pulseq"
+    DATABASE_URL = "postgresql://doadmin:AVNS_95RMxfUncIPJxVWMz6N@pulseq-db-do-user-34708355-0.h.db.ondigitalocean.com:25060/defaultdb?sslmode=require"
 
 # Firebase Configuration (deprecated - keeping for migration)
 FIREBASE_SERVICE_ACCOUNT_KEY = os.getenv(

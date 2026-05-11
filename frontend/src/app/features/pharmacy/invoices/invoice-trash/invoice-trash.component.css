@@ -1,129 +1,301 @@
-.layout {
-  display: flex;
-  min-height: 100vh;
-  background: #f3f4f6;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-}
-
-.main-content {
-  flex: 1;
+/* ─────────────────────────────────────────────────────────────────────────
+   LAYOUT
+───────────────────────────────────────────────────────────────────────── */
+.page-wrapper {
   margin-left: 240px;
   padding: 1.5rem 1.75rem;
+  background-color: #f3f4f6;
   min-height: 100vh;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   min-width: 0;
   overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 1.2rem;
 }
 
-.layout .mobile-topbar {
-  display: none;
-}
-
-.layout .sidebar-overlay {
-  display: none;
-}
-
-.trash-container {
-  padding: 2rem;
-  background-color: #1a1a1a;
-  min-height: 100vh;
-}
-
-.header-section {
-  margin-bottom: 2rem;
-}
-
-.header-content {
+/* ─────────────────────────────────────────────────────────────────────────
+   PAGE HEADER
+───────────────────────────────────────────────────────────────────────── */
+.page-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-top: 1rem;
+  flex-wrap: wrap;
+  gap: 0.75rem;
 }
 
-.header-title h1 {
-  font-size: 2rem;
-  font-weight: 600;
-  color: #ffffff;
+.page-header h1 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #111827;
   margin: 0;
 }
 
-.header-actions {
+.subtitle {
+  color: #6b7280;
+  font-size: 0.85rem;
+  margin: 0.2rem 0 0;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   BUTTON
+───────────────────────────────────────────────────────────────────────── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.btn-outline {
+  background: #fff;
+  color: #374151;
+  border-color: #e5e7eb;
+}
+
+.btn-outline:hover {
+  background: #f9fafb;
+  border-color: #9ca3af;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   TABLE CARD
+───────────────────────────────────────────────────────────────────────── */
+.table-card {
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.07);
+  overflow: hidden;
+}
+
+.table-header {
+  padding: 0.75rem 1.25rem;
+  border-bottom: 1px solid #f3f4f6;
+  background: #f9fafb;
+}
+
+.table-title {
   display: flex;
-  gap: 1rem;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: #111827;
 }
 
-:deep(.p-datatable) {
-  background-color: #1e1e2e;
-  color: #ffffff;
-}
-
-:deep(.p-datatable .p-datatable-thead > tr > th) {
-  background-color: #2a2a2a;
-  color: #ffffff;
-  border-color: #3a3a3a;
-  padding: 1rem;
-  text-align: left;
-}
-
-:deep(.p-datatable .p-datatable-tbody > tr) {
-  border-color: #3a3a3a;
-  background-color: #1e1e2e;
-}
-
-:deep(.p-datatable .p-datatable-tbody > tr > td) {
-  padding: 1rem;
-  color: #ffffff;
-}
-
-:deep(.p-datatable .p-datatable-tbody > tr:hover) {
-  background-color: #252535;
-}
-
-:deep(.p-paginator) {
-  background-color: #2a2a2a;
-  color: #ffffff;
-  border-color: #3a3a3a;
-}
-
-:deep(.p-paginator .p-paginator-pages .p-paginator-page) {
-  color: #ffffff;
-  background-color: transparent;
-  border-color: #3a3a3a;
-}
-
-:deep(.p-paginator .p-paginator-pages .p-paginator-page:hover) {
-  background-color: #3a3a3a;
-  border-color: #f59e0b;
-}
-
-:deep(.p-paginator .p-paginator-pages .p-paginator-page.p-highlight) {
-  background-color: #f59e0b;
-  color: #000;
-  border-color: #f59e0b;
-}
-
-:deep(.p-tag) {
-  padding: 0.5rem 0.75rem;
+.table-title .pi {
+  color: #dc2626;
   font-size: 0.875rem;
 }
 
-.text-green-400 {
-  color: #4ade80;
-  font-weight: 500;
+.count-badge {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #6b7280;
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   TABLE
+───────────────────────────────────────────────────────────────────────── */
+:host ::ng-deep .trash-table.p-datatable .p-datatable-thead>tr>th {
+  background: #f9fafb !important;
+  color: #9ca3af !important;
+  font-size: 0.65rem !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.04em !important;
+  border: none !important;
+  border-bottom: 1px solid #e5e7eb !important;
+  padding: 0.5rem 0.75rem !important;
+  white-space: nowrap !important;
+}
+
+:host ::ng-deep .trash-table .p-sortable-column-icon {
+  display: none !important;
+}
+
+:host ::ng-deep .trash-table.p-datatable .p-datatable-tbody>tr>td {
+  border: none !important;
+  border-bottom: 1px solid #f3f4f6 !important;
+  padding: 0.55rem 0.75rem !important;
+  font-size: 0.8rem !important;
+  color: #374151 !important;
+  vertical-align: middle !important;
+}
+
+:host ::ng-deep .trash-table.p-datatable .p-datatable-tbody>tr:last-child>td {
+  border-bottom: none !important;
+}
+
+:host ::ng-deep .trash-table.p-datatable .p-datatable-tbody>tr:hover>td {
+  background: #f9fafb !important;
+}
+
+:host ::ng-deep .trash-table.p-datatable {
+  border: none !important;
+}
+
+:host ::ng-deep .trash-table .p-paginator {
+  border: none !important;
+  border-top: 1px solid #f3f4f6 !important;
+  background: #fff !important;
+  padding: 0.5rem 1rem !important;
+  font-size: 0.8rem !important;
+}
+
+:host ::ng-deep .trash-table .p-paginator .p-paginator-pages .p-paginator-page {
+  background: none !important;
+  border: 1px solid #e5e7eb !important;
+  color: #374151 !important;
+  min-width: 1.75rem !important;
+  height: 1.75rem !important;
+  border-radius: 6px !important;
+  font-size: 0.775rem !important;
+}
+
+:host ::ng-deep .trash-table .p-paginator .p-paginator-pages .p-paginator-page.p-highlight {
+  background: #2563eb !important;
+  border-color: #2563eb !important;
+  color: #fff !important;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   p-tag BADGE OVERRIDES — soft light style
+───────────────────────────────────────────────────────────────────────── */
+:host ::ng-deep .trash-table .p-tag {
+  border-radius: 999px !important;
+  font-size: 0.7rem !important;
+  font-weight: 600 !important;
+  padding: 0.25rem 0.7rem !important;
+  line-height: 1 !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+/* success → completed */
+:host ::ng-deep .trash-table .p-tag.p-tag-success {
+  background: #dcfce7 !important;
+  color: #15803d !important;
+}
+
+/* info → partial */
+:host ::ng-deep .trash-table .p-tag.p-tag-info {
+  background: #dbeafe !important;
+  color: #1d4ed8 !important;
+}
+
+/* warning → pending */
+:host ::ng-deep .trash-table .p-tag.p-tag-warning {
+  background: #fef9c3 !important;
+  color: #a16207 !important;
+}
+
+/* danger → cancelled */
+:host ::ng-deep .trash-table .p-tag.p-tag-danger {
+  background: #fee2e2 !important;
+  color: #b91c1c !important;
+}
+
+/* secondary → fallback */
+:host ::ng-deep .trash-table .p-tag.p-tag-secondary {
+  background: #f3f4f6 !important;
+  color: #374151 !important;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   CELL STYLES
+───────────────────────────────────────────────────────────────────────── */
+.invoice-num {
+  font-weight: 700;
+  color: #111827;
+  font-size: 0.8rem;
+}
+
+.amount {
+  color: #16a34a;
+  font-weight: 600;
+}
+
+.date-col {
+  color: #6b7280;
+  font-size: 0.75rem;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   RESTORE BUTTON
+───────────────────────────────────────────────────────────────────────── */
+.icon-btn {
+  background: none;
+  border: none;
+  padding: 0.2rem 0.4rem;
+  cursor: pointer;
+  font-size: 0.95rem;
+  border-radius: 4px;
+  transition: background 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.icon-btn.restore {
+  color: #16a34a;
+}
+
+.icon-btn.restore:hover {
+  background: #dcfce7;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   EMPTY STATE
+───────────────────────────────────────────────────────────────────────── */
+.empty-state {
+  text-align: center;
+  padding: 2.5rem;
+  color: #9ca3af;
+}
+
+.empty-state i {
+  font-size: 2rem;
+  display: block;
+  margin-bottom: 0.5rem;
+  opacity: 0.35;
+}
+
+.empty-state p {
+  font-size: 0.875rem;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   RESPONSIVE
+───────────────────────────────────────────────────────────────────────── */
+@media (max-width: 900px) {
+  .page-wrapper {
+    margin-left: 0;
+    padding: 1.25rem 1rem;
+    padding-top: calc(56px + 1.25rem);
+  }
 }
 
 @media (max-width: 768px) {
-  .header-content {
+  .page-wrapper {
+    padding: 1rem;
+    padding-top: calc(56px + 1rem);
+  }
+
+  .page-header {
     flex-direction: column;
     align-items: flex-start;
-    gap: 1rem;
-  }
-
-  :deep(.p-datatable) {
-    font-size: 0.875rem;
-  }
-
-  :deep(.p-datatable .p-datatable-thead > tr > th),
-  :deep(.p-datatable .p-datatable-tbody > tr > td) {
-    padding: 0.5rem;
   }
 }

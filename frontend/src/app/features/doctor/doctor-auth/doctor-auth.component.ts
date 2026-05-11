@@ -29,7 +29,7 @@ import { AuthService } from '../../../core/services/auth.service';
 })
 export class DoctorAuthComponent implements OnInit {
   loginForm!: FormGroup;
-  
+
   // ✅ Signals replace isLoading state variable
   readonly showPassword = signal(false);
   readonly isLoading = signal(false);
@@ -95,9 +95,5 @@ export class DoctorAuthComponent implements OnInit {
           });
         }
       });
-  }
-
-  goBack(): void {
-    this.router.navigate(['../auth'], { relativeTo: this.route });
   }
 }

@@ -78,7 +78,7 @@
             </div>
 
             <ng-container *ngIf="!loading && filteredVisits.length > 0">
-                <a class="visit-card" *ngFor="let v of filteredVisits" [routerLink]="['/history', v.id]">
+                <a class="visit-card" *ngFor="let v of filteredVisits" [routerLink]="[v.id]">
 
                     <div class="visit-card-left">
                         <div class="avatar-circle">{{ getInitial(v.doctor) }}</div>

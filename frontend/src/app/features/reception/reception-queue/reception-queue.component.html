@@ -10,16 +10,83 @@
         </div>
     </div>
 
-    <!-- SEARCH & FILTER -->
+    <!-- SEARCH BAR + FILTER TOGGLE -->
     <div class="search-bar">
         <i class="pi pi-search"></i>
         <input type="text" placeholder="Search by name or token..." [(ngModel)]="searchText"
             (ngModelChange)="onSearchChange($event)" />
-        <i class="pi pi-filter"></i>
-        <p-dropdown [options]="statuses" [(ngModel)]="selectedStatus" (onChange)="onStatusChange()">
-        </p-dropdown>
-        <p-dropdown [options]="paymentOptions" [(ngModel)]="paymentFilter" (onChange)="onPaymentChange()">
-        </p-dropdown>
+
+        <!-- Filter button -->
+        <div class="filter-panel-wrapper" (click)="$event.stopPropagation()">
+            <button class="filter-toggle-btn" [class.active]="filterPanelOpen || activeFilterCount > 0"
+                (click)="toggleFilterPanel($event)">
+                <i class="pi pi-sliders-h"></i>
+                <span>Filters &amp; Sort</span>
+                <span *ngIf="activeFilterCount > 0" class="filter-badge">{{ activeFilterCount }}</span>
+            </button>
+
+            <!-- Dropdown panel -->
+            <div class="filter-panel" *ngIf="filterPanelOpen">
+                <div class="filter-panel-header">
+                    <span class="filter-panel-title">Filters</span>
+                    <button class="clear-btn" (click)="clearAllFilters()">Clear all</button>
+                </div>
+
+                <div class="filter-grid">
+                    <!-- Status -->
+                    <div class="filter-group">
+                        <label class="filter-label">Status</label>
+                        <p-dropdown [options]="statuses" [(ngModel)]="selectedStatus" (onChange)="onFilterChange()"
+                            styleClass="filter-dropdown" placeholder="All statuses">
+                        </p-dropdown>
+                    </div>
+
+                    <!-- Payment -->
+                    <div class="filter-group">
+                        <label class="filter-label">Payment</label>
+                        <p-dropdown [options]="paymentOptions" [(ngModel)]="paymentFilter" (onChange)="onFilterChange()"
+                            styleClass="filter-dropdown" placeholder="All payments">
+                        </p-dropdown>
+                    </div>
+
+                    <!-- Doctor -->
+                    <div class="filter-group">
+                        <label class="filter-label">Doctor</label>
+                        <p-dropdown [options]="doctorOptions" [(ngModel)]="selectedDoctorId"
+                            (onChange)="onFilterChange()" styleClass="filter-dropdown" placeholder="Any doctor">
+                        </p-dropdown>
+                    </div>
+
+                    <!-- Department -->
+                    <div class="filter-group">
+                        <label class="filter-label">Department</label>
+                        <p-dropdown [options]="departmentOptions" [(ngModel)]="selectedDepartment"
+                            (onChange)="onFilterChange()" styleClass="filter-dropdown" placeholder="All departments">
+                        </p-dropdown>
+                    </div>
+                </div>
+
+                <div class="filter-divider"></div>
+
+                <!-- Sort -->
+                <div class="sort-section">
+                    <span class="filter-panel-title">Sort by</span>
+                    <div class="sort-chips">
+                        <button *ngFor="let opt of sortOptions" class="sort-chip"
+                            [class.active]="sortField === opt.value" (click)="setSortField(opt.value)">
+                            {{ opt.label }}
+                            <i *ngIf="sortField === opt.value"
+                                [class]="sortDir === 'asc' ? 'pi pi-sort-up' : 'pi pi-sort-down'"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <button class="apply-btn" (click)="applyAndClose()">
+                    <i class="pi pi-check"></i>
+                    Apply filters
+                </button>
+            </div>
+        </div>
     </div>
 
     <!-- TABLE -->
@@ -92,7 +159,6 @@
                             <button pButton icon="pi pi-trash" severity="danger"
                                 class="p-button-text p-button-plain action-btn" pTooltip="Delete" tooltipPosition="top"
                                 (click)="delete(row)"></button>
-                            <!---BUTTON for skipped tokens — warning color for visibility -->
                             <button pButton icon="pi pi-undo" label="Re-add" severity="warning"
                                 class="p-button-sm re-add-btn" pTooltip="Re-add to Queue" tooltipPosition="top"
                                 (click)="reAddToken(row)" *ngIf="row.status === 'skipped'"></button>
@@ -111,7 +177,7 @@
     </p-card>
 </app-reception-sidebar>
 
-<!-- VIEW DIALOG (READ ONLY) -->
+<!-- VIEW DIALOG -->
 <p-dialog header="View Token" [(visible)]="viewVisible" [modal]="true" [style]="{width:'480px'}">
     <div *ngIf="viewModel" class="p-fluid queue-dialog">
         <div class="dialog-grid">
@@ -167,10 +233,9 @@
 </p-dialog>
 
 <!-- EDIT DIALOG -->
-<p-dialog header="Edit Token Details" [(visible)]="editVisible" [modal]="true" [style]="{width:'500px'}">
+<p-dialog header="Edit Token Details" [(visible)]="editVisible" [modal]="true" [style]="{width:'500px'}"
+    [contentStyle]="{padding: '1.5rem'}">
     <div *ngIf="editModel" class="p-fluid queue-dialog">
-
-        <!-- Token (read-only) + Status badge -->
         <div class="dialog-grid">
             <div class="p-field">
                 <label>Token</label>
@@ -181,7 +246,6 @@
                 <input pInputText [value]="editModel.mrn || '-'" disabled />
             </div>
         </div>
-
         <div class="dialog-grid">
             <div class="p-field">
                 <label>Name</label>
@@ -193,7 +257,6 @@
                     (ngModelChange)="onAgeChange($event)" placeholder="Age" />
             </div>
         </div>
-
         <div class="dialog-grid">
             <div class="p-field">
                 <label>Gender</label>
@@ -205,7 +268,6 @@
                 <input pInputText [(ngModel)]="editModel.phone" placeholder="Phone number" />
             </div>
         </div>
-
         <div class="dialog-grid">
             <div class="p-field">
                 <label>Department</label>
@@ -218,16 +280,12 @@
                     placeholder="Select payment"></p-dropdown>
             </div>
         </div>
-
-        <!-- Reason — full width, properly isolated -->
         <div class="p-field reason-field">
             <label>Reason for Visit</label>
             <textarea pInputTextarea [(ngModel)]="editModel.reason" rows="3" placeholder="Reason for visit"
                 style="width:100%; display:block; resize:vertical; border-radius:10px;">
             </textarea>
         </div>
-
-        <!-- Re-add button — only shown for skipped patients -->
         <div *ngIf="editModel.status === 'skipped'" class="readd-section">
             <div class="skipped-notice">
                 <i class="pi pi-exclamation-triangle"></i>
@@ -237,7 +295,6 @@
                 class="p-button-success readd-full-btn">
             </button>
         </div>
-
         <div class="dialog-actions">
             <button pButton label="Save Changes" icon="pi pi-check" (click)="saveEdit()" class="p-button-success"
                 style="flex:1;"></button>
@@ -247,7 +304,7 @@
     </div>
 </p-dialog>
 
-<!-- DELETE CONFIRMATION DIALOG -->
+<!-- DELETE DIALOG -->
 <p-dialog header="Confirm Delete" [(visible)]="deleteConfirmVisible" [modal]="true" [style]="{width:'400px'}">
     <div *ngIf="deleteModel">
         <div class="delete-warning">

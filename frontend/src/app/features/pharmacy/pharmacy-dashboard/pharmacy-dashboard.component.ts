@@ -1,7 +1,7 @@
-import { ChangeDetectorRef, Component, DestroyRef, Injector, OnInit, effect, inject } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule, Router, ActivatedRoute } from '@angular/router';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { Subscription } from 'rxjs';
 
 import { CardModule } from 'primeng/card';
 import { ButtonModule } from 'primeng/button';
@@ -11,7 +11,7 @@ import { PharmacyService } from '../../../core/services/pharmacy.service';
 import { Medicine } from '../../../shared/models/medicine.model';
 import { PharmacySidebarComponent } from '../shared/components/pharmacy-sidebar/pharmacy-sidebar.component';
 import { AuthService } from '../../../core/services/auth.service';
-import { RealtimeService } from '../../../core/services/realtime.service';
+import { pharmacyPath } from '../../../core/utils/portal-path.util';
 
 @Component({
     selector: 'app-pharmacy-dashboard',
@@ -28,11 +28,7 @@ export class PharmacyDashboardComponent implements OnInit {
     inventoryValue = 0;
 
     medicines: Medicine[] = [];
-    private readonly realtimeService = inject(RealtimeService);
-    private readonly destroyRef = inject(DestroyRef);
-    private readonly injector = inject(Injector);
-    private readonly cdr = inject(ChangeDetectorRef);
-    private realtimeRoom: string | null = null;
+    private sub: Subscription | null = null;
 
     constructor(
         private pharmacyService: PharmacyService,
@@ -42,16 +38,18 @@ export class PharmacyDashboardComponent implements OnInit {
     ) { }
 
     ngOnInit(): void {
-        effect(() => {
-            this.medicines = this.pharmacyService.medicines();
+        this.sub = this.pharmacyService.medicines$.subscribe(meds => {
+            this.medicines = meds;
             this.updateStats();
-            this.cdr.markForCheck();
-        }, { injector: this.injector });
+        });
         
         // Trigger a fresh fetch from the API using correct hospital ID and Staff endpoint
         const hid = (this.authService.getCurrentUser() as any)?.hospitalId || '';
-        this.ensureRealtimeConnection(hid);
         this.pharmacyService.loadMedicinesFromApi(hid);
+    }
+
+    ngOnDestroy(): void {
+        this.sub?.unsubscribe();
     }
 
     updateStats(): void {
@@ -77,32 +75,10 @@ export class PharmacyDashboardComponent implements OnInit {
     }
 
     goToInventory(): void {
-        this.router.navigate(['../inventory'], { relativeTo: this.route });
+        this.router.navigate([pharmacyPath('inventory')]);
     }
 
     goToSales(): void {
-        this.router.navigate(['../sales'], { relativeTo: this.route });
-    }
-
-    private ensureRealtimeConnection(hospitalId: string): void {
-        if (!hospitalId) {
-            return;
-        }
-
-        const room = `hospital_${hospitalId}`;
-        if (this.realtimeRoom === room) {
-            return;
-        }
-
-        this.realtimeRoom = room;
-        this.realtimeService.connect(room)
-            .pipe(takeUntilDestroyed(this.destroyRef))
-            .subscribe(message => {
-                if (message?.type === 'ack') {
-                    return;
-                }
-
-                this.pharmacyService.loadMedicinesFromApi(hospitalId);
-            });
+        this.router.navigate([pharmacyPath('sales')]);
     }
 }

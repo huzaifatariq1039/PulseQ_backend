@@ -914,8 +914,6 @@ async def create_invoice(
         created_by=getattr(current, "user_id", None),
         items=[item.model_dump() for item in payload.items],
     )
-    db.commit()
-    db.refresh(invoice)
     data = invoice.to_dict()
     data["items"] = PharmacyInvoiceService.get_invoice_items(db=db, invoice_id=invoice.id)
     data["item_count"] = len(data["items"])
@@ -1003,4 +1001,258 @@ async def restore_invoice(
         raise HTTPException(status_code=404, detail="Invoice not found in trash")
     return ok(data=invoice.to_dict(), message="Invoice restored successfully")
 
+# ═══════════════════════════════════════════════════════════════════════════════
+#  SALES & REVENUE PAGE ENDPOINTS
+# ═══════════════════════════════════════════════════════════════════════════════
 
+def _resolve_date_range(
+    preset: Optional[str],
+    from_date: Optional[str],
+    to_date: Optional[str]
+) -> Tuple[datetime, datetime]:
+    """Resolve date range from preset or explicit from/to dates."""
+    now = datetime.utcnow()
+    if preset == "last_7_days":
+        return now - timedelta(days=7), now
+    elif preset == "this_month":
+        return now.replace(day=1, hour=0, minute=0, second=0, microsecond=0), now
+    elif preset == "last_month":
+        first_this = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        last_prev = first_this - timedelta(seconds=1)
+        first_prev = last_prev.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        return first_prev, last_prev
+    elif from_date and to_date:
+        return datetime.fromisoformat(from_date), datetime.fromisoformat(to_date)
+    else:
+        # Default: last 30 days
+        return now - timedelta(days=30), now
+
+
+# ── GET /sales/overview ───────────────────────────────────────────────────────
+# Overview tab — Total Revenue, Invoices, Units Sold, Avg Order Value
+
+@router.get("/sales/overview", dependencies=[Depends(require_roles("pharmacy", "admin"))])
+async def get_sales_overview(
+    db: Session = Depends(get_db),
+    current: TokenData = Depends(get_current_active_user),
+    hospital_id: Optional[str] = Query(None),
+    preset: Optional[str] = Query("last_30_days", description="last_7_days | last_30_days | this_month | last_month"),
+    from_date: Optional[str] = Query(None, description="ISO date e.g. 2026-04-01"),
+    to_date: Optional[str] = Query(None, description="ISO date e.g. 2026-05-09"),
+):
+    h_id = hospital_id or getattr(current, "hospital_id", None)
+    start, end = _resolve_date_range(preset, from_date, to_date)
+
+    sales = db.query(PharmacySale).filter(
+        PharmacySale.hospital_id == h_id,
+        PharmacySale.payment_status != "cancelled",
+        PharmacySale.sold_at >= start,
+        PharmacySale.sold_at <= end,
+    ).all()
+
+    total_revenue = sum((s.total_amount or s.total_price or 0) for s in sales)
+    total_invoices = len(sales)
+    units_sold = sum((s.quantity or 0) for s in sales)
+    avg_order_value = round(total_revenue / total_invoices, 2) if total_invoices > 0 else 0.0
+
+    return ok(data={
+        "total_revenue": round(total_revenue, 2),
+        "invoices": total_invoices,
+        "units_sold": units_sold,
+        "avg_order_value": avg_order_value,
+        "period": {
+            "from": start.isoformat(),
+            "to": end.isoformat()
+        }
+    })
+
+
+# ── GET /sales/over-time ──────────────────────────────────────────────────────
+# Overview tab — "Sales over time" chart (daily breakdown)
+
+@router.get("/sales/over-time", dependencies=[Depends(require_roles("pharmacy", "admin"))])
+async def get_sales_over_time(
+    db: Session = Depends(get_db),
+    current: TokenData = Depends(get_current_active_user),
+    hospital_id: Optional[str] = Query(None),
+    preset: Optional[str] = Query("last_30_days"),
+    from_date: Optional[str] = Query(None),
+    to_date: Optional[str] = Query(None),
+):
+    h_id = hospital_id or getattr(current, "hospital_id", None)
+    start, end = _resolve_date_range(preset, from_date, to_date)
+
+    rows = db.query(
+        func.date(PharmacySale.sold_at).label("date"),
+        func.coalesce(func.sum(
+            case((PharmacySale.total_amount.isnot(None), PharmacySale.total_amount),
+                 else_=PharmacySale.total_price)
+        ), 0).label("revenue"),
+        func.count(PharmacySale.id).label("invoices")
+    ).filter(
+        PharmacySale.hospital_id == h_id,
+        PharmacySale.payment_status != "cancelled",
+        PharmacySale.sold_at >= start,
+        PharmacySale.sold_at <= end,
+    ).group_by(
+        func.date(PharmacySale.sold_at)
+    ).order_by(
+        func.date(PharmacySale.sold_at)
+    ).all()
+
+    return ok(data=[
+        {
+            "date": str(row.date),
+            "revenue": round(float(row.revenue or 0), 2),
+            "invoices": row.invoices
+        }
+        for row in rows
+    ])
+
+
+# ── GET /sales/payment-methods ────────────────────────────────────────────────
+# Overview tab — "Payment method" breakdown (Cash, Card, Online)
+
+@router.get("/sales/payment-methods", dependencies=[Depends(require_roles("pharmacy", "admin"))])
+async def get_payment_method_breakdown(
+    db: Session = Depends(get_db),
+    current: TokenData = Depends(get_current_active_user),
+    hospital_id: Optional[str] = Query(None),
+    preset: Optional[str] = Query("last_30_days"),
+    from_date: Optional[str] = Query(None),
+    to_date: Optional[str] = Query(None),
+):
+    h_id = hospital_id or getattr(current, "hospital_id", None)
+    start, end = _resolve_date_range(preset, from_date, to_date)
+
+    sales = db.query(PharmacySale).filter(
+        PharmacySale.hospital_id == h_id,
+        PharmacySale.payment_status != "cancelled",
+        PharmacySale.sold_at >= start,
+        PharmacySale.sold_at <= end,
+    ).all()
+
+    breakdown: Dict[str, float] = {"cash": 0.0, "card": 0.0, "online": 0.0}
+
+    for s in sales:
+        method = "cash"  # default
+        if isinstance(s.items, dict):
+            method = str(s.items.get("payment_method", "cash")).lower()
+        elif isinstance(s.items, list) and s.items:
+            method = str(s.items[0].get("payment_method", "cash")).lower()
+        if method not in breakdown:
+            method = "cash"
+        breakdown[method] += (s.total_amount or s.total_price or 0)
+
+    total = sum(breakdown.values())
+    return ok(data={
+        "breakdown": [
+            {
+                "method": k,
+                "amount": round(v, 2),
+                "percentage": round((v / total * 100), 1) if total > 0 else 0
+            }
+            for k, v in breakdown.items()
+        ],
+        "total": round(total, 2)
+    })
+
+
+# ── GET /sales/top-medicines ──────────────────────────────────────────────────
+# Products tab — Top selling medicines
+
+@router.get("/sales/top-medicines", dependencies=[Depends(require_roles("pharmacy", "admin"))])
+async def get_top_selling_medicines(
+    db: Session = Depends(get_db),
+    current: TokenData = Depends(get_current_active_user),
+    hospital_id: Optional[str] = Query(None),
+    preset: Optional[str] = Query("last_30_days"),
+    from_date: Optional[str] = Query(None),
+    to_date: Optional[str] = Query(None),
+    limit: int = Query(10, ge=1, le=50),
+):
+    h_id = hospital_id or getattr(current, "hospital_id", None)
+    start, end = _resolve_date_range(preset, from_date, to_date)
+
+    rows = db.query(
+        PharmacySale.medicine_name,
+        func.coalesce(func.sum(PharmacySale.quantity), 0).label("units_sold"),
+        func.coalesce(func.sum(
+            case((PharmacySale.total_amount.isnot(None), PharmacySale.total_amount),
+                 else_=PharmacySale.total_price)
+        ), 0).label("revenue"),
+        func.count(PharmacySale.id).label("transactions")
+    ).filter(
+        PharmacySale.hospital_id == h_id,
+        PharmacySale.payment_status != "cancelled",
+        PharmacySale.medicine_name.isnot(None),
+        PharmacySale.sold_at >= start,
+        PharmacySale.sold_at <= end,
+    ).group_by(
+        PharmacySale.medicine_name
+    ).order_by(
+        func.sum(PharmacySale.quantity).desc()
+    ).limit(limit).all()
+
+    return ok(data=[
+        {
+            "medicine_name": row.medicine_name,
+            "units_sold": int(row.units_sold or 0),
+            "revenue": round(float(row.revenue or 0), 2),
+            "transactions": row.transactions
+        }
+        for row in rows
+    ])
+
+
+# ── GET /sales/export ─────────────────────────────────────────────────────────
+# Export Excel button
+
+@router.get("/sales/export", dependencies=[Depends(require_roles("pharmacy", "admin"))])
+async def export_sales_excel(
+    db: Session = Depends(get_db),
+    current: TokenData = Depends(get_current_active_user),
+    hospital_id: Optional[str] = Query(None),
+    preset: Optional[str] = Query("last_30_days"),
+    from_date: Optional[str] = Query(None),
+    to_date: Optional[str] = Query(None),
+):
+    import openpyxl
+    from io import BytesIO
+
+    h_id = hospital_id or getattr(current, "hospital_id", None)
+    start, end = _resolve_date_range(preset, from_date, to_date)
+
+    sales = db.query(PharmacySale).filter(
+        PharmacySale.hospital_id == h_id,
+        PharmacySale.payment_status != "cancelled",
+        PharmacySale.sold_at >= start,
+        PharmacySale.sold_at <= end,
+    ).order_by(PharmacySale.sold_at.desc()).all()
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Sales & Revenue"
+    ws.append(["ID", "Medicine", "Quantity", "Unit Price", "Total Amount", "Payment Status", "Sold At"])
+
+    for s in sales:
+        ws.append([
+            s.id,
+            s.medicine_name or "N/A",
+            s.quantity or 0,
+            s.unit_price or 0,
+            s.total_amount or s.total_price or 0,
+            s.payment_status,
+            s.sold_at.isoformat() if s.sold_at else ""
+        ])
+
+    buffer = BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+
+    filename = f"sales_{start.date()}_to_{end.date()}.xlsx"
+    return StreamingResponse(
+        buffer,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )

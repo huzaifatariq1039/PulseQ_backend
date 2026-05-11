@@ -54,17 +54,17 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
             }
           }
           const currentUrl = isBrowser ? window.location.pathname : '';
-          let redirectPath = '/auth';
-          if (currentUrl.includes('/patient')) {
+          let redirectPath = '/';
+          if (currentUrl.includes('/staff/doctor')) {
+            redirectPath = '/staff/doctor/auth';
+          } else if (currentUrl.includes('/staff/admin')) {
+            redirectPath = '/staff/admin/auth';
+          } else if (currentUrl.includes('/staff/reception')) {
+            redirectPath = '/staff/reception/auth';
+          } else if (currentUrl.includes('/staff/pharmacy')) {
+            redirectPath = '/staff/pharmacy/auth';
+          } else if (currentUrl.includes('/patient')) {
             redirectPath = '/patient/auth';
-          } else if (currentUrl.includes('/doctor')) {
-            redirectPath = '/doctor/auth';
-          } else if (currentUrl.includes('/admin')) {
-            redirectPath = '/admin/auth';
-          } else if (currentUrl.includes('/reception')) {
-            redirectPath = '/reception/auth';
-          } else if (currentUrl.includes('/pharmacy')) {
-            redirectPath = '/pharmacy/auth';
           }
           router.navigate([redirectPath]).catch(err => {
             console.error(`Navigation to ${redirectPath} failed:`, err);

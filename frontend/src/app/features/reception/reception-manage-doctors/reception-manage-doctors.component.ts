@@ -254,5 +254,5 @@ export class ReceptionManageDoctorsComponent implements OnInit, OnDestroy {
     }
 
     toggleSidebar() { this.sidebarOpen = !this.sidebarOpen; }
-    signOut() { this.router.navigate(['../auth'], { relativeTo: this.route }); }
+    signOut() { this.router.navigate(['/']); }
 }

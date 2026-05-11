@@ -18,7 +18,7 @@ export class AdminSidebarComponent {
     signOut(): void {
         this.authService.logout();
         // route back to admin login page, mimic existing components
-        this.router.navigate(['../auth'], { relativeTo: this.route });
+        this.router.navigate(['auth'], { relativeTo: this.route.parent?.parent });
     }
 
     toggleSidebar(): void {

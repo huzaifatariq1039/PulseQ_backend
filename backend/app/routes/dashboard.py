@@ -112,16 +112,42 @@ async def get_dashboard_data(
         )
     
     user_data = {k: v for k, v in user.__dict__.items() if not k.startswith('_')}
-    # Ensure ID is a string and role is lowercase for Pydantic
+
+# Ensure ID is a string and role is lowercase for Pydantic
     if "id" in user_data and not isinstance(user_data["id"], str):
-        user_data["id"] = str(user_data["id"])
+       user_data["id"] = str(user_data["id"])
     if "role" in user_data and isinstance(user_data["role"], str):
-        user_data["role"] = user_data["role"].lower()
-    user_data.pop("password", None)
-    
-    # Get statistics
+       user_data["role"] = user_data["role"].lower()
+
+# ✅ Exact fields from UserBase + UserResponse combined
+    ALLOWED_USER_FIELDS = {
+    # From UserBase
+       "name", "email", "phone", "role", "hospital_id", "location_access",
+    # From UserResponse
+       "id", "date_of_birth", "address", "birthday",
+       "location", "membership_type", "avatar_initials",
+       "created_at", "updated_at",
+}
+    user_data = {k: v for k, v in user_data.items() if k in ALLOWED_USER_FIELDS}
+
+# ✅ Map DB column names → Pydantic field names if they differ
+# If your DB column is "full_name" but Pydantic expects "name"
+    if "full_name" in user_data and "name" not in user_data:
+      user_data["name"] = user_data.pop("full_name")
+
+# If your DB column is "phone_number" but Pydantic expects "phone"
+    if "phone_number" in user_data and "phone" not in user_data:
+      user_data["phone"] = user_data.pop("phone_number")
+
+# ✅ Defaults for required/optional fields
+    user_data.setdefault("membership_type", "Premium Member")
+    user_data.setdefault("location_access", False)
+    user_data.setdefault("created_at", datetime.utcnow())
+    user_data.setdefault("updated_at", datetime.utcnow())
+
+# Get statistics
     statistics = await get_user_statistics(current_user.user_id, db=db)
-    
+
     # Get recent activities
     recent_activities = await get_recent_activities(current_user.user_id, limit=5, db=db)
     
@@ -635,19 +661,22 @@ async def get_recent_activities(user_id: str, limit: int = 10, activity_type: Op
     for obj in activities_objs:
         activity_data = {k: v for k, v in obj.__dict__.items() if not k.startswith('_')}
         
-        # 1. Convert UUID objects to strings for Pydantic
+        # 1. Convert UUID objects to strings
         if "id" in activity_data and not isinstance(activity_data["id"], str):
             activity_data["id"] = str(activity_data["id"])
         if "user_id" in activity_data and not isinstance(activity_data["user_id"], str):
             activity_data["user_id"] = str(activity_data["user_id"])
             
-        # 2. Normalize activity_type to lowercase to match Pydantic Enum
+        # 2. Normalize activity_type to lowercase
         if "activity_type" in activity_data and isinstance(activity_data["activity_type"], str):
             activity_data["activity_type"] = activity_data["activity_type"].lower()
 
-        # 3. Explicitly map meta_data (DB name) to metadata (Pydantic model name)
+        # 3. Map meta_data (DB) → metadata (Pydantic)
         if "meta_data" in activity_data:
             activity_data["metadata"] = activity_data.pop("meta_data")
+
+        # 4. ✅ FIX: Remove updated_at — not in Pydantic schema, extra='forbid' rejects it
+        activity_data.pop("updated_at", None)
             
         activities.append(ActivityLogModel(**activity_data))
     

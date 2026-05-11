@@ -117,7 +117,7 @@ export class PatientDashboardComponent implements OnInit, OnDestroy {
               people_ahead: queue?.people_ahead ?? null,
               is_future_appointment: queue?.is_future_appointment ?? false,
             });
-            
+
             // Setup WebSocket listener for this doctor
             if (token.doctor_id) {
               this.setupRealtimeListener(token.doctor_id);
@@ -191,9 +191,9 @@ export class PatientDashboardComponent implements OnInit, OnDestroy {
 
   private setupRealtimeListener(doctorId: string): void {
     const room = `doctor_${doctorId}`;
-    
+
     if (this.realtimeRooms.has(room)) return;
-    
+
     this.realtimeService.connect(room)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
@@ -223,7 +223,7 @@ export class PatientDashboardComponent implements OnInit, OnDestroy {
           console.error(`WebSocket error for room ${room}:`, err);
         }
       });
-    
+
     this.realtimeRooms.add(room);
   }
 
@@ -234,7 +234,7 @@ export class PatientDashboardComponent implements OnInit, OnDestroy {
   }
 
   // ── Navigation ──────────────────────────────────────────────────
-  logout(): void { this.router.navigate(['../auth'], { relativeTo: this.route }); }
+  logout(): void { this.router.navigate(['auth'], { relativeTo: this.route.parent?.parent }); }
   goGenerateToken(): void { this.router.navigate(['../new-token'], { relativeTo: this.route }); }
   viewToken(): void { this.router.navigate(['../my-token'], { relativeTo: this.route }); }
   viewSpecificToken(id?: string): void {

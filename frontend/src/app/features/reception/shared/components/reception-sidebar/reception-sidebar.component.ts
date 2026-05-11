@@ -28,6 +28,6 @@ export class ReceptionSidebarComponent {
 
     onSignOut() {
         this.signOut.emit();
-        this.router.navigate(['../auth'], { relativeTo: this.route });
+        this.router.navigate(['/']);
     }
 }

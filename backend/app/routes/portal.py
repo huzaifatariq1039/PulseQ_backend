@@ -15,6 +15,8 @@ from app.routes.pharmacy import router as pharmacy_router
 from app.utils.mrn import get_or_create_patient_mrn
 import uuid
 import logging
+from app.routes.tokens import avg_last_5, avg_last_10
+# OR wherever these functions live in your codebase
 
 # --- 🚀 AI Engine Imports ---
 from app.services.ai_engine import ai_engine
@@ -122,9 +124,27 @@ async def get_doctor_tokens(
     page: Optional[int] = Query(1, ge=1),
     page_size: Optional[int] = Query(20, ge=1, le=500),
 ) -> Dict[str, Any]:
-    """Get tokens/patient history - Returns all tokens (no doctor_id filter)"""
+    """Get tokens/patient history - Doctors see only their own tokens, admins see all"""
     
     query = db.query(Token)
+    
+    # Filter by doctor if user is a doctor (not admin)
+    user_role = str(getattr(current, "role", "")).lower()
+    if user_role == "doctor":
+        # ✅ Fix — look up doctor by user_id first, then filter by doctor.id
+        doctor = db.query(Doctor).filter(
+            or_(
+                Doctor.user_id == current.user_id,
+                Doctor.id == current.user_id
+            )
+        ).first()
+
+        if not doctor:
+            # No doctor profile found — return empty
+            return ok(data=[], meta={"page": page, "page_size": page_size, "total": 0})
+
+        query = query.filter(Token.doctor_id == doctor.id)  # ✅ use doctor.id not user_id
+
     
     if patient_id:
         query = query.filter(Token.patient_id == patient_id)
@@ -552,12 +572,26 @@ async def receptionist_dashboard(
             gender = str(gender).capitalize()
         
         return age, gender
+    
+    def _get_avg_service_time(doctor_id: str) -> float:
+        try:
+           last_5 = avg_last_5(doctor_id, db) or 5.0
+           last_10 = avg_last_10(doctor_id, db) or 5.0
+           return round((0.6 * last_5) + (0.4 * last_10), 1)
+        except Exception:
+           return 5.0
 
     upcoming = []
+    position = 1
     for t in active:
         if now_serving and t.id == now_serving.id:
             continue
         age, gender = _get_age_and_gender(t.patient_id, t)
+
+        doc_id = t.doctor_id or doctor_id
+        avg_service = _get_avg_service_time(doc_id)
+        live_wait = max(1, round(position * avg_service))
+
         
         upcoming.append({
             "token_id": t.id,
@@ -569,6 +603,8 @@ async def receptionist_dashboard(
             "doctor_name": t.doctor_name,
             "waiting_time_minutes": getattr(t, 'estimated_wait_time', 0) or 0
         })
+
+        position += 1
         if len(upcoming) >= upcoming_limit:
             break
             
@@ -606,9 +642,12 @@ async def receptionist_dashboard(
                 "waiting": len(waiting),
                 "completed": len(completed),
                 "skipped": len(skipped),
-                "avg_wait_minutes": (
-                    sum((getattr(t, 'estimated_wait_time', 0) or 0) for t in active) // len([t for t in active if (getattr(t, 'estimated_wait_time', 0) or 0) > 0])
-                ) if any((getattr(t, 'estimated_wait_time', 0) or 0) > 0 for t in active) else 0,
+                #"avg_wait_minutes": (
+                #    sum((getattr(t, 'estimated_wait_time', 0) or 0) for t in active) // len([t for t in active if (getattr(t, 'estimated_wait_time', 0) or 0) > 0])
+                #) if any((getattr(t, 'estimated_wait_time', 0) or 0) > 0 for t in active) else 0,
+                "avg_wait_minutes": round(
+                    _get_avg_service_time(doctor_id or (doctors[0].id if doctors else None))
+                ) if active else 0,
             }
         }
     )
@@ -827,27 +866,38 @@ async def receptionist_create_walkin_token(
     
     db.add(new_token)
     db.commit()
-    
-    return ok(
-        data={
-            "token_id": token_id,
-            "token_number": display_code,
-            "hospital_name": hospital_name_str,
-            "department": reason,
-            "doctor_name": doctor.name,
-            "patient_name": patient_name,
-            "phone": phone,
-            "mrn": mrn,
-            "age": age,
-            "gender": gender,
-            "payment": "UNPAID",
-            "status": "PENDING",
-            "consultation_fee": doc_fee,
-            "token_fee": token_fee,
-            "total_fee": total_fee
-        }, 
-        message="Walk-in token created via AI Engine"
-    )
+
+    # ✅ Send WhatsApp appointment confirmation to patient
+    if phone:
+        try:
+            from app.services.whatsapp_service import send_template_message
+
+            def _normalize_phone(p: str) -> str:
+                p = str(p).strip().replace(" ", "").replace("-", "")
+                if p.startswith("0") and len(p) == 11:
+                    return "+92" + p[1:]
+                if not p.startswith("+"):
+                    return "+" + p
+                return p
+
+            room_number = getattr(doctor, 'room_number', None) or getattr(doctor, 'room', None) or "TBD"
+
+            await send_template_message(
+                phone=_normalize_phone(phone),
+                template_name="token_number",  # ← replace with your actual template name
+                params=[
+                    doctor.name,                  # {doctor_name}
+                    patient_name,                 # {name}
+                    hospital_name_str,            # {hospital_name}
+                    str(room_number),             # {room_number}
+                    str(estimated_wait_time),     # {wait_time}
+                ]
+            )
+            logger.info(f"WhatsApp walk-in confirmation sent to {phone} for token {token_id}")
+        except Exception as e:
+            logger.error(f"Failed to send WhatsApp walk-in confirmation for token {token_id}: {e}")
+
+    return ok(data={"token_id": token_id})
 
 @router.post("/receptionist/tokens/{token_id}/skip", dependencies=[Depends(require_roles("receptionist", "patient", "admin"))])
 async def receptionist_skip_token(

@@ -116,65 +116,65 @@ export class PatientHistoryComponent implements OnInit {
     this.staffService.getDoctorTokens('completed', 1, 100)
       .pipe(takeUntilDestroyed())
       .subscribe({
-      next: (res: any) => {
-        if (res.success && Array.isArray(res.data)) {
-          const grouped = new Map<string, any[]>();
+        next: (res: any) => {
+          if (res.success && Array.isArray(res.data)) {
+            const grouped = new Map<string, any[]>();
 
-          res.data.forEach((t: any) => {
-            const pid = t.mrn || t.patient_id || t.patient_phone || 'unknown';
-            if (!grouped.has(pid)) grouped.set(pid, []);
+            res.data.forEach((t: any) => {
+              const pid = t.mrn || t.patient_id || t.patient_phone || 'unknown';
+              if (!grouped.has(pid)) grouped.set(pid, []);
 
-            grouped.get(pid)!.push({
-              tokenNumber: t.token_number,
-              startTime: t.started_at || t.appointment_date,
-              endTime: t.completed_at || t.appointment_date,
-              reason: t.reason_for_visit || t.visit_reason || '',
-              doctorName: t.doctor_name || 'Dr.',
-              phone: t.patient_phone || '',
-              notes: t.consultation_notes || t.notes || t.special_instructions || '',
-              patientName: t.patient_name || 'Unknown',
-              duration: t.duration
-            });
-          });
-
-          const patientArray: PatientGroup[] = [];
-
-          grouped.forEach((consultations, patientId) => {
-            // Filter by search name
-            if (this.searchName && !consultations[0].patientName.toLowerCase().includes(this.searchName.toLowerCase())) {
-              return;
-            }
-
-            // Filter by date — use parseDate to correctly handle DD-MM-YYYY
-            let filteredConsultations = consultations;
-            if (this.filterDate) {
-              const selectedDate = new Date(this.filterDate);
-              filteredConsultations = consultations.filter(c => {
-                const cDate = this.parseDate(c.startTime);
-                return cDate.toDateString() === selectedDate.toDateString();
+              grouped.get(pid)!.push({
+                tokenNumber: t.token_number,
+                startTime: t.started_at || t.appointment_date,
+                endTime: t.completed_at || t.appointment_date,
+                reason: t.reason_for_visit || t.visit_reason || '',
+                doctorName: t.doctor_name || 'Dr.',
+                phone: t.patient_phone || '',
+                notes: t.consultation_notes || t.notes || t.special_instructions || '',
+                patientName: t.patient_name || 'Unknown',
+                duration: t.duration
               });
-            }
-
-            // Sort descending by startTime — use parseDate to avoid Invalid Date
-            const sortedConsultations = [...filteredConsultations].sort((a, b) =>
-              this.parseDate(b.startTime).getTime() - this.parseDate(a.startTime).getTime()
-            );
-
-            if (sortedConsultations.length === 0) return;
-
-            patientArray.push({
-              patientId,
-              patientName: consultations[0].patientName,
-              consultations: sortedConsultations,
-              isExpanded: false
             });
-          });
 
-          this.patientGroups = patientArray.sort((a, b) => a.patientName.localeCompare(b.patientName));
-        }
-      },
-      error: (err) => console.error('Failed to load history', err)
-    });
+            const patientArray: PatientGroup[] = [];
+
+            grouped.forEach((consultations, patientId) => {
+              // Filter by search name
+              if (this.searchName && !consultations[0].patientName.toLowerCase().includes(this.searchName.toLowerCase())) {
+                return;
+              }
+
+              // Filter by date — use parseDate to correctly handle DD-MM-YYYY
+              let filteredConsultations = consultations;
+              if (this.filterDate) {
+                const selectedDate = new Date(this.filterDate);
+                filteredConsultations = consultations.filter(c => {
+                  const cDate = this.parseDate(c.startTime);
+                  return cDate.toDateString() === selectedDate.toDateString();
+                });
+              }
+
+              // Sort descending by startTime — use parseDate to avoid Invalid Date
+              const sortedConsultations = [...filteredConsultations].sort((a, b) =>
+                this.parseDate(b.startTime).getTime() - this.parseDate(a.startTime).getTime()
+              );
+
+              if (sortedConsultations.length === 0) return;
+
+              patientArray.push({
+                patientId,
+                patientName: consultations[0].patientName,
+                consultations: sortedConsultations,
+                isExpanded: false
+              });
+            });
+
+            this.patientGroups = patientArray.sort((a, b) => a.patientName.localeCompare(b.patientName));
+          }
+        },
+        error: (err) => console.error('Failed to load history', err)
+      });
   }
 
   togglePatientGroup(index: number): void {
@@ -210,6 +210,6 @@ export class PatientHistoryComponent implements OnInit {
   }
 
   logout(): void {
-    this.router.navigate(['../auth'], { relativeTo: this.activatedRoute });
+    this.router.navigate(['auth'], { relativeTo: this.activatedRoute.parent?.parent });
   }
 }

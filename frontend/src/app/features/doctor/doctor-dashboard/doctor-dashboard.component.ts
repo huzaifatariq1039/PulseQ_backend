@@ -351,125 +351,125 @@ export class DoctorDashboardComponent implements OnInit {
     this.staffService.getDoctorDashboard(20, 20)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
-      next: (res: any) => {
-        if (!res.success) return;
+        next: (res: any) => {
+          if (!res.success) return;
 
-        const d = res.data;
+          const d = res.data;
 
-        // ✅ Use doctor ID from API response — this is the authoritative source
-        if (d.doctor?.id) {
-          this.doctorId = d.doctor.id;
-          this.doctorName = d.doctor.name || this.doctorName;
-          this.specialty = d.doctor.department || '';
-          this.ensureRealtimeConnection();
-        }
-
-        console.log('Doctor ID from API:', this.doctorId);
-
-        // ─── STEP 1: Build raw upcoming list ───────────────────────────────
-        let rawUpcoming: UpcomingPatient[] = [];
-
-        if (d.upcoming_patients && Array.isArray(d.upcoming_patients)) {
-          rawUpcoming = d.upcoming_patients.map((t: any) => ({
-            token: t.token_number || t.token || '',
-            name: t.patient_name || 'Unknown',
-            age: this.parseAge(t.patient_age) || 0,
-            reason: t.reason_for_visit || t.reason || '',
-            waitTime: (t.estimated_wait_time || t.waiting_time_minutes || 0) + 'm',
-            patientId: t.patient_id || t.mrn || '',
-            tokenId: t.token_id || t.id || '',
-            mrn: t.mrn || '',
-            gender: t.patient_gender || 'Unknown',
-            phone: t.phone || ''
-          }));
-        }
-
-        // ─── STEP 2: Resolve current patient ──────────────────────────────
-        if (d.current_consultation) {
-          // Backend says there IS an active consultation — use it authoritatively
-          const t = d.current_consultation;
-          this.currentPatient = {
-            name: t.patient_name || 'Unknown',
-            age: this.parseAge(t.patient_age) || 0,
-            gender: t.patient_gender || 'Unknown',
-            reason: t.reason_for_visit || t.reason || t.visit_reason || '',
-            phone: t.phone || t.patient_phone || '',
-            token: t.token_number || t.token || '',
-            patientId: t.patient_id || t.mrn || '',
-            tokenId: t.token_id || t.id || '',
-            mrn: t.mrn || ''
-          };
-          this.isConsultationActive = true;
-          if (!this.consultationStartTime) {
-            this.consultationStartTime = new Date();
+          // ✅ Use doctor ID from API response — this is the authoritative source
+          if (d.doctor?.id) {
+            this.doctorId = d.doctor.id;
+            this.doctorName = d.doctor.name || this.doctorName;
+            this.specialty = d.doctor.department || '';
+            this.ensureRealtimeConnection();
           }
-        } else if (!this.isConsultationActive) {
-          // No active consultation running — promote first upcoming as current
-          if (rawUpcoming.length > 0) {
-            const first = rawUpcoming[0];
+
+          console.log('Doctor ID from API:', this.doctorId);
+
+          // ─── STEP 1: Build raw upcoming list ───────────────────────────────
+          let rawUpcoming: UpcomingPatient[] = [];
+
+          if (d.upcoming_patients && Array.isArray(d.upcoming_patients)) {
+            rawUpcoming = d.upcoming_patients.map((t: any) => ({
+              token: t.token_number || t.token || '',
+              name: t.patient_name || 'Unknown',
+              age: this.parseAge(t.patient_age) || 0,
+              reason: t.reason_for_visit || t.reason || '',
+              waitTime: (t.estimated_wait_time || t.waiting_time_minutes || 0) + 'm',
+              patientId: t.patient_id || t.mrn || '',
+              tokenId: t.token_id || t.id || '',
+              mrn: t.mrn || '',
+              gender: t.patient_gender || 'Unknown',
+              phone: t.phone || ''
+            }));
+          }
+
+          // ─── STEP 2: Resolve current patient ──────────────────────────────
+          if (d.current_consultation) {
+            // Backend says there IS an active consultation — use it authoritatively
+            const t = d.current_consultation;
             this.currentPatient = {
-              name: first.name,
-              age: first.age,
-              gender: first.gender || 'Unknown',
-              reason: first.reason,
-              phone: first.phone || '',
-              token: first.token,
-              patientId: first.patientId,
-              tokenId: first.tokenId,
-              mrn: first.mrn || ''
+              name: t.patient_name || 'Unknown',
+              age: this.parseAge(t.patient_age) || 0,
+              gender: t.patient_gender || 'Unknown',
+              reason: t.reason_for_visit || t.reason || t.visit_reason || '',
+              phone: t.phone || t.patient_phone || '',
+              token: t.token_number || t.token || '',
+              patientId: t.patient_id || t.mrn || '',
+              tokenId: t.token_id || t.id || '',
+              mrn: t.mrn || ''
             };
-          } else {
-            this.currentPatient = null;
+            this.isConsultationActive = true;
+            if (!this.consultationStartTime) {
+              this.consultationStartTime = new Date();
+            }
+          } else if (!this.isConsultationActive) {
+            // No active consultation running — promote first upcoming as current
+            if (rawUpcoming.length > 0) {
+              const first = rawUpcoming[0];
+              this.currentPatient = {
+                name: first.name,
+                age: first.age,
+                gender: first.gender || 'Unknown',
+                reason: first.reason,
+                phone: first.phone || '',
+                token: first.token,
+                patientId: first.patientId,
+                tokenId: first.tokenId,
+                mrn: first.mrn || ''
+              };
+            } else {
+              this.currentPatient = null;
+            }
           }
+          // If isConsultationActive but no current_consultation from backend yet,
+          // keep the existing this.currentPatient untouched.
+
+          // ─── STEP 3: Always filter serving token out of upcoming ──────────
+          // Filter by BOTH tokenId and token string to handle any mapping gaps
+          const servingTokenId = this.currentPatient?.tokenId;
+          const servingToken = this.currentPatient?.token;
+
+          this.upcomingPatients = rawUpcoming.filter(p =>
+            (servingTokenId ? p.tokenId !== servingTokenId : true) &&
+            (servingToken ? p.token !== servingToken : true)
+          );
+
+          console.log('[DASHBOARD] currentPatient:', this.currentPatient?.tokenId,
+            '| upcoming count:', this.upcomingPatients.length);
+
+          // ─── STEP 4: Skipped patients ──────────────────────────────────────
+          if (d.skipped_patients && Array.isArray(d.skipped_patients)) {
+            this.skippedPatients = d.skipped_patients.map((t: any) => ({
+              token: t.token_number || t.token || '',
+              name: t.patient_name || 'Unknown',
+              age: this.parseAge(t.patient_age) || 0,
+              reason: t.reason_for_visit || t.reason || '',
+              waitTime: '0m',
+              patientId: t.patient_id || t.mrn || '',
+              tokenId: t.token_id || t.id || '',
+              mrn: t.mrn || '',
+              gender: t.patient_gender || 'Unknown',
+              phone: t.phone || ''
+            }));
+          }
+
+          // ─── STEP 5: Stats cards ───────────────────────────────────────────
+          if (d.cards) {
+            this.waitingPatients = d.cards.waiting_in_queue || 0;
+            this.patientsServed = d.cards.patients_served || 0;
+          }
+          this.cdr.markForCheck();
+        },
+        error: (err) => {
+          console.error('Error fetching doctor dashboard:', err);
+          this.messageService.add({
+            severity: 'warn',
+            summary: 'Dashboard Error',
+            detail: 'Could not load dashboard data. Retrying...'
+          });
         }
-        // If isConsultationActive but no current_consultation from backend yet,
-        // keep the existing this.currentPatient untouched.
-
-        // ─── STEP 3: Always filter serving token out of upcoming ──────────
-        // Filter by BOTH tokenId and token string to handle any mapping gaps
-        const servingTokenId = this.currentPatient?.tokenId;
-        const servingToken = this.currentPatient?.token;
-
-        this.upcomingPatients = rawUpcoming.filter(p =>
-          (servingTokenId ? p.tokenId !== servingTokenId : true) &&
-          (servingToken ? p.token !== servingToken : true)
-        );
-
-        console.log('[DASHBOARD] currentPatient:', this.currentPatient?.tokenId,
-          '| upcoming count:', this.upcomingPatients.length);
-
-        // ─── STEP 4: Skipped patients ──────────────────────────────────────
-        if (d.skipped_patients && Array.isArray(d.skipped_patients)) {
-          this.skippedPatients = d.skipped_patients.map((t: any) => ({
-            token: t.token_number || t.token || '',
-            name: t.patient_name || 'Unknown',
-            age: this.parseAge(t.patient_age) || 0,
-            reason: t.reason_for_visit || t.reason || '',
-            waitTime: '0m',
-            patientId: t.patient_id || t.mrn || '',
-            tokenId: t.token_id || t.id || '',
-            mrn: t.mrn || '',
-            gender: t.patient_gender || 'Unknown',
-            phone: t.phone || ''
-          }));
-        }
-
-        // ─── STEP 5: Stats cards ───────────────────────────────────────────
-        if (d.cards) {
-          this.waitingPatients = d.cards.waiting_in_queue || 0;
-          this.patientsServed = d.cards.patients_served || 0;
-        }
-        this.cdr.markForCheck();
-      },
-      error: (err) => {
-        console.error('Error fetching doctor dashboard:', err);
-        this.messageService.add({
-          severity: 'warn',
-          summary: 'Dashboard Error',
-          detail: 'Could not load dashboard data. Retrying...'
-        });
-      }
-    });
+      });
   }
 
   private parseAge(ageStr: any): number {
@@ -485,7 +485,7 @@ export class DoctorDashboardComponent implements OnInit {
 
   logout(): void {
     this.authService.logout();
-    this.router.navigate(['../auth'], { relativeTo: this.route });
+    this.router.navigate(['auth'], { relativeTo: this.route.parent?.parent });
   }
 
   viewPreviousHistory(): void {

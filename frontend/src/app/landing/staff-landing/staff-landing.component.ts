@@ -1,6 +1,7 @@
 import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
+import { isDevelopmentEnvironment } from '../../core/config/api.config';
 
 @Component({
     selector: 'app-staff-landing',
@@ -14,7 +15,7 @@ export class StaffLandingComponent {
 
     goTo(role: string) {
         const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:';
-        const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        const isLocalhost = isDevelopmentEnvironment();
 
         if (isLocalhost) {
             // Local development: navigate into the staff subtree

@@ -126,16 +126,24 @@ export class MyTokenComponent implements OnInit, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (res: any) => {
-          if (res && res.token) {
-            const mapped = this.mapToken(res.token, res.queue);
-            this.mergeToken(mapped);
-            
-            // Setup WebSocket for this token's doctor
-            const doctorId = res.token.doctor_id;
-            if (doctorId && doctorId !== this.currentDoctorId) {
-              this.setupRealtimeListener(doctorId);
+          // Handle both array response and single object response
+          const detailsArray = Array.isArray(res) ? res : (res && res.token ? [res] : []);
+
+          detailsArray.forEach((item: any) => {
+            const token = item.token || item;
+            const queue = item.queue || null;
+
+            if (token) {
+              const mapped = this.mapToken(token, queue);
+              this.mergeToken(mapped);
+
+              // Setup WebSocket for the first token's doctor
+              const doctorId = token.doctor_id;
+              if (doctorId && doctorId !== this.currentDoctorId) {
+                this.setupRealtimeListener(doctorId);
+              }
             }
-          }
+          });
         },
         error: (err) => {
           console.error('Failed to get active token details', err);
@@ -145,15 +153,15 @@ export class MyTokenComponent implements OnInit, OnDestroy {
 
   private setupRealtimeListener(doctorId: string): void {
     if (this.realtimeConnected && this.currentDoctorId === doctorId) return;
-    
+
     // Clean up old connection if switching doctors
     if (this.currentDoctorId && this.currentDoctorId !== doctorId) {
       this.realtimeService.disconnect(`doctor_${this.currentDoctorId}`);
     }
-    
+
     this.currentDoctorId = doctorId;
     const room = `doctor_${doctorId}`;
-    
+
     this.realtimeService.connect(room)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
@@ -166,7 +174,7 @@ export class MyTokenComponent implements OnInit, OnDestroy {
           console.error(`WebSocket error for room ${room}:`, err);
         }
       });
-    
+
     this.realtimeConnected = true;
   }
 
@@ -218,73 +226,183 @@ export class MyTokenComponent implements OnInit, OnDestroy {
     this.destroy$.complete();
   }
 
+  private drawRoundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+  }
+
   saveTicket(): void {
     this.messageService.add({
       severity: 'info',
       summary: 'Downloading',
-      detail: 'Downloading ticket as image...',
+      detail: 'Generating ticket...',
       life: 2000
     });
 
     setTimeout(() => {
+      const W = 600, H = 980;
       const canvas = document.createElement('canvas');
-      canvas.width = 500;
-      canvas.height = 640;
-      const ctx = canvas.getContext('2d');
+      canvas.width = W;
+      canvas.height = H;
+      const ctx = canvas.getContext('2d')!;
 
-      if (ctx) {
+      const drawTicket = (logoImg: HTMLImageElement | null) => {
         ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillRect(0, 0, W, H);
 
-        ctx.fillStyle = '#2563eb';
-        ctx.fillRect(0, 0, canvas.width, 8);
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(18, 18, W - 36, H - 36);
+
+        let y = 40;
+        if (logoImg) {
+          ctx.drawImage(logoImg, W / 2 - 36, y, 72, 72);
+          y += 80;
+        } else {
+          y += 12;
+        }
 
         ctx.fillStyle = '#000000';
+        ctx.font = 'bold 17px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('Rufayda Health Complex', W / 2, y);
+        y += 18;
+
+        ctx.font = '11px Arial';
+        ctx.fillStyle = '#444444';
+        ctx.fillText('Soan Gardens, Islamabad  |  +92 335 2015268', W / 2, y);
+        y += 28;
+
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(36, y); ctx.lineTo(W - 36, y); ctx.stroke();
+        y += 18;
+
+        ctx.font = 'bold 11px Arial';
+        ctx.fillStyle = '#000000';
+        ctx.textAlign = 'center';
+        ctx.fillText('QUEUE TICKET', W / 2, y);
+        y += 28;
+
         ctx.font = 'bold 72px Arial';
+        ctx.fillStyle = '#000000';
         ctx.textAlign = 'center';
-        ctx.fillText(this.token?.tokenNumber || '', canvas.width / 2, 120);
+        ctx.fillText(this.token?.tokenNumber || '-', W / 2, y + 60);
+        y += 80;
 
-        ctx.font = '14px Arial';
-        ctx.fillStyle = '#666666';
+        const status = (this.token?.status || 'pending').toUpperCase();
+        const pillW = 120, pillH = 26, pillX = W / 2 - 60;
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 1.5;
+        this.drawRoundRect(ctx, pillX, y, pillW, pillH, 4);
+        ctx.stroke();
+        ctx.font = 'bold 10px Arial';
+        ctx.fillStyle = '#000000';
         ctx.textAlign = 'center';
-        let yPos = 170;
-        const lineHeight = 22;
+        ctx.fillText(status, W / 2, y + 17);
+        y += 44;
 
-        const t = this.token;
-        ctx.fillText(`Hospital: ${t?.hospital}`, canvas.width / 2, yPos); yPos += lineHeight;
-        ctx.fillText(`Department: ${t?.department}`, canvas.width / 2, yPos); yPos += lineHeight;
-        ctx.fillText(`Doctor: ${t?.doctor || 'Any'}`, canvas.width / 2, yPos); yPos += lineHeight;
-        ctx.fillText(`Name: ${t?.patientName || '-'}`, canvas.width / 2, yPos); yPos += lineHeight;
-        ctx.fillText(`Phone: ${t?.patientPhone || '-'}`, canvas.width / 2, yPos); yPos += lineHeight;
-        ctx.fillText(`MRN: ${t?.mrn || '-'}`, canvas.width / 2, yPos); yPos += lineHeight;
-        ctx.fillText(`Age: ${t?.patientAge || '-'}`, canvas.width / 2, yPos); yPos += lineHeight;
-        ctx.fillText(`Gender: ${t?.patientGender || '-'}`, canvas.width / 2, yPos); yPos += lineHeight;
-        ctx.fillText(`Queue Position: ${t?.queuePosition || '-'}`, canvas.width / 2, yPos); yPos += lineHeight;
-        ctx.fillText(`People Ahead: ${t?.peopleAhead ?? '-'}`, canvas.width / 2, yPos); yPos += lineHeight;
-        if (t?.specialNotes && t.specialNotes !== 'None') {
-          ctx.fillText(`Notes: ${t?.specialNotes}`, canvas.width / 2, yPos); yPos += lineHeight;
+        ctx.strokeStyle = '#cccccc';
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(36, y); ctx.lineTo(W - 36, y); ctx.stroke();
+        y += 20;
+
+        const ROW_H = 26;
+
+        const drawRow = (label: string, value: string, rowY: number, shaded: boolean) => {
+          if (shaded) {
+            ctx.fillStyle = '#f5f5f5';
+            ctx.fillRect(36, rowY - 14, W - 72, 24);
+          }
+          ctx.font = '11px Arial';
+          ctx.fillStyle = '#555555';
+          ctx.textAlign = 'left';
+          ctx.fillText(label, 48, rowY + 4);
+          ctx.font = 'bold 11px Arial';
+          ctx.fillStyle = '#000000';
+          ctx.textAlign = 'right';
+          ctx.fillText(value, W - 48, rowY + 4);
+        };
+
+        const drawSection = (text: string, headerY: number) => {
+          ctx.font = 'bold 10px Arial';
+          ctx.fillStyle = '#000000';
+          ctx.textAlign = 'left';
+          ctx.fillText(text.toUpperCase(), 48, headerY);
+          ctx.strokeStyle = '#000000';
+          ctx.lineWidth = 0.5;
+          ctx.beginPath(); ctx.moveTo(36, headerY + 6); ctx.lineTo(W - 36, headerY + 6); ctx.stroke();
+        };
+
+        drawSection('Appointment Info', y); y += 18;
+        drawRow('Hospital', this.token?.hospital || '-', y, false); y += ROW_H;
+        drawRow('Department', this.token?.department || '-', y, true); y += ROW_H;
+        drawRow('Doctor', this.token?.doctor || 'Any', y, false); y += ROW_H;
+        drawRow('Est. Wait Time', this.token?.estimatedWait || '-', y, true); y += ROW_H + 10;
+
+        drawSection('Patient Details', y); y += 18;
+        drawRow('Name', this.token?.patientName || '-', y, false); y += ROW_H;
+        drawRow('MRN', this.token?.mrn || '-', y, true); y += ROW_H;
+        drawRow('Phone', this.token?.patientPhone || '-', y, false); y += ROW_H;
+        drawRow('Age', (this.token?.patientAge ?? '-') + ' years', y, true); y += ROW_H;
+        drawRow('Gender', this.token?.patientGender || '-', y, false); y += ROW_H + 10;
+
+        if (this.token?.specialNotes && this.token.specialNotes !== 'None') {
+          drawSection('Notes', y); y += 18;
+          ctx.font = '10px Arial';
+          ctx.fillStyle = '#444444';
+          ctx.textAlign = 'left';
+          ctx.fillText(this.token.specialNotes.slice(0, 80), 48, y + 4);
+          y += 22;
         }
-        ctx.fillText(`Estimated Wait: ${t?.estimatedWait || '-'}`, canvas.width / 2, yPos); yPos += lineHeight;
-        ctx.fillText(`Status: ${t?.status?.toUpperCase() || '-'}`, canvas.width / 2, yPos);
-      }
 
-      canvas.toBlob((blob) => {
-        if (blob) {
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(36, H - 56); ctx.lineTo(W - 36, H - 56); ctx.stroke();
+
+        ctx.font = '10px Arial';
+        ctx.fillStyle = '#777777';
+        ctx.textAlign = 'center';
+        ctx.fillText('Please keep this ticket safe.  For assistance, contact reception.', W / 2, H - 38);
+        ctx.fillText('Rufayda Health Complex  -  Soan Gardens, Islamabad', W / 2, H - 22);
+
+        canvas.toBlob((blob) => {
+          if (!blob) return;
           const url = URL.createObjectURL(blob);
           const link = document.createElement('a');
           link.href = url;
-          link.download = `ticket-${this.token?.tokenNumber}.png`;
+          link.download = `ticket-${this.token?.tokenNumber || 'ticket'}.png`;
           link.click();
           URL.revokeObjectURL(url);
-        }
-        this.messageService.add({
-          severity: 'success',
-          summary: 'Success',
-          detail: 'Ticket downloaded as image',
-          life: 3000
+          this.messageService.add({ severity: 'success', summary: 'Downloaded', detail: 'Ticket saved.', life: 3000 });
         });
-      });
-    }, 1500);
+      };
+
+      const img = new Image();
+      img.onload = () => drawTicket(img);
+      img.onerror = () => drawTicket(null);
+      img.src = 'assets/rufaydaLogo.jpg';
+    }, 500);
+  }
+  private getStatusColor(status: string): string {
+    const statusColors: { [key: string]: string } = {
+      'pending': '#f97316',
+      'waiting': '#3b82f6',
+      'called': '#8b5cf6',
+      'completed': '#22c55e',
+      'cancelled': '#ef4444',
+      'skipped': '#ec4899'
+    };
+    return statusColors[status.toLowerCase()] || '#6b7280';
   }
 
   leaveQueue(): void {

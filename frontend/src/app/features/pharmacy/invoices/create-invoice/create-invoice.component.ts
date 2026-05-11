@@ -40,6 +40,7 @@ import { PharmacySidebarComponent } from '../../shared/components/pharmacy-sideb
 })
 export class CreateInvoiceComponent implements OnInit {
     isEditMode = false;
+    isViewMode = false;
     invoiceId: string | null = null;
     isSubmitting = false;
     customerName = 'Walk in customer';
@@ -76,15 +77,16 @@ export class CreateInvoiceComponent implements OnInit {
     ) { }
 
     ngOnInit(): void {
-        this.route.params.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(params => {
+        this.route.queryParams.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(params => {
             if (params['id']) {
-                this.isEditMode = true;
                 this.invoiceId = params['id'];
-                this.breadcrumbs = [{ label: 'Invoices' }, { label: 'Edit' }];
+                const mode = params['mode'] || 'edit';
+                this.isEditMode = mode === 'edit';
+                this.isViewMode = mode === 'view';
                 this.loadInvoice(params['id']);
             } else {
                 this.isEditMode = false;
-                this.breadcrumbs = [{ label: 'Invoices' }, { label: 'Create' }];
+                this.isViewMode = false;
                 this.initializeNewInvoice();
             }
             this.cdr.markForCheck();
@@ -103,6 +105,10 @@ export class CreateInvoiceComponent implements OnInit {
                 this.status = invoice.status;
                 this.notes = invoice.notes || '';
                 this.recalculate();
+                // If in view mode, disable form fields
+                if (this.isViewMode) {
+                    setTimeout(() => this.disableFormFields(), 100);
+                }
                 this.cdr.markForCheck();
             },
             error: (err) => {
@@ -112,6 +118,51 @@ export class CreateInvoiceComponent implements OnInit {
                     detail: err?.error?.message || 'Failed to load invoice'
                 });
             }
+        });
+    }
+
+    disableFormFields(): void {
+        // Disable all native input fields and textareas
+        const inputs = document.querySelectorAll(
+            '.page-wrapper input, ' +
+            '.page-wrapper textarea'
+        );
+        inputs.forEach((input: any) => {
+            input.setAttribute('readonly', 'readonly');
+            input.setAttribute('disabled', 'disabled');
+            input.style.backgroundColor = '#f3f4f6';
+            input.style.cursor = 'not-allowed';
+        });
+
+        // Disable PrimeNG dropdowns and autocomplete
+        const primeElements = document.querySelectorAll(
+            '.page-wrapper .p-dropdown, ' +
+            '.page-wrapper .p-autocomplete, ' +
+            '.page-wrapper .p-inputnumber'
+        );
+        primeElements.forEach((el: any) => {
+            el.style.pointerEvents = 'none';
+            el.style.opacity = '0.7';
+            el.style.backgroundColor = '#f3f4f6';
+            const innerInput = el.querySelector('input');
+            if (innerInput) {
+                innerInput.setAttribute('readonly', 'readonly');
+                innerInput.setAttribute('disabled', 'disabled');
+                innerInput.style.backgroundColor = '#f3f4f6';
+                innerInput.style.cursor = 'not-allowed';
+            }
+        });
+
+        // Hide add button for new items
+        const addItemBtn = document.querySelector('.page-wrapper .add-item-btn') as HTMLElement;
+        if (addItemBtn) {
+            addItemBtn.style.display = 'none';
+        }
+
+        // Hide delete buttons for existing items
+        const deleteButtons = document.querySelectorAll('.page-wrapper .delete');
+        deleteButtons.forEach((btn: any) => {
+            btn.style.display = 'none';
         });
     }
 
@@ -196,32 +247,21 @@ export class CreateInvoiceComponent implements OnInit {
                 product_code: item.product_code ?? null,
                 quantity: item.quantity,
                 unit_price: item.unit_price,
-                discount: item.discount
+                discount: item.discount,
+                total: (item.quantity * item.unit_price) - (item.discount || 0)  // ← added
             }))
         };
     }
-
     submit(): void {
         if (!this.validateForm()) return;
         this.isSubmitting = true;
         this.cdr.markForCheck();
         const payload = this.buildPayload();
-        // Ensure each item has a computed `total` to satisfy backend schema
-        const itemsWithTotals = this.invoiceItems.map(item => ({
-            product_id: item.product_id,
-            product_name: item.product_name,
-            product_code: item.product_code ?? null,
-            quantity: item.quantity,
-            unit_price: item.unit_price,
-            discount: item.discount,
-            total: (item.quantity * item.unit_price) - (item.discount || 0)
-        }));
-        (payload as any).items = itemsWithTotals;
         if (this.isEditMode && this.invoiceId) {
             this.invoiceService.updateInvoice(this.invoiceId, payload).subscribe({
                 next: () => {
                     this.messageService.add({ severity: 'success', summary: 'Success', detail: 'Invoice updated successfully' });
-                    this.router.navigate(['/staff/pharmacy/invoices']);
+                    setTimeout(() => this.router.navigate(['/staff/pharmacy/invoices']), 1500);
                 },
                 error: (err) => {
                     this.isSubmitting = false;
@@ -233,7 +273,7 @@ export class CreateInvoiceComponent implements OnInit {
             this.invoiceService.createInvoice(payload).subscribe({
                 next: () => {
                     this.messageService.add({ severity: 'success', summary: 'Success', detail: 'Invoice created successfully' });
-                    this.router.navigate(['/staff/pharmacy/invoices']);
+                    setTimeout(() => this.router.navigate(['/staff/pharmacy/invoices']), 1500);
                 },
                 error: (err) => {
                     this.isSubmitting = false;
@@ -248,19 +288,7 @@ export class CreateInvoiceComponent implements OnInit {
         if (!this.validateForm()) return;
         this.isSubmitting = true;
         this.cdr.markForCheck();
-        const payload = this.buildPayload();
-        const itemsWithTotals = this.invoiceItems.map(item => ({
-            product_id: item.product_id,
-            product_name: item.product_name,
-            product_code: item.product_code ?? null,
-            quantity: item.quantity,
-            unit_price: item.unit_price,
-            discount: item.discount,
-            total: (item.quantity * item.unit_price) - (item.discount || 0)
-        }));
-        (payload as any).items = itemsWithTotals;
-
-        this.invoiceService.createInvoice(payload).subscribe({
+        this.invoiceService.createInvoice(this.buildPayload()).subscribe({
             next: () => {
                 this.messageService.add({ severity: 'success', summary: 'Success', detail: 'Invoice created. Ready to create another.' });
                 this.initializeNewInvoice();

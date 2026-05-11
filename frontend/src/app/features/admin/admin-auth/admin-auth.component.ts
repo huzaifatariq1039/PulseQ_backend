@@ -84,8 +84,4 @@ export class AdminAuthComponent implements OnInit {
       }
     });
   }
-
-  goBack() {
-    this.router.navigate(['../auth'], { relativeTo: this.route });
-  }
 }

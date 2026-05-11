@@ -2,13 +2,14 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
-import { ActivatedRoute, Router } from '@angular/router';
+import { Router } from '@angular/router';
 import { CardModule } from 'primeng/card';
 import { ButtonModule } from 'primeng/button';
 import { InputTextModule } from 'primeng/inputtext';
 import { ToastModule } from 'primeng/toast';
 import { MessageService } from 'primeng/api';
 
+import { environment } from '../../../../environments/environment';
 import { AuthService } from '../../../core/services/auth.service';
 
 @Component({
@@ -26,7 +27,6 @@ export class PharmacyAuthComponent implements OnInit {
 
   constructor(
     private fb: FormBuilder,
-    private route: ActivatedRoute,
     private router: Router,
     private messageService: MessageService,
     private authService: AuthService
@@ -63,7 +63,14 @@ export class PharmacyAuthComponent implements OnInit {
             life: 2000
           });
           setTimeout(() => {
-            this.router.navigate(['../dashboard'], { relativeTo: this.route });
+            const isLocalhost = window.location.hostname === 'localhost' ||
+              window.location.hostname === '127.0.0.1';
+
+            if (isLocalhost) {
+              this.router.navigate(['/staff/pharmacy/dashboard']);
+            } else {
+              this.router.navigate(['/dashboard']);
+            }
           }, 500);
         } else {
           this.messageService.add({
@@ -84,9 +91,5 @@ export class PharmacyAuthComponent implements OnInit {
         });
       }
     });
-  }
-
-  goBack() {
-    this.router.navigate(['../auth'], { relativeTo: this.route });
   }
 }

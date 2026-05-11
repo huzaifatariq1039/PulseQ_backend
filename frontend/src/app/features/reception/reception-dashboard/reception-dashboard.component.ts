@@ -38,6 +38,8 @@ interface Patient {
   paymentStatus?: 'paid' | 'unpaid';
   fee?: string;
   estimatedWait?: number | string;
+  mrn?: string;
+  doctorName?: string;
 }
 
 @Component({
@@ -111,7 +113,6 @@ export class ReceptionDashboardComponent implements OnInit, OnDestroy {
 
   private destroy$ = new Subject<void>();
 
-  // localStorage key scoped per hospital so multiple hospitals don't bleed into each other
   private get skippedStorageKey(): string {
     return `skippedTokens_${this.getHospitalId()}`;
   }
@@ -129,11 +130,9 @@ export class ReceptionDashboardComponent implements OnInit, OnDestroy {
   ) { }
 
   ngOnInit() {
-    // Restore skipped tokens from localStorage FIRST so the panel is visible immediately on refresh
     this.loadSkippedFromStorage();
     this.loadDepartments();
     this.loadDoctors();
-    // Load queue first, then stats — ordering matters for skipped state
     this.loadQueueThenStats();
   }
 
@@ -142,18 +141,12 @@ export class ReceptionDashboardComponent implements OnInit, OnDestroy {
     return user?.hospitalId || user?.hospital_id || '';
   }
 
-  // ── SKIPPED TOKEN PERSISTENCE (localStorage) ──
-  // These three methods are the workaround for the backend not returning
-  // SKIPPED tokens in the queue response. Once the backend is fixed,
-  // syncSkippedFromAllTokens() will handle everything and these
-  // localStorage methods become a safety net only.
-
   private saveSkippedToStorage(): void {
     try {
       if (typeof window !== 'undefined' && window.localStorage) {
         window.localStorage.setItem(this.skippedStorageKey, JSON.stringify(this.skippedTokens));
       }
-    } catch (e) { /* ignore */ }
+    } catch (e) { }
   }
 
   private loadSkippedFromStorage(): void {
@@ -165,7 +158,7 @@ export class ReceptionDashboardComponent implements OnInit, OnDestroy {
           this.skippedCount = this.skippedTokens.length;
         }
       }
-    } catch (e) { /* ignore */ }
+    } catch (e) { }
   }
 
   private removeFromSkippedStorage(token: string): void {
@@ -174,12 +167,6 @@ export class ReceptionDashboardComponent implements OnInit, OnDestroy {
     this.saveSkippedToStorage();
   }
 
-  // ── QUEUE LOADING ──
-
-  /**
-   * Loads queue first → then dashboard stats.
-   * Chained so allTokens is ready before stats potentially overwrites allUpcoming.
-   */
   loadQueueThenStats(): void {
     this.receptionService.getQueue(this.getHospitalId())
       .pipe(takeUntil(this.destroy$))
@@ -195,15 +182,6 @@ export class ReceptionDashboardComponent implements OnInit, OnDestroy {
       });
   }
 
-  /**
-   * Maps raw queue API response into allTokens, derives skipped/current/upcoming.
-   *
-   * BACKEND BUG NOTE:
-   * The queue endpoint currently returns data:[] — it filters out SKIPPED tokens.
-   * When this is empty, we fall back to localStorage skipped tokens so the panel
-   * doesn't disappear on refresh. Once the backend fix is applied (see backend notes
-   * below), backendSkipped.length will be > 0 and localStorage becomes just a cache.
-   */
   private processQueueResponse(res: any): void {
     const rawTokens = res?.data || res?.queue || res || [];
     const tokensArray = Array.isArray(rawTokens) ? rawTokens : [];
@@ -232,15 +210,10 @@ export class ReceptionDashboardComponent implements OnInit, OnDestroy {
     });
 
     const backendSkipped = this.allTokens.filter(t => t.status === 'skipped');
-
     if (backendSkipped.length > 0) {
-      // Backend is correctly returning skipped tokens — use as source of truth
       this.skippedTokens = backendSkipped;
       this.skippedCount = this.skippedTokens.length;
       this.saveSkippedToStorage();
-    } else {
-      // Backend not returning skipped tokens (current bug) — keep localStorage version
-      // loadSkippedFromStorage() already ran in ngOnInit so skippedTokens is intact
     }
 
     this.completedCount = this.allTokens.filter(t => t.status === 'completed').length;
@@ -259,7 +232,6 @@ export class ReceptionDashboardComponent implements OnInit, OnDestroy {
     this.filterByDepartment();
   }
 
-  /** Public alias for manual refresh (walk-in, re-add, etc.) */
   loadQueue(): void {
     this.loadQueueThenStats();
   }
@@ -305,7 +277,6 @@ export class ReceptionDashboardComponent implements OnInit, OnDestroy {
           this.waitingCount = data.cards.waiting || 0;
           this.completedCount = data.cards.completed || 0;
           this.avgWait = data.cards.avg_wait_minutes || 0;
-          // Prefer local skipped list (has actual objects); fall back to API count
           this.skippedCount = this.skippedTokens.length > 0
             ? this.skippedTokens.length
             : (data.cards.skipped || 0);
@@ -318,7 +289,6 @@ export class ReceptionDashboardComponent implements OnInit, OnDestroy {
             : (data.stats.skipped || 0);
         }
 
-        // Use active_doctors from dashboard if doctorData not yet loaded
         if (data.active_doctors && Array.isArray(data.active_doctors) && this.doctorData.length === 0) {
           this.doctorData = data.active_doctors.map((d: any) => ({
             id: d.doctor_id,
@@ -347,9 +317,6 @@ export class ReceptionDashboardComponent implements OnInit, OnDestroy {
             mrn: t.mrn || t.patient_id || '-',
             id: t.token_id || t.id || ''
           }));
-
-          // Do NOT call syncSkippedFromAllTokens() here — allTokens is empty (backend bug)
-          // skippedTokens is already correctly populated from localStorage
           this.filterByDepartment();
         }
       },
@@ -389,8 +356,6 @@ export class ReceptionDashboardComponent implements OnInit, OnDestroy {
     this.destroy$.next();
     this.destroy$.complete();
   }
-
-  // ── HELPERS ──
 
   convertTo12Hour(time24: string): string {
     if (!time24) return '9:00 AM';
@@ -471,11 +436,6 @@ export class ReceptionDashboardComponent implements OnInit, OnDestroy {
     this.filterByDepartment();
   }
 
-  /**
-   * Re-derives skipped from allTokens and persists.
-   * Only reliable when allTokens is populated (i.e. after backend fix).
-   * For the current backend bug, use saveSkippedToStorage() directly.
-   */
   private syncSkippedFromAllTokens(): void {
     this.skippedTokens = this.allTokens.filter(t => t.status === 'skipped');
     this.skippedCount = this.skippedTokens.length;
@@ -489,7 +449,7 @@ export class ReceptionDashboardComponent implements OnInit, OnDestroy {
           current: this.current, allTokens: this.allTokens
         }));
       }
-    } catch (e) { /* ignore */ }
+    } catch (e) { }
   }
 
   completeCurrent(): void {
@@ -523,18 +483,15 @@ export class ReceptionDashboardComponent implements OnInit, OnDestroy {
       return;
     }
 
-    // Snapshot current patient before it gets cleared
     const skippedPatient: Patient = { ...this.current, status: 'skipped' };
 
     this.receptionService.skipToken(tokenId).subscribe({
       next: () => {
         const tokenInAll = this.allTokens.find(t => t.token === skippedPatient.token);
         if (tokenInAll) {
-          // allTokens has this token — update and sync
           tokenInAll.status = 'skipped';
           this.syncSkippedFromAllTokens();
         } else {
-          // allTokens is empty (backend bug) — manually push to skipped and persist
           const alreadyExists = this.skippedTokens.find(t => t.token === skippedPatient.token);
           if (!alreadyExists) {
             this.skippedTokens = [...this.skippedTokens, skippedPatient];
@@ -542,6 +499,9 @@ export class ReceptionDashboardComponent implements OnInit, OnDestroy {
             this.saveSkippedToStorage();
           }
         }
+
+        // ── Download slip on skip ──
+        this.downloadSlip(skippedPatient);
 
         this.messageService.add({
           severity: 'warn', summary: 'Skipped',
@@ -577,21 +537,17 @@ export class ReceptionDashboardComponent implements OnInit, OnDestroy {
           if (updatedStatus && updatedStatus.toLowerCase() !== 'skipped') {
             this.messageService.add({
               severity: 'success', summary: 'Re-added to Queue',
-              detail: `${patient.token} — ${patient.name}`, life: 3000
+              detail: `${patient.token} - ${patient.name}`, life: 3000
             });
-
             const tokenInAll = this.allTokens.find(t => t.token === patient.token);
             if (tokenInAll) {
               tokenInAll.status = 'pending';
               this.syncSkippedFromAllTokens();
             } else {
-              // allTokens empty (backend bug) — remove directly from storage
               this.removeFromSkippedStorage(patient.token);
             }
-
             this.refreshUpcomingList();
           } else {
-            console.error('Backend bug: token status not updated. Response:', response?.data);
             this.messageService.add({
               severity: 'error', summary: 'Backend Error',
               detail: `Backend failed to update token status. Still: ${updatedStatus}. Contact admin.`,
@@ -782,45 +738,176 @@ export class ReceptionDashboardComponent implements OnInit, OnDestroy {
 
   toggleSidebar(): void { this.sidebarOpen = !this.sidebarOpen; }
 
-  downloadSlip(row: Patient) {
+  private drawRoundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+  }
+
+  downloadSlip(row: Patient): void {
     this.messageService.add({ severity: 'info', summary: 'Downloading', detail: 'Generating slip...', life: 2000 });
+
     setTimeout(() => {
+      const W = 600, H = 1020;
       const canvas = document.createElement('canvas');
-      canvas.width = 500;
-      canvas.height = 600;
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = '#2563eb'; ctx.fillRect(0, 0, canvas.width, 8);
-        ctx.fillStyle = '#000000'; ctx.font = 'bold 72px Arial'; ctx.textAlign = 'center';
-        ctx.fillText(row.token || '', canvas.width / 2, 120);
-        ctx.font = '14px Arial'; ctx.fillStyle = '#666666'; ctx.textAlign = 'center';
-        let yPos = 170; const lineHeight = 22;
-        ctx.fillText(`Hospital: PulseQ Hospital`, canvas.width / 2, yPos); yPos += lineHeight;
-        ctx.fillText(`Department: ${row.department || '-'}`, canvas.width / 2, yPos); yPos += lineHeight;
-        ctx.fillText(`Doctor: ${(row as any).doctorName || 'Any'}`, canvas.width / 2, yPos); yPos += lineHeight;
-        ctx.fillText(`Name: ${row.name || '-'}`, canvas.width / 2, yPos); yPos += lineHeight;
-        ctx.fillText(`Phone: ${row.phone || '-'}`, canvas.width / 2, yPos); yPos += lineHeight;
-        ctx.fillText(`MRN: ${(row as any).mrn || '-'}`, canvas.width / 2, yPos); yPos += lineHeight;
-        ctx.fillText(`Age: ${row.age || '-'}`, canvas.width / 2, yPos); yPos += lineHeight;
-        ctx.fillText(`Gender: ${row.gender || '-'}`, canvas.width / 2, yPos); yPos += lineHeight;
-        ctx.fillText(`Payment: ${(row.paymentStatus || 'unpaid').toUpperCase()}`, canvas.width / 2, yPos); yPos += lineHeight;
-        ctx.fillText(`Fee: ${row.fee || '-'}`, canvas.width / 2, yPos); yPos += lineHeight;
-        ctx.fillText(`Status: ${(row.status || 'pending').toUpperCase()}`, canvas.width / 2, yPos);
-      }
-      canvas.toBlob((blob) => {
-        if (blob) {
+      canvas.width = W;
+      canvas.height = H;
+      const ctx = canvas.getContext('2d')!;
+
+      const drawSlip = (logoImg: HTMLImageElement | null) => {
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, W, H);
+
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(18, 18, W - 36, H - 36);
+
+        let y = 40;
+
+        if (logoImg) {
+          ctx.drawImage(logoImg, W / 2 - 36, y, 72, 72);
+          y += 80;
+        } else {
+          y += 12;
+        }
+
+        ctx.fillStyle = '#000000';
+        ctx.font = 'bold 17px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('Rufayda Health Complex', W / 2, y);
+        y += 18;
+
+        ctx.font = '11px Arial';
+        ctx.fillStyle = '#444444';
+        ctx.fillText('Soan Gardens, Islamabad  |  +92 335 2015268', W / 2, y);
+        y += 28;
+
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(36, y); ctx.lineTo(W - 36, y); ctx.stroke();
+        y += 18;
+
+        ctx.font = 'bold 11px Arial';
+        ctx.fillStyle = '#000000';
+        ctx.textAlign = 'center';
+        ctx.fillText('TOKEN SLIP', W / 2, y);
+        y += 28;
+
+        ctx.font = 'bold 72px Arial';
+        ctx.fillStyle = '#000000';
+        ctx.textAlign = 'center';
+        ctx.fillText(row.token || '-', W / 2, y + 60);
+        y += 80;
+
+        const status = (row.status || 'pending').toUpperCase();
+        const pillW = 120, pillH = 26, pillX = W / 2 - 60;
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 1.5;
+        this.drawRoundRect(ctx, pillX, y, pillW, pillH, 4);
+        ctx.stroke();
+        ctx.font = 'bold 10px Arial';
+        ctx.fillStyle = '#000000';
+        ctx.textAlign = 'center';
+        ctx.fillText(status, W / 2, y + 17);
+        y += 44;
+
+        ctx.strokeStyle = '#cccccc';
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(36, y); ctx.lineTo(W - 36, y); ctx.stroke();
+        y += 20;
+
+        const ROW_H = 26;
+
+        const drawRow = (label: string, value: string, rowY: number, shaded: boolean) => {
+          if (shaded) {
+            ctx.fillStyle = '#f5f5f5';
+            ctx.fillRect(36, rowY - 14, W - 72, 24);
+          }
+          ctx.font = '11px Arial';
+          ctx.fillStyle = '#555555';
+          ctx.textAlign = 'left';
+          ctx.fillText(label, 48, rowY + 4);
+          ctx.font = 'bold 11px Arial';
+          ctx.fillStyle = '#000000';
+          ctx.textAlign = 'right';
+          ctx.fillText(value, W - 48, rowY + 4);
+        };
+
+        const drawSection = (text: string, headerY: number) => {
+          ctx.font = 'bold 10px Arial';
+          ctx.fillStyle = '#000000';
+          ctx.textAlign = 'left';
+          ctx.fillText(text.toUpperCase(), 48, headerY);
+          ctx.strokeStyle = '#000000';
+          ctx.lineWidth = 0.5;
+          ctx.beginPath(); ctx.moveTo(36, headerY + 6); ctx.lineTo(W - 36, headerY + 6); ctx.stroke();
+        };
+
+        drawSection('Appointment Info', y); y += 18;
+        drawRow('Hospital', 'Rufayda Health Complex', y, false); y += ROW_H;
+        drawRow('Department', row.department || '-', y, true); y += ROW_H;
+        drawRow('Doctor', (row as any).doctorName || 'Any', y, false); y += ROW_H + 10;
+
+        drawSection('Patient Details', y); y += 18;
+        drawRow('Name', row.name || '-', y, false); y += ROW_H;
+        drawRow('MRN', (row as any).mrn || '-', y, true); y += ROW_H;
+        drawRow('Phone', row.phone || '-', y, false); y += ROW_H;
+        drawRow('Age', (row.age ?? '-') + ' years', y, true); y += ROW_H;
+        drawRow('Gender', row.gender || '-', y, false); y += ROW_H + 10;
+
+        if (row.reason) {
+          drawSection('Reason for Visit', y); y += 18;
+          ctx.font = '10px Arial';
+          ctx.fillStyle = '#333333';
+          ctx.textAlign = 'left';
+          const words = row.reason.split(' ');
+          let line = '';
+          for (const word of words) {
+            const test = line ? line + ' ' + word : word;
+            if (ctx.measureText(test).width > W - 96 && line) {
+              ctx.fillText(line, 48, y); y += 16; line = word;
+            } else { line = test; }
+          }
+          if (line) { ctx.fillText(line, 48, y); y += 16; }
+          y += 10;
+        }
+
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(36, H - 56); ctx.lineTo(W - 36, H - 56); ctx.stroke();
+
+        ctx.font = '10px Arial';
+        ctx.fillStyle = '#777777';
+        ctx.textAlign = 'center';
+        ctx.fillText('Please keep this slip for your records.  For assistance, contact reception.', W / 2, H - 38);
+        ctx.fillText('Rufayda Health Complex  -  Soan Gardens, Islamabad', W / 2, H - 22);
+
+        canvas.toBlob((blob) => {
+          if (!blob) return;
           const url = URL.createObjectURL(blob);
           const link = document.createElement('a');
           link.href = url;
-          link.download = `ticket-${row.token}.png`;
+          link.download = `token-${row.token}.png`;
           link.click();
           URL.revokeObjectURL(url);
-          this.messageService.add({ severity: 'success', summary: 'Success', detail: 'Slip downloaded successfully', life: 3000 });
-        }
-      });
-    }, 1500);
+          this.messageService.add({ severity: 'success', summary: 'Downloaded', detail: 'Slip saved.', life: 3000 });
+        });
+      };
+
+      const img = new Image();
+      img.onload = () => drawSlip(img);
+      img.onerror = () => drawSlip(null);
+      img.src = 'assets/rufaydaLogo.jpg';
+    }, 500);
   }
 
-  signOut(): void { this.router.navigate(['../auth'], { relativeTo: this.route }); }
+  signOut(): void { this.router.navigate(['/']); }
 }

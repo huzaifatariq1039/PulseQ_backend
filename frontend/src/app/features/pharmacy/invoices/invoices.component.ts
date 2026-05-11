@@ -22,7 +22,7 @@ import { debounceTime, distinctUntilChanged, Subject } from 'rxjs';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 
 import { InvoiceService } from '../../../core/services/invoice.service';
-import { Invoice, InvoiceListParams } from '../../../shared/models/invoice.model';
+import { Invoice, InvoiceCounts, InvoiceListParams } from '../../../shared/models/invoice.model';
 import { PharmacySidebarComponent } from '../shared/components/pharmacy-sidebar/pharmacy-sidebar.component';
 
 @Component({
@@ -43,12 +43,22 @@ import { PharmacySidebarComponent } from '../shared/components/pharmacy-sidebar/
 })
 export class InvoicesComponent implements OnInit {
     invoices: Invoice[] = [];
-    totalRecords = 0;
     loading = false;
     selectedInvoices: Invoice[] = [];
     searchTerm = '';
     selectedStatus: string | null = null;
     rowsPerPage = 10;
+
+    printingInvoice: Invoice | null = null;
+
+    counts: InvoiceCounts = {
+        all: 0,
+        completed: 0,
+        pending: 0,
+        partial: 0,
+        cancelled: 0
+    };
+
     statusOptions = [
         { label: 'All', value: null },
         { label: 'Completed', value: 'completed' },
@@ -56,10 +66,11 @@ export class InvoicesComponent implements OnInit {
         { label: 'Partial', value: 'partial' },
         { label: 'Cancelled', value: 'cancel' }
     ];
+
     dateFrom: Date | null = null;
     dateTo: Date | null = null;
     activeFilterCount = 0;
-    breadcrumbs = [{ label: 'Invoices' }, { label: 'List' }];
+
     private readonly destroyRef = inject(DestroyRef);
     private readonly searchSubject = new Subject<string>();
 
@@ -87,18 +98,15 @@ export class InvoicesComponent implements OnInit {
         this.cdr.markForCheck();
         this.invoiceService.getInvoices(params).subscribe({
             next: (res) => {
-                const payload: any = res?.data ?? res;
-                const items = payload?.invoices ?? payload?.items ?? payload?.data ?? payload ?? [];
-                this.invoices = Array.isArray(items) ? items : [];
-                this.totalRecords = payload?.total ?? payload?.total_count ?? this.invoices.length;
-                this.cdr.markForCheck();
+                this.invoices = res.data?.invoices || [];
+                this.counts = res.data?.counts || this.counts;
                 this.loading = false;
+                this.cdr.markForCheck();
             },
             error: (err) => {
                 this.loading = false;
                 this.messageService.add({
-                    severity: 'error',
-                    summary: 'Error',
+                    severity: 'error', summary: 'Error',
                     detail: err?.error?.message || 'Failed to load invoices'
                 });
                 this.cdr.markForCheck();
@@ -130,6 +138,17 @@ export class InvoicesComponent implements OnInit {
         this.loadInvoices();
     }
 
+    getStatusCount(status: string | null): number {
+        if (!status) return this.counts.all;
+        switch (status) {
+            case 'completed': return this.counts.completed;
+            case 'pending': return this.counts.pending;
+            case 'partial': return this.counts.partial;
+            case 'cancel': return this.counts.cancelled;
+            default: return 0;
+        }
+    }
+
     getStatusSeverity(status: string): 'success' | 'secondary' | 'info' | 'warning' | 'danger' | 'contrast' | undefined {
         switch (status) {
             case 'completed': return 'success';
@@ -149,25 +168,51 @@ export class InvoicesComponent implements OnInit {
         }
     }
 
+    // ── PRINT HELPERS ──────────────────────────────────────────────────
+    getItemsTotal(): number {
+        if (!this.printingInvoice?.items) return 0;
+        return this.printingInvoice.items.reduce((sum, item) => sum + (item.total || 0), 0);
+    }
+
+    getGrandTotal(): number {
+        if (!this.printingInvoice) return 0;
+        const subtotal = this.getItemsTotal();
+        const tax = subtotal * ((this.printingInvoice.tax || 0) / 100);
+        const discount = this.printingInvoice.discount || 0;
+        return subtotal + tax - discount;
+    }
+
+    // ── PRINT ──────────────────────────────────────────────────────────
+    printInvoice(invoice: Invoice): void {
+        if (!invoice.id) return;
+        this.invoiceService.getInvoice(invoice.id).subscribe({
+            next: (res) => {
+                this.printingInvoice = res.data;
+                this.cdr.markForCheck();
+                setTimeout(() => window.print(), 300);
+            },
+            error: (err) => {
+                this.messageService.add({
+                    severity: 'error', summary: 'Error',
+                    detail: err?.error?.message || 'Failed to load invoice'
+                });
+                this.cdr.markForCheck();
+            }
+        });
+    }
+
+    // ── NAVIGATION ─────────────────────────────────────────────────────
     viewInvoice(invoice: Invoice): void {
-        this.messageService.add({
-            severity: 'info',
-            summary: 'View Invoice',
-            detail: `View detail for invoice ${invoice.invoice_number}`
+        if (!invoice.id) return;
+        this.router.navigate(['/staff/pharmacy/invoices/create'], {
+            queryParams: { id: invoice.id, mode: 'view' }
         });
     }
 
     editInvoice(invoice: Invoice): void {
-        if (invoice.id) {
-            this.router.navigate(['/staff/pharmacy/invoices/edit', invoice.id]);
-        }
-    }
-
-    printInvoice(invoice: Invoice): void {
-        this.messageService.add({
-            severity: 'info',
-            summary: 'Print Invoice',
-            detail: `Print invoice ${invoice.invoice_number}`
+        if (!invoice.id) return;
+        this.router.navigate(['/staff/pharmacy/invoices/create'], {
+            queryParams: { id: invoice.id, mode: 'edit' }
         });
     }
 
@@ -179,66 +224,44 @@ export class InvoicesComponent implements OnInit {
         this.router.navigate(['/staff/pharmacy/invoices/trash']);
     }
 
+    // ── BULK STATUS ────────────────────────────────────────────────────
     updateStatus(newStatus: string): void {
         const ids = this.selectedInvoices.map(i => i.id).filter(Boolean) as string[];
         if (ids.length === 0) {
-            this.messageService.add({
-                severity: 'warn',
-                summary: 'Warning',
-                detail: 'No invoices selected'
-            });
+            this.messageService.add({ severity: 'warn', summary: 'Warning', detail: 'No invoices selected' });
             return;
         }
         this.invoiceService.updateInvoiceStatus(ids, newStatus).subscribe({
             next: () => {
-                this.messageService.add({
-                    severity: 'success',
-                    summary: 'Success',
-                    detail: 'Invoices updated successfully'
-                });
+                this.messageService.add({ severity: 'success', summary: 'Success', detail: 'Invoices updated successfully' });
                 this.selectedInvoices = [];
                 this.loadInvoices();
             },
             error: (err) => {
-                this.messageService.add({
-                    severity: 'error',
-                    summary: 'Error',
-                    detail: err?.error?.message || 'Failed to update invoices'
-                });
+                this.messageService.add({ severity: 'error', summary: 'Error', detail: err?.error?.message || 'Failed to update invoices' });
             }
         });
     }
 
+    // ── DELETE ─────────────────────────────────────────────────────────
     deleteInvoice(invoice: Invoice): void {
         if (!invoice.id) return;
+        const invoiceId = invoice.id;
         this.confirmationService.confirm({
             message: `Are you sure you want to delete invoice ${invoice.invoice_number}?`,
             header: 'Confirm Delete',
             icon: 'pi pi-exclamation-triangle',
             accept: () => {
-                this.invoiceService.deleteInvoice(invoice.id!).subscribe({
+                this.invoiceService.deleteInvoice(invoiceId).subscribe({
                     next: () => {
-                        this.messageService.add({
-                            severity: 'success',
-                            summary: 'Success',
-                            detail: 'Invoice deleted successfully'
-                        });
+                        this.messageService.add({ severity: 'success', summary: 'Success', detail: 'Invoice deleted successfully' });
                         this.loadInvoices();
                     },
                     error: (err) => {
-                        this.messageService.add({
-                            severity: 'error',
-                            summary: 'Error',
-                            detail: err?.error?.message || 'Failed to delete invoice'
-                        });
+                        this.messageService.add({ severity: 'error', summary: 'Error', detail: err?.error?.message || 'Failed to delete invoice' });
                     }
                 });
             }
         });
-    }
-
-    getStatusCount(status: string | null): number {
-        if (!status) return this.invoices.length;
-        return this.invoices.filter(inv => inv.status === status).length;
     }
 }

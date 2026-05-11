@@ -234,7 +234,7 @@ export class DoctorRatingsComponent implements OnInit, OnDestroy {
     }
 
     logout(): void {
-        this.router.navigate(['../auth'], { relativeTo: this.route });
+        this.router.navigate(['auth'], { relativeTo: this.route.parent?.parent });
     }
 
     ngOnDestroy(): void {
