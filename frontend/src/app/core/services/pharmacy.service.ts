@@ -253,7 +253,7 @@ export class PharmacyService {
     }
 
     return this.http.get(
-      `${environment.apiBaseUrl}/external/pos/reports/daily-sales`,
+      `${environment.apiBaseUrl}/staff/pharmacy/reports/sales-summary`,
       { params }
     );
   }
@@ -270,7 +270,7 @@ export class PharmacyService {
     }
 
     return this.http.get(
-      `${environment.apiBaseUrl}/external/pos/reports/inventory-turnover`,
+      `${environment.apiBaseUrl}/staff/pharmacy/dashboard/stats`,
       { params }
     );
   }
@@ -335,7 +335,7 @@ export class PharmacyService {
     }
 
     return this.http.get(
-      `${environment.apiBaseUrl}/staff/portal/sales/overview`,
+      `${environment.apiBaseUrl}/staff/pharmacy/sales/overview`,
       { params }
     );
   }
@@ -356,7 +356,7 @@ export class PharmacyService {
     }
 
     return this.http.get(
-      `${environment.apiBaseUrl}/staff/portal/sales/over-time`,
+      `${environment.apiBaseUrl}/staff/pharmacy/sales/over-time`,
       { params }
     );
   }
@@ -377,7 +377,7 @@ export class PharmacyService {
     }
 
     return this.http.get(
-      `${environment.apiBaseUrl}/staff/portal/sales/payment-methods`,
+      `${environment.apiBaseUrl}/staff/pharmacy/sales/payment-methods`,
       { params }
     );
   }
@@ -400,7 +400,7 @@ export class PharmacyService {
     }
 
     return this.http.get(
-      `${environment.apiBaseUrl}/staff/portal/sales/top-medicines`,
+      `${environment.apiBaseUrl}/staff/pharmacy/sales/top-medicines`,
       { params }
     );
   }
@@ -421,7 +421,7 @@ export class PharmacyService {
     }
 
     return this.http.get(
-      `${environment.apiBaseUrl}/staff/portal/sales/export`,
+      `${environment.apiBaseUrl}/staff/pharmacy/sales/export`,
       { params, responseType: 'blob' }
     );
   }

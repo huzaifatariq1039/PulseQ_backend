@@ -1,16 +1,7 @@
-<div class="mobile-topbar">
-    <div class="brand-label">Dr. Portal</div>
-    <button class="hamburger" (click)="toggleSidebar()">
-        <i [ngClass]="sidebarOpen ? 'pi pi-times' : 'pi pi-bars'"></i>
-    </button>
-</div>
-
-<!-- overlay for mobile -->
-<div class="sidebar-overlay" *ngIf="sidebarOpen" (click)="toggleSidebar()"></div>
-
+<!-- SIDEBAR & MAIN -->
 <div class="doctor-layout">
     <!-- shared sidebar component -->
-    <app-doctor-sidebar [open]="sidebarOpen" (signOut)="logout()" (close)="sidebarOpen = false"></app-doctor-sidebar>
+    <app-doctor-sidebar></app-doctor-sidebar>
 
     <!-- MAIN CONTENT -->
     <main class="main-content">

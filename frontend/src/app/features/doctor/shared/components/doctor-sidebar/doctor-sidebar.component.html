@@ -1,30 +1,43 @@
-<aside class="sidebar" [class.open]="open">
-    <div class="sidebar-header" *ngIf="!isMobile">
-        <div class="portal-icon">
-            <i class="pi pi-heart-fill"></i>
-        </div>
-        <h2>Dr. Portal</h2>
+<!-- MOBILE TOPBAR -->
+<div class="mobile-topbar">
+    <button class="hamburger" (click)="toggleSidebar()">
+        <i [ngClass]="sidebarOpen ? 'pi pi-times' : 'pi pi-bars'"></i>
+    </button>
+    <div class="brand-name">Doctor Portal</div>
+</div>
+
+<!-- SIDEBAR OVERLAY -->
+<div class="sidebar-overlay" *ngIf="sidebarOpen" (click)="toggleSidebar()"></div>
+
+<!-- SIDEBAR -->
+<aside class="sidebar" [class.open]="sidebarOpen">
+    <div class="sidebar-header">
+        <i class="pi pi-heart-fill"></i>
+        <span>Doctor Portal</span>
     </div>
 
-    <nav class="sidebar-nav">
-        <a routerLink="/staff/doctor/dashboard" routerLinkActive="active" class="nav-item" (click)="handleLinkClick()">
+    <nav class="sidebar-menu">
+        <a routerLink="/staff/doctor/dashboard" routerLinkActive="active" class="menu-item"
+            [routerLinkActiveOptions]="{ exact: true }" (click)="sidebarOpen = false">
             <i class="pi pi-th-large"></i>
-            My Dashboard
+            <span>My Dashboard</span>
         </a>
-        <a routerLink="/staff/doctor/ratings" routerLinkActive="active" class="nav-item" (click)="handleLinkClick()">
+        <a routerLink="/staff/doctor/ratings" routerLinkActive="active" class="menu-item"
+            [routerLinkActiveOptions]="{ exact: false }" (click)="sidebarOpen = false">
             <i class="pi pi-star-fill"></i>
-            Patient Ratings
+            <span>Patient Ratings</span>
         </a>
-        <a routerLink="/staff/doctor/history" routerLinkActive="active" class="nav-item" (click)="handleLinkClick()">
+        <a routerLink="/staff/doctor/history" routerLinkActive="active" class="menu-item"
+            [routerLinkActiveOptions]="{ exact: false }" (click)="sidebarOpen = false">
             <i class="pi pi-history"></i>
-            History
+            <span>History</span>
         </a>
     </nav>
 
     <div class="sidebar-footer">
-        <button class="sign-out-btn" (click)="handleSignOut()">
+        <button class="signout-btn" (click)="signOut()">
             <i class="pi pi-sign-out"></i>
-            Sign Out
+            <span>Sign Out</span>
         </button>
     </div>
 </aside>

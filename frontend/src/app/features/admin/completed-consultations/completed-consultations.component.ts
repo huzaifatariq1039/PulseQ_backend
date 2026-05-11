@@ -1,4 +1,4 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnInit, OnDestroy, inject } from '@angular/core';
 import { Router, RouterModule } from '@angular/router';
 import { ConsultationService } from '../../../core/services/consultation.service';
 import { StaffPortalService } from '../../../core/services/staff-portal.service';
@@ -12,7 +12,7 @@ import { DialogModule } from 'primeng/dialog';
 import { ButtonModule } from 'primeng/button';
 import { ToastModule } from 'primeng/toast';
 import { RippleModule } from 'primeng/ripple';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { Subject, takeUntil } from 'rxjs';
 
 export interface CompletedToken {
     id: string;
@@ -52,7 +52,7 @@ export interface CompletedToken {
     templateUrl: './completed-consultations.component.html',
     styleUrls: ['./completed-consultations.component.css']
 })
-export class CompletedConsultationsComponent implements OnInit {
+export class CompletedConsultationsComponent implements OnInit, OnDestroy {
     tokens: CompletedToken[] = [];
     selectedToken: CompletedToken | null = null;
     displayDialog: boolean = false;
@@ -60,6 +60,8 @@ export class CompletedConsultationsComponent implements OnInit {
     completedToday = 0;
     averageDuration = 0;
     completedThisMonth = 0;
+
+    private destroy$ = new Subject<void>();
 
     private consultationService = inject(ConsultationService);
     private staffService = inject(StaffPortalService);
@@ -69,19 +71,37 @@ export class CompletedConsultationsComponent implements OnInit {
         this.loadFromApi();
     }
 
+    ngOnDestroy(): void {
+        this.destroy$.next();
+        this.destroy$.complete();
+    }
+
     private loadFromApi(): void {
         this.staffService.getCompletedTokens(1, 100)
-            .pipe(takeUntilDestroyed())
+            .pipe(takeUntil(this.destroy$))
             .subscribe({
                 next: (res: any) => {
-                    const raw: any[] = Array.isArray(res)
-                        ? res
-                        : Array.isArray(res?.data)
-                            ? res.data
-                            : [];
+                    console.log('[CompletedConsultations] API response:', res);
+
+                    // Handle all possible response shapes
+                    let raw: any[] = [];
+                    if (Array.isArray(res)) {
+                        raw = res;
+                    } else if (Array.isArray(res?.data)) {
+                        raw = res.data;
+                    } else if (Array.isArray(res?.tokens)) {
+                        raw = res.tokens;
+                    } else if (Array.isArray(res?.results)) {
+                        raw = res.results;
+                    } else if (Array.isArray(res?.items)) {
+                        raw = res.items;
+                    }
+
+                    console.log('[CompletedConsultations] Mapped raw rows:', raw.length, raw);
 
                     this.tokens = raw.map((t: any) => this.mapApiTokenToCompletedToken(t));
 
+                    // Metrics from meta or computed
                     if (res?.meta) {
                         this.completedToday = res.meta.completed_today ?? 0;
                         this.completedThisMonth = res.meta.completed_this_month ?? 0;
@@ -91,7 +111,7 @@ export class CompletedConsultationsComponent implements OnInit {
                     }
                 },
                 error: (err) => {
-                    console.error('Failed to load completed consultations from API, falling back to local', err);
+                    console.error('[CompletedConsultations] API error, falling back to local:', err);
                     this.loadFromLocal();
                 }
             });
@@ -99,7 +119,7 @@ export class CompletedConsultationsComponent implements OnInit {
 
     private loadFromLocal(): void {
         this.consultationService.consultations$
-            .pipe(takeUntilDestroyed())
+            .pipe(takeUntil(this.destroy$))
             .subscribe(list => {
                 this.tokens = list
                     .filter(c => !!c.endTime)
@@ -133,7 +153,7 @@ export class CompletedConsultationsComponent implements OnInit {
     }
 
     getDuration(token: CompletedToken): number {
-        if (token.apiDuration !== undefined) {
+        if (token.apiDuration !== undefined && token.apiDuration > 0) {
             return token.apiDuration;
         }
         if (!token.consultationStartTime || !token.consultationEndTime) return 0;
@@ -161,7 +181,7 @@ export class CompletedConsultationsComponent implements OnInit {
         const parseDate = (...keys: string[]): Date | undefined => {
             const val = keys.reduce((acc: any, k: string) => acc ?? t[k], undefined);
             if (!val) return undefined;
-            const fromDMY = this.parseDMY(val);
+            const fromDMY = this.parseDMY(String(val));
             if (fromDMY) return fromDMY;
             const d = new Date(val);
             return isNaN(d.getTime()) ? undefined : d;
@@ -169,22 +189,22 @@ export class CompletedConsultationsComponent implements OnInit {
 
         return {
             id: pick('id', 'token_id', 'tokenId') ?? '',
-            tokenNumber: String(pick('token_number', 'tokenNumber') ?? ''),
-            patientName: pick('patient_name', 'patientName') ?? '',
-            mrn: pick('mrn', 'MRN') ?? '',
+            tokenNumber: String(pick('token_number', 'tokenNumber', 'token_no') ?? ''),
+            patientName: pick('patient_name', 'patientName', 'name') ?? '',
+            mrn: pick('mrn', 'MRN', 'patient_mrn') ?? '',
             age: pick('patient_age', 'patientAge', 'age'),
             gender: pick('patient_gender', 'patientGender', 'gender') ?? '',
-            phone: pick('patient_phone', 'patientPhone', 'phone') ?? '',
+            phone: pick('patient_phone', 'patientPhone', 'phone', 'contact') ?? '',
             cnic: pick('patient_cnic', 'patientCnic', 'cnic') ?? '',
-            visitReason: pick('visit_reason', 'visitReason', 'reason') ?? '',
-            department: pick('department') ?? '',
-            doctorName: pick('doctor_name', 'doctorName') ?? '',
+            visitReason: pick('visit_reason', 'visitReason', 'reason', 'chief_complaint') ?? '',
+            department: pick('department', 'dept') ?? '',
+            doctorName: pick('doctor_name', 'doctorName', 'physician_name') ?? '',
             createdAt: parseDate('created_at', 'createdAt'),
             consultationStartTime: parseDate('consultation_start_time', 'consultationStartTime', 'start_time', 'startTime'),
             consultationEndTime: parseDate('consultation_end_time', 'consultationEndTime', 'end_time', 'endTime'),
             consultationNotes: pick('notes', 'consultation_notes', 'consultationNotes', 'special_instructions') ?? '',
             status: 'completed',
-            apiDuration: t.duration ?? 0
+            apiDuration: pick('duration', 'consultation_duration', 'duration_minutes') ?? 0
         };
     }
 

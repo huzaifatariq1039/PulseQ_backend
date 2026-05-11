@@ -113,13 +113,19 @@ export class StaffPortalService {
     return this.http.get(`${this.API}/portal/admin/dashboard`, { params });
   }
 
-  /** Get completed tokens for admin — /api/v1/portal/doctor/tokens?status=completed */
-  /** Get completed consultations — GET /api/v1/portal/completed-consultations */
+  /** Get completed tokens for admin — /api/v1/staff/portal/completed-consultations */
   getCompletedTokens(page = 1, pageSize = 100): Observable<any> {
     const params = new HttpParams()
       .set('page', page.toString())
       .set('page_size', pageSize.toString());
-    return this.http.get(`${this.PORTAL_API}/completed-consultations`, { params });
+    return this.http.get(`${this.API}/portal/completed-consultations`, { params });
+  }
+
+  /** Get sales summary report — /api/v1/staff/portal/reports/sales-summary */
+  getSalesSummary(hospitalId?: string): Observable<any> {
+    let params = new HttpParams();
+    if (hospitalId) params = params.set('hospital_id', hospitalId);
+    return this.http.get(`${this.API}/portal/reports/sales-summary`, { params });
   }
 
   // ============================================================

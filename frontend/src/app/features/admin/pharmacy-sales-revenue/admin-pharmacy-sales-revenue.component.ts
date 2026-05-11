@@ -1,4 +1,4 @@
-import { Component, OnInit, PLATFORM_ID, inject } from '@angular/core';
+import { Component, OnInit, OnDestroy, PLATFORM_ID, inject } from '@angular/core';
 import { CommonModule, isPlatformBrowser } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
@@ -9,10 +9,11 @@ import { SelectButtonModule } from 'primeng/selectbutton';
 import { CalendarModule } from 'primeng/calendar';
 import { PharmacyService } from '../../../core/services/pharmacy.service';
 import { ExternalPosService } from '../../../core/services/external-pos.service';
+import { StaffPortalService } from '../../../core/services/staff-portal.service';
 import type { Sale } from '../../../core/services/pharmacy.service';
 import { AdminSidebarComponent } from '../shared/components/admin-sidebar/admin-sidebar.component';
 import { AuthService } from '../../../core/services/auth.service';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { Subject, takeUntil } from 'rxjs';
 
 @Component({
     selector: 'app-admin-pharmacy-sales-revenue',
@@ -21,7 +22,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
     templateUrl: './admin-pharmacy-sales-revenue.component.html',
     styleUrls: ['./admin-pharmacy-sales-revenue.component.css']
 })
-export class AdminPharmacySalesRevenueComponent implements OnInit {
+export class AdminPharmacySalesRevenueComponent implements OnInit, OnDestroy {
     todaySales = 0;
     weeklySales = 0;
     monthlySales = 0;
@@ -44,16 +45,23 @@ export class AdminPharmacySalesRevenueComponent implements OnInit {
     allSales: Sale[] = [];
     sales: Sale[] = [];
 
+    private destroy$ = new Subject<void>();
+
     private readonly platformId = inject(PLATFORM_ID);
     private pharmacyService = inject(PharmacyService);
     private posService = inject(ExternalPosService);
+    private staffService = inject(StaffPortalService);
     private authService = inject(AuthService);
 
     ngOnInit(): void {
-        // Skip HTTP calls during SSR — this page requires browser auth token
         if (isPlatformBrowser(this.platformId)) {
             this.loadApiData();
         }
+    }
+
+    ngOnDestroy(): void {
+        this.destroy$.next();
+        this.destroy$.complete();
     }
 
     private getHospitalId(): string | undefined {
@@ -63,56 +71,51 @@ export class AdminPharmacySalesRevenueComponent implements OnInit {
     private loadApiData(): void {
         const hid = this.getHospitalId();
 
-        // 1. Daily Sales
-        this.pharmacyService.getDailySalesReport(hid)
-            .pipe(takeUntilDestroyed())
+        // 1. Sales metrics — /api/v1/staff/portal/reports/sales-summary
+        this.staffService.getSalesSummary(hid)
+            .pipe(takeUntil(this.destroy$))
             .subscribe({
                 next: (res: any) => {
+                    console.log('[PharmacySales] sales-summary response:', res);
                     const data = res?.data || res || {};
-                    this.todaySales = data.total_sales || data.today_sales || 0;
+                    this.todaySales = data.daily_revenue || data.today_sales || data.total_sales || 0;
+                    this.weeklySales = data.weekly_revenue || data.weekly_sales || 0;
+                    this.monthlySales = data.monthly_revenue || data.monthly_sales || 0;
+                    this.totalRevenue = data.total_revenue || data.total_value || 0;
                 },
-                error: () => {
-                    this.todaySales = 0; // Removed local fallback
+                error: (err) => {
+                    console.error('[PharmacySales] sales-summary error:', err);
+                    this.todaySales = this.weeklySales = this.monthlySales = this.totalRevenue = 0;
                 }
             });
 
-        // 2. Inventory Turnover & Aggregate Metrics
+        // 2. Inventory metrics — /api/v1/staff/pharmacy/dashboard/stats
         this.pharmacyService.getInventoryTurnoverReport(hid)
-            .pipe(takeUntilDestroyed())
+            .pipe(takeUntil(this.destroy$))
             .subscribe({
                 next: (res: any) => {
+                    console.log('[PharmacySales] dashboard/stats response:', res);
                     const data = res?.data || res || {};
-                    this.totalStock = data.total_stock || data.current_stock || 0;
-                    this.medicineTypes = data.medicine_types || data.unique_items || 0;
+                    this.totalStock = data.total_medicines || data.total_stock || data.current_stock || 0;
+                    this.medicineTypes = data.active_medicines || data.medicine_types || data.unique_items || 0;
                     this.inventoryValue = data.inventory_value || data.total_value || 0;
-
-                    if (data.weekly_sales || data.weekly_revenue) {
-                        this.weeklySales = data.weekly_sales ?? data.weekly_revenue;
-                    }
-                    if (data.monthly_sales || data.monthly_revenue) {
-                        this.monthlySales = data.monthly_sales ?? data.monthly_revenue;
-                    }
-                    if (data.total_revenue || data.total_value) {
-                        this.totalRevenue = data.total_revenue ?? data.total_value;
-                    }
                 },
-                error: () => {
-                    this.totalStock = 0;
-                    this.medicineTypes = 0;
-                    this.inventoryValue = 0;
+                error: (err) => {
+                    console.error('[PharmacySales] dashboard/stats error:', err);
+                    this.totalStock = this.medicineTypes = this.inventoryValue = 0;
                 }
             });
 
-        // 3. Sales/Items Table
+        // 3. Sales table
         this.loadTableData();
     }
 
     private loadTableData(): void {
         const hid = this.getHospitalId();
 
-        if (this.searchTerm && this.searchTerm.trim()) {
+        if (this.searchTerm?.trim()) {
             this.pharmacyService.searchMedicineApi(this.searchTerm)
-                .pipe(takeUntilDestroyed())
+                .pipe(takeUntil(this.destroy$))
                 .subscribe({
                     next: (res: any) => {
                         this.processApiItemsToSales(res?.data || res?.items || res || []);
@@ -122,34 +125,33 @@ export class AdminPharmacySalesRevenueComponent implements OnInit {
             return;
         }
 
-        // Primary: try daily sales report (real transactions with sale dates)
+        // Primary: daily sales report
         this.pharmacyService.getDailySalesReport(hid)
-            .pipe(takeUntilDestroyed())
+            .pipe(takeUntil(this.destroy$))
             .subscribe({
                 next: (res: any) => {
+                    console.log('[PharmacySales] getDailySalesReport response:', res);
                     const data = res?.data || res || {};
                     const txns = data.transactions || data.items || data.sales;
                     if (Array.isArray(txns) && txns.length > 0) {
                         this.processApiItemsToSales(txns);
                     } else {
-                        // Fallback: sales history endpoint
-                        this.posService.getSalesHistory(hid)
-                            .pipe(takeUntilDestroyed())
-                            .subscribe({
-                                next: (r: any) => this.processApiItemsToSales(r?.sales || r?.history || r?.data || r || []),
-                                error: () => this.fallbackLocalSales()
-                            });
+                        this.loadSalesHistoryFallback(hid);
                     }
                 },
-                error: () => {
-                    // Fallback: sales history endpoint
-                    this.posService.getSalesHistory(hid)
-                        .pipe(takeUntilDestroyed())
-                        .subscribe({
-                            next: (r: any) => this.processApiItemsToSales(r?.sales || r?.history || r?.data || r || []),
-                            error: () => this.fallbackLocalSales()
-                        });
-                }
+                error: () => this.loadSalesHistoryFallback(hid)
+            });
+    }
+
+    // Extracted to avoid nested takeUntil pipes
+    private loadSalesHistoryFallback(hid: string | undefined): void {
+        this.posService.getSalesHistory(hid)
+            .pipe(takeUntil(this.destroy$))
+            .subscribe({
+                next: (r: any) => {
+                    this.processApiItemsToSales(r?.sales || r?.history || r?.data || r || []);
+                },
+                error: () => this.fallbackLocalSales()
             });
     }
 
@@ -178,14 +180,12 @@ export class AdminPharmacySalesRevenueComponent implements OnInit {
     }
 
     private fallbackLocalSales(): void {
-        // Removed hardcoded local mock data logic
         this.allSales = [];
         this.refreshLocalMetrics();
         this.applyFilter();
     }
 
     private refreshLocalMetrics(): void {
-        // Only calculate these if they weren't fully set by API
         if (!this.todaySales) this.todaySales = this.calculateTodaySales();
         if (!this.weeklySales) this.weeklySales = this.calculateWeeklySales();
         if (!this.monthlySales) this.monthlySales = this.calculateMonthlySales();
@@ -213,30 +213,21 @@ export class AdminPharmacySalesRevenueComponent implements OnInit {
                 return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
             });
         } else if (this.selectedOption === 'week') {
-            const weekAgo = new Date();
-            weekAgo.setDate(now.getDate() - 7);
+            const weekAgo = new Date(); weekAgo.setDate(now.getDate() - 7);
             filtered = filtered.filter(s => new Date(s.date) >= weekAgo);
         } else if (this.selectedOption === 'month') {
-            const monthAgo = new Date();
-            monthAgo.setMonth(now.getMonth() - 1);
+            const monthAgo = new Date(); monthAgo.setMonth(now.getMonth() - 1);
             filtered = filtered.filter(s => new Date(s.date) >= monthAgo);
-        } else if (this.selectedOption === 'all') {
-            // All time, no filter
         } else if (this.selectedOption === 'custom') {
-            if (this.customRange && this.customRange[0] && this.customRange[1]) {
-                const start = new Date(this.customRange[0]);
-                start.setHours(0, 0, 0, 0);
-                const end = new Date(this.customRange[1]);
-                end.setHours(23, 59, 59, 999);
-                filtered = filtered.filter(s => {
-                    const d = new Date(s.date);
-                    return d >= start && d <= end;
-                });
+            if (this.customRange?.[0] && this.customRange?.[1]) {
+                const start = new Date(this.customRange[0]); start.setHours(0, 0, 0, 0);
+                const end = new Date(this.customRange[1]); end.setHours(23, 59, 59, 999);
+                filtered = filtered.filter(s => { const d = new Date(s.date); return d >= start && d <= end; });
             }
         }
+        // 'all' — no filter
 
-        // Search filter (in case API didn't filter or we're using fallback)
-        if (this.searchTerm && this.searchTerm.trim()) {
+        if (this.searchTerm?.trim()) {
             const term = this.searchTerm.trim().toLowerCase();
             filtered = filtered.filter(s =>
                 s.medicineName.toLowerCase().includes(term) ||
@@ -244,47 +235,35 @@ export class AdminPharmacySalesRevenueComponent implements OnInit {
                 (s.customer?.toLowerCase() ?? '').includes(term)
             );
         }
+
         this.sales = filtered;
     }
 
     onSearch(): void {
-        // Reload API data if searching so it hits the search endpoint
         this.loadTableData();
     }
 
     calculateTodaySales(): number {
         const now = new Date();
         return this.allSales
-            .filter(s => {
-                const d = new Date(s.date);
-                return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
-            })
+            .filter(s => { const d = new Date(s.date); return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate(); })
             .reduce((sum, s) => sum + s.totalAmount, 0);
     }
 
     calculateWeeklySales(): number {
-        const now = new Date();
-        const weekAgo = new Date();
-        weekAgo.setDate(now.getDate() - 7);
-        return this.allSales
-            .filter(s => new Date(s.date) >= weekAgo)
-            .reduce((sum, s) => sum + s.totalAmount, 0);
+        const weekAgo = new Date(); weekAgo.setDate(new Date().getDate() - 7);
+        return this.allSales.filter(s => new Date(s.date) >= weekAgo).reduce((sum, s) => sum + s.totalAmount, 0);
     }
 
     calculateMonthlySales(): number {
-        const now = new Date();
-        const monthAgo = new Date();
-        monthAgo.setMonth(now.getMonth() - 1);
-        return this.allSales
-            .filter(s => new Date(s.date) >= monthAgo)
-            .reduce((sum, s) => sum + s.totalAmount, 0);
+        const monthAgo = new Date(); monthAgo.setMonth(new Date().getMonth() - 1);
+        return this.allSales.filter(s => new Date(s.date) >= monthAgo).reduce((sum, s) => sum + s.totalAmount, 0);
     }
 
     calculateTotalRevenue(): number {
         return this.allSales.reduce((sum, s) => sum + s.totalAmount, 0);
     }
 
-    /** Week-over-week growth % */
     get weeklyGrowth(): number {
         const now = new Date();
         const weekAgo = new Date(now); weekAgo.setDate(now.getDate() - 7);
@@ -295,7 +274,6 @@ export class AdminPharmacySalesRevenueComponent implements OnInit {
         return Math.round(((thisWeek - prevWeek) / prevWeek) * 100);
     }
 
-    /** Month-over-month growth % */
     get monthlyGrowth(): number {
         const now = new Date();
         const monthAgo = new Date(now); monthAgo.setMonth(now.getMonth() - 1);

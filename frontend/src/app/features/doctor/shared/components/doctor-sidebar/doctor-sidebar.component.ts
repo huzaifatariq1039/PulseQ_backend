@@ -1,45 +1,25 @@
-import { Component, EventEmitter, HostListener, Input, OnInit, Output } from '@angular/core';
-import { RouterModule } from '@angular/router';
+import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { RouterModule, Router, ActivatedRoute } from '@angular/router';
+import { AuthService } from '../../../../../core/services/auth.service';
 
 @Component({
     selector: 'app-doctor-sidebar',
     standalone: true,
-    imports: [RouterModule, CommonModule],
+    imports: [CommonModule, RouterModule],
     templateUrl: './doctor-sidebar.component.html',
     styleUrls: ['./doctor-sidebar.component.css']
 })
-export class DoctorSidebarComponent implements OnInit {
-    /** Controls whether the sidebar is visible (used for mobile). */
-    @Input() open = true;
+export class DoctorSidebarComponent {
+    sidebarOpen = false;
 
-    /** Emitted when a navigation item is clicked or the sidebar should close. */
-    @Output() close = new EventEmitter<void>();
+    constructor(private route: ActivatedRoute, private router: Router, private authService: AuthService) { }
 
-    /** Emitted when the sign‑out button is clicked. */
-    @Output() signOut = new EventEmitter<void>();
-
-    isMobile = false;
-
-
-    ngOnInit(): void {
-        this.checkMobile();
+    signOut(): void {
+        this.authService.logout();
     }
 
-    @HostListener('window:resize')
-    checkMobile(): void {
-        if (typeof window !== 'undefined') {
-            this.isMobile = window.innerWidth <= 900;
-        } else {
-            this.isMobile = false;
-        }
-    }
-
-    handleLinkClick(): void {
-        this.close.emit();
-    }
-
-    handleSignOut(): void {
-        this.signOut.emit();
+    toggleSidebar(): void {
+        this.sidebarOpen = !this.sidebarOpen;
     }
 }
