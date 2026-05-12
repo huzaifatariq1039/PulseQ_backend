@@ -51,7 +51,7 @@ load_dotenv()
 # FIX 2: Compute cors_origins BEFORE lifespan so the startup log doesn't crash
 cors_origins = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:4200," \
                                             "http://localhost:3000," \
-                                            "https://patient.pulseq.health/," \
+                                            "http://patient.pulseq.health/," \
                                             "https://pharmacy.pulseq.health/," \
                                             "https://admin.pulseq.health/," \
                                             "https://reception.pulseq.health/," \
