@@ -18,7 +18,7 @@ import { OverlayPanelModule } from 'primeng/overlaypanel';
 import { CalendarModule } from 'primeng/calendar';
 import { IconFieldModule } from 'primeng/iconfield';
 import { MessageService, ConfirmationService } from 'primeng/api';
-import { debounceTime, distinctUntilChanged, Subject } from 'rxjs';
+import { debounceTime, distinctUntilChanged, Subject, forkJoin } from 'rxjs';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 
 import { InvoiceService } from '../../../core/services/invoice.service';
@@ -231,7 +231,10 @@ export class InvoicesComponent implements OnInit {
             this.messageService.add({ severity: 'warn', summary: 'Warning', detail: 'No invoices selected' });
             return;
         }
-        this.invoiceService.updateInvoiceStatus(ids, newStatus).subscribe({
+
+        const requests = ids.map(id => this.invoiceService.updateInvoiceStatus(id, newStatus));
+
+        forkJoin(requests).subscribe({
             next: () => {
                 this.messageService.add({ severity: 'success', summary: 'Success', detail: 'Invoices updated successfully' });
                 this.selectedInvoices = [];

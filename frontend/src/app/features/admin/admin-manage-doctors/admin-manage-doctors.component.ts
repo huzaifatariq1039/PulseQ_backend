@@ -48,7 +48,7 @@ export class AdminManageDoctorsComponent implements OnInit, OnDestroy {
     addStatus: 'available' | 'unavailable' | 'onLeave' = 'available';
     addStartTime: string = '09:00';
     addEndTime: string = '17:00';
-    addFee: number = 0;
+    addFee: number = 500;
     addModel = {
         name: '',
         department: '',
@@ -238,7 +238,7 @@ export class AdminManageDoctorsComponent implements OnInit, OnDestroy {
         };
         this.addStartTime = '09:00';
         this.addEndTime = '17:00';
-        this.addFee = 0;
+        this.addFee = 500;
         this.addStatus = 'available';
         this.showAddDialog = true;
     }
@@ -258,6 +258,27 @@ export class AdminManageDoctorsComponent implements OnInit, OnDestroy {
             });
             return;
         }
+        if (!this.addModel.email?.trim()) {
+            this.messageService.add({
+                severity: 'error', summary: 'Validation Error',
+                detail: 'Email is required', life: 3000
+            });
+            return;
+        }
+        if (!this.addModel.phone?.trim() || this.addModel.phone.trim().length < 10) {
+            this.messageService.add({
+                severity: 'error', summary: 'Validation Error',
+                detail: 'A valid phone number (min 10 digits) is required', life: 3000
+            });
+            return;
+        }
+        if (this.addFee <= 0) {
+            this.messageService.add({
+                severity: 'error', summary: 'Validation Error',
+                detail: 'Consultation fee must be greater than 0', life: 3000
+            });
+            return;
+        }
 
         const apiStatus =
             this.addStatus === 'onLeave' ? 'on_leave' :
@@ -270,10 +291,13 @@ export class AdminManageDoctorsComponent implements OnInit, OnDestroy {
             department: this.addModel.department,
             subcategory: '',
             hospital_id: hospitalId,
-            email: this.addModel.email?.trim() || '',
+            email: this.addModel.email.trim(),
+            phone: this.addModel.phone.trim(),
             password: this.addModel.password.trim(),
             consultation_fee: this.addFee,
             session_fee: 1,
+            rating: 0,
+            review_count: 0,
             start_time: this.addStartTime,
             end_time: this.addEndTime,
             available_days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
@@ -291,7 +315,15 @@ export class AdminManageDoctorsComponent implements OnInit, OnDestroy {
                 this.loadDoctorsFromApi();
             },
             error: (err) => {
-                const detail = err?.error?.message || err?.error?.detail || 'Failed to add doctor. Please try again.';
+                // Extract detailed validation errors from 422 responses
+                let detail = 'Failed to add doctor. Please try again.';
+                if (err?.error?.detail && Array.isArray(err.error.detail)) {
+                    detail = err.error.detail.map((e: any) => e.msg || e.message || JSON.stringify(e)).join('; ');
+                } else if (typeof err?.error?.detail === 'string') {
+                    detail = err.error.detail;
+                } else if (err?.error?.message) {
+                    detail = err.error.message;
+                }
                 this.messageService.add({
                     severity: 'error', summary: 'Error', detail, life: 4000
                 });

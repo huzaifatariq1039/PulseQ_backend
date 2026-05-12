@@ -44,7 +44,9 @@ export function detectPortal(): PortalType {
     // Path-based detection for localhost
     const pathSegments = pathname.split('/').filter(s => s.length > 0);
 
-    if (pathSegments.length === 0) return 'main';
+    if (pathSegments.length === 0) {
+      return 'main';
+    }
 
     const firstSegment = pathSegments[0].toLowerCase();
 
@@ -52,15 +54,10 @@ export function detectPortal(): PortalType {
       return subdomainMap[firstSegment];
     }
 
-    // /staff/admin now returns 'admin' instead of 'main'
-    if (firstSegment === 'staff') {
-      const secondSegment = pathSegments[1]?.toLowerCase();
-      if (secondSegment && secondSegment in subdomainMap) {
-        return subdomainMap[secondSegment];
-      }
-      return 'main';
-    }
-
+    // In local development with path-based routing (/staff/...),
+    // we MUST return 'main' so that mainRoutes handles the nested paths.
+    // Returning the portal directly would mount its routes at the root,
+    // breaking the /staff/... path expectations and causing ** wildcard redirects.
     return 'main';
   } catch (error) {
     console.warn('Error detecting portal, defaulting to main:', error);
@@ -70,6 +67,19 @@ export function detectPortal(): PortalType {
 
 export function getPortalName(): string {
   return detectPortal();
+}
+
+export function getAuthPageForUrl(url: string): string {
+  const cleanUrl = url.split('?')[0].split('#')[0];
+
+  if (cleanUrl.startsWith('/patient')) return '/patient/auth';
+  if (cleanUrl.startsWith('/staff/doctor')) return '/staff/doctor/auth';
+  if (cleanUrl.startsWith('/staff/reception')) return '/staff/reception/auth';
+  if (cleanUrl.startsWith('/staff/pharmacy')) return '/staff/pharmacy/auth';
+  if (cleanUrl.startsWith('/staff/admin')) return '/staff/admin/auth';
+
+  // Root-level single-portal deployment — auth is always at /auth
+  return '/auth';
 }
 
 export function isPortal(portal: PortalType): boolean {

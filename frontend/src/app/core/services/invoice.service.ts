@@ -35,9 +35,9 @@ export class InvoiceService {
         return this.http.put<ApiResponse<Invoice>>(`${this.API}/${id}`, payload);
     }
 
-    updateInvoiceStatus(ids: string[], newStatus: string): Observable<ApiResponse<any>> {
+    updateInvoiceStatus(id: string, newStatus: string): Observable<ApiResponse<any>> {
         const params = new HttpParams().set('new_status', newStatus);
-        return this.http.patch<ApiResponse<any>>(`${this.API}/status`, { ids }, { params });
+        return this.http.patch<ApiResponse<any>>(`${this.API}/${id}/status`, null, { params });
     }
 
     deleteInvoice(id: string): Observable<ApiResponse<any>> {

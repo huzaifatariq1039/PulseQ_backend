@@ -36,7 +36,12 @@ export class AdminAuthComponent implements OnInit {
     });
   }
 
-  ngOnInit(): void { }
+  ngOnInit(): void {
+    // If already authenticated, redirect to dashboard instead of showing login
+    if (this.authService.isAuthenticated()) {
+      this.router.navigate(['../dashboard'], { relativeTo: this.route });
+    }
+  }
 
   get f() {
     return this.loginForm.controls;

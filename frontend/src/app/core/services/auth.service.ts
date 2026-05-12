@@ -4,6 +4,7 @@ import { Router } from '@angular/router';
 import { BehaviorSubject, Observable, of, throwError } from 'rxjs';
 import { map, tap, catchError, switchMap } from 'rxjs/operators';
 import { environment } from '../../../environments/environment';
+import { getAuthPageForUrl } from '../config/portal-detector';
 
 export interface AuthUser {
   id?: string;
@@ -246,17 +247,17 @@ export class AuthService {
     try {
       localStorage.removeItem('pulseq_user');
       localStorage.removeItem('pulseq_token');
+      // NOTE: Do NOT clear sessionStorage 'pulseq_portal' here.
+      // Portal identity (reception, doctor, admin) is about which app is loaded,
+      // not about auth state. Clearing it would cause route matching failures.
     } catch { }
 
-    if (typeof window !== 'undefined') {
-      window.history.replaceState(null, '', window.location.origin);
-    }
+    const authPage = getAuthPageForUrl(this.router.url);
 
-    // ── FIXED: since portal is detected dynamically at root,
-    //    auth is always at /auth regardless of portal type ──
-    this.router.navigate(['/auth'], { replaceUrl: true }).catch(() => {
+    // Navigate to auth page — replaceUrl prevents back-button returning to protected page
+    this.router.navigate([authPage], { replaceUrl: true }).catch(() => {
       if (typeof window !== 'undefined') {
-        window.location.href = '/auth';
+        window.location.href = authPage;
       }
     });
   }
