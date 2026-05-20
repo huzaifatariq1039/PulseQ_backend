@@ -604,6 +604,9 @@ class PharmacyMedicine(Base):
     generic_name = Column(String, nullable=True)
     type = Column(String, nullable=True)
     distributor = Column(String, nullable=True)
+    supplier_name = Column(String, nullable=True)       # ADD THIS
+    distributor_mobile = Column(String, nullable=True)  # ADD THIS
+    distributor_company = Column(String, nullable=True) # ADD THIS
     purchase_price = Column(Float, nullable=False)
     selling_price = Column(Float, nullable=False)
     stock_unit = Column(String, nullable=True)
@@ -629,6 +632,9 @@ class PharmacyMedicine(Base):
             "generic_name": self.generic_name,
             "type": self.type,
             "distributor": self.distributor,
+            "supplier_name": self.supplier_name,           # ADD THIS
+            "distributor_mobile": self.distributor_mobile, # ADD THIS
+            "distributor_company": self.distributor_company, # ADD THIS
             "purchase_price": self.purchase_price,
             "selling_price": self.selling_price,
             "stock_unit": self.stock_unit,

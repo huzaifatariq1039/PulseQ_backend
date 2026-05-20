@@ -629,6 +629,9 @@ class PharmacyMedicine(Base):
             "generic_name": self.generic_name,
             "type": self.type,
             "distributor": self.distributor,
+            "supplier_name": self.supplier_name,           # ADD THIS
+            "distributor_mobile": self.distributor_mobile, # ADD THIS
+            "distributor_company": self.distributor_company, # ADD THIS
             "purchase_price": self.purchase_price,
             "selling_price": self.selling_price,
             "stock_unit": self.stock_unit,
